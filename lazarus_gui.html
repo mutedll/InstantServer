@@ -4,6 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Instant Server</title>
+  <!-- Photoshop-Style Taskbar & Window Icon: Deep Navy Blue (#001E36), Sky Blue Border (#31A8FF), Light Blue 'IS' with Top & Bottom Bars on 'I' -->
+  <link
+    rel="icon"
+    type="image/svg+xml"
+    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Crect x='4' y='4' width='120' height='120' rx='26' fill='%23001E36' stroke='%2331A8FF' stroke-width='6'/%3E%3Cpath d='M24 32 H54 V41 H43.5 V87 H54 V96 H24 V87 H34.5 V41 H24 Z' fill='%2366C4FF'/%3E%3Cpath d='M84 42 C75 42 70 45.5 70 50.5 C70 56 76 58.5 85 61.5 C96 65 103 70 103 80 C103 90.5 94 97 80 97 C70 97 62 94 58 91 L61.5 82 C66 85 72.5 87.5 80 87.5 C88 87.5 92.5 84 92.5 79.5 C92.5 74.5 87.5 71.5 78 68.5 C67 65 60 60 60 50.5 C60 40.5 68.5 32.5 83 32.5 C91.5 32.5 98 34.5 101.5 37 L98 46 C94.5 43.5 89.5 42 84 42 Z' fill='%2366C4FF'/%3E%3C/svg%3E"
+  />
+  <link rel="shortcut icon" href="/favicon.ico" />
   <style>
     /* ==========================================================================
        Windows 11 Fluent Design System (WinUI 3) Tokens + Smooth Setup Animations
@@ -152,7 +159,6 @@
     *::-webkit-scrollbar-corner {
       background: transparent;
     }
-    /* Idle: Thin subtle line achieved via transparent border around the thumb */
     *::-webkit-scrollbar-thumb {
       background-color: var(--scroll-thumb-idle);
       border-radius: 999px;
@@ -160,7 +166,6 @@
       background-clip: padding-box;
       transition: background-color 0.2s ease, border-width 0.2s ease;
     }
-    /* Hovering container, scrolling with wheel/keys (.is-scrolling), or hovering/dragging thumb */
     *:hover::-webkit-scrollbar-track,
     *.is-scrolling::-webkit-scrollbar-track {
       background: var(--scroll-track-active);
@@ -306,7 +311,7 @@
     }
 
     /* ==========================================================================
-       Smooth View Animations & Non-Overlapping Vertical Flow Stack
+       Smooth Tab-Only Animation & Non-Overlapping Vertical Flow Stack
        ========================================================================== */
     @keyframes fadeSlideUp {
       from {
@@ -319,11 +324,11 @@
       }
     }
 
-    .animate-view {
-      animation: fadeSlideUp 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    /* Applied ONLY when switching tabs — never on toggles, sliders, or expanders */
+    .animate-tab-switch {
+      animation: fadeSlideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     }
 
-    /* Ensures every card stack, Advanced options box, and notice banner has clean spacing */
     .tab-flow-stack {
       display: flex;
       flex-direction: column;
@@ -513,7 +518,7 @@
       width: 24px;
       height: 24px;
       color: var(--text-secondary);
-      transition: transform 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+      transition: transform 0.24s cubic-bezier(0.16, 1, 0.3, 1);
       font-size: 14px;
     }
     .expander-wrap.open .expander-chevron {
@@ -522,7 +527,7 @@
     .expander-content-grid {
       display: grid;
       grid-template-rows: 0fr;
-      transition: grid-template-rows 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+      transition: grid-template-rows 0.24s cubic-bezier(0.16, 1, 0.3, 1);
     }
     .expander-wrap.open .expander-content-grid {
       grid-template-rows: 1fr;
@@ -928,7 +933,7 @@
       display: none;
       flex-direction: column;
       gap: 2px;
-      animation: fadeSlideUp 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      animation: fadeSlideUp 0.14s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     }
     .win-combobox.open .win-combobox-menu {
       display: flex;
@@ -957,7 +962,6 @@
       background: var(--flyout-item-selected);
       font-weight: 500;
     }
-    /* Signature Windows 11 Left Vertical Accent Pill on Selected Dropdown Option */
     .win-combobox-option.selected::before {
       content: "";
       position: absolute;
@@ -1053,7 +1057,7 @@
       background: var(--warning-bg);
     }
 
-    /* Flashing Progress & Live Logs Card (Neat Progress Bar + Logs Only) */
+    /* Flashing Progress & Live Logs Card */
     .flash-panel {
       padding: 18px 20px;
       border-radius: var(--radius);
@@ -1215,7 +1219,7 @@
 
     <!-- MODE 1: First-Run Windows Setup Window (Pinned Top Tabs + Scrollable Body + Pinned Footer) -->
     <div class="setup-shell" id="setupShellView">
-      <div class="setup-window-card animate-view">
+      <div class="setup-window-card">
         <nav class="setup-top-tabs" id="setupTopTabs"></nav>
         <div class="setup-body" id="setupBodyContent" tabindex="0"></div>
         <footer class="setup-footer" id="setupFooterBar"></footer>
@@ -1237,7 +1241,7 @@
 
   <script>
     // =========================================================================
-    // Application State (Empty Default Inputs & Persistent Config Support)
+    // Application State (Tab-Only Animation Flag + Automatic Config Loading)
     // =========================================================================
     const SETUP_TABS = [
       { id: "network", label: "Network" },
@@ -1256,13 +1260,16 @@
       { id: "config", label: "Configuration & LAN", icon: "📄" }
     ];
 
+    // Controls whether the next render plays the full tab transition animation
+    let shouldAnimateTab = true;
+
     const state = {
       theme: "dark",
-      viewMode: "setup", // Opens in 'setup' first unless saved config exists
+      viewMode: "setup",
       setupTab: "network",
       settingsTab: "system",
       searchQuery: "",
-      openDropdownField: null, // Tracks active Windows 11 custom ComboBox flyout
+      openDropdownField: null,
       advancedExpanded: {
         network: false,
         apps: false,
@@ -1270,7 +1277,7 @@
         power: false
       },
       configSavedLocally: false,
-      savedConfigPath: "instant-server-config.json",
+      savedConfigPath: "Instant_Server_Data/instant-server-config.json",
 
       // User Configuration (Starts with empty Wi-Fi, passwords, and optional fields)
       hostname: "instant-server",
@@ -1284,8 +1291,8 @@
       static_dns: "",
       ssh_authorized_key: "",
 
-      // Apps & Services (Clean names, no port clutter)
-      dashboard_choice: "both", // 'both', 'cockpit', 'casaos', 'none'
+      // Apps & Services
+      dashboard_choice: "both",
       enable_pihole_dns_prep: true,
       enable_samba_nas: true,
       enable_intel_vaapi: true,
@@ -1293,7 +1300,7 @@
       tailscale_authkey: "",
 
       // Target Laptop Storage Mode & USB
-      install_mode: "dual_boot", // 'dual_boot', 'auto_erase', 'interactive_select', 'secondary_drive'
+      install_mode: "dual_boot",
       dual_boot_Allocation_gb: 45,
       confirm_erase_main_drive: false,
       ubuntu_release: "24.04",
@@ -1426,7 +1433,7 @@
         "ups_shutdown_battery_pct", "enable_low_ram_zram", "safe_gpu_nomodeset"
       ];
       keys.forEach(k => {
-        if (cfg[k] !== undefined) state[k] = String(cfg[k]) === cfg[k] || typeof cfg[k] === "boolean" || typeof cfg[k] === "number" ? cfg[k] : state[k];
+        if (cfg[k] !== undefined) state[k] = cfg[k];
       });
       state.screen_blank_seconds = String(state.screen_blank_seconds || "60");
       state.ubuntu_release = String(state.ubuntu_release || "24.04");
@@ -1439,13 +1446,31 @@
     }
 
     async function initAppStartup() {
-      const res = await callBackend("load-config", "GET");
-      if (res && res.exists && res.config) {
-        applyConfigToState(res.config);
+      let loadedFromDisk = false;
+
+      // 1. Check synchronous boot config injected by instant_server_cli.py
+      if (window.__INSTANT_SERVER_BOOT_CONFIG__ && window.__INSTANT_SERVER_BOOT_CONFIG__.exists && window.__INSTANT_SERVER_BOOT_CONFIG__.config) {
+        applyConfigToState(window.__INSTANT_SERVER_BOOT_CONFIG__.config);
         state.configSavedLocally = true;
-        state.savedConfigPath = res.path || "instant-server-config.json";
+        state.savedConfigPath = window.__INSTANT_SERVER_BOOT_CONFIG__.path || "Instant_Server_Data/instant-server-config.json";
         state.viewMode = "settings";
-      } else {
+        loadedFromDisk = true;
+      }
+
+      // 2. Also query backend load-config endpoint (for pywebview / HTTP server)
+      if (!loadedFromDisk) {
+        const res = await callBackend("load-config", "GET");
+        if (res && res.exists && res.config) {
+          applyConfigToState(res.config);
+          state.configSavedLocally = true;
+          state.savedConfigPath = res.path || "Instant_Server_Data/instant-server-config.json";
+          state.viewMode = "settings";
+          loadedFromDisk = true;
+        }
+      }
+
+      // 3. Fallback to browser localStorage when previewing in standalone Canvas
+      if (!loadedFromDisk) {
         try {
           const cached = localStorage.getItem("instant_server_saved_config");
           if (cached) {
@@ -1457,6 +1482,7 @@
       }
 
       await scanUsbDrives(true);
+      shouldAnimateTab = true;
       renderApp();
     }
 
@@ -1513,9 +1539,12 @@
       if (res && res.path) {
         state.savedConfigPath = res.path;
       }
+      if (state.viewMode !== "settings") {
+        shouldAnimateTab = true;
+      }
       state.viewMode = "settings";
       state.settingsTab = "system";
-      showToast("Configuration saved to instant-server-config.json");
+      showToast("Saved to Instant_Server_Data/instant-server-config.json");
       renderApp();
     }
 
@@ -1557,11 +1586,15 @@
       }
 
       const payload = serializeProfilePayload();
+      try {
+        localStorage.setItem("instant_server_saved_config", JSON.stringify(payload));
+      } catch (_e) {}
+
       state.flashing = true;
       state.flashProgress = 8;
       state.flashStatusText = "Starting Instant Server USB provisioning...";
       state.flashLogs = [
-        "[00:00] Validating configuration and Triple-Lock USB safety...",
+        "[00:00] Saved config to Instant_Server_Data/instant-server-config.json",
         `[00:01] Target server: ${payload.hostname}.local (${payload.username})`
       ];
       renderApp();
@@ -1649,7 +1682,7 @@
       return `
         <div class="win-combobox ${isOpen ? "open" : ""}" data-combobox="${esc(field)}">
           <button type="button" class="win-combobox-trigger" data-action="toggle-dropdown" data-field="${esc(field)}">
-            <span>${esc(currentOpt ? currentOpt.label : "")}</span>
+            <span class="win-combobox-label">${esc(currentOpt ? currentOpt.label : "")}</span>
             <span class="win-combobox-chevron">⌄</span>
           </button>
           <div class="win-combobox-menu" role="listbox">
@@ -1662,6 +1695,7 @@
                   data-action="select-dropdown-option"
                   data-field="${esc(field)}"
                   data-value="${esc(opt.value)}"
+                  data-label="${esc(opt.label)}"
                   role="option"
                   aria-selected="${isSel}"
                 >
@@ -1768,7 +1802,7 @@ ${storageSnippet}
     }
 
     // =========================================================================
-    // Tab Content Builders (Wrapped in .tab-flow-stack so Boxes Never Overlap)
+    // Tab Content Builders (With Data Attributes for Flicker-Free In-Place Updates)
     // =========================================================================
     function buildNetworkSection() {
       const basicHtml = `
@@ -1778,7 +1812,7 @@ ${storageSnippet}
               <div class="card-icon">🏷</div>
               <div class="card-text">
                 <div class="card-title">Server name</div>
-                <div class="card-desc">Name used to reach your server on your home network (${esc(state.hostname || "instant-server")}.local)</div>
+                <div class="card-desc" id="descServerHostname">Name used to reach your server on your home network (${esc(state.hostname || "instant-server")}.local)</div>
               </div>
             </div>
             <div class="card-right">
@@ -1942,7 +1976,14 @@ ${storageSnippet}
             </div>
           </div>
           <div class="card-right" style="flex-wrap:wrap;">
-            ${state.enable_tailscale ? `<input class="win-input" style="min-width:160px;" data-field="tailscale_authkey" value="${esc(state.tailscale_authkey)}" placeholder="Auth key (optional)" />` : ""}
+            <input
+              id="tailscaleAuthInput"
+              class="win-input"
+              style="min-width:160px; ${state.enable_tailscale ? "" : "display:none;"}"
+              data-field="tailscale_authkey"
+              value="${esc(state.tailscale_authkey)}"
+              placeholder="Auth key (optional)"
+            />
             ${renderSwitch("toggle-tailscale", state.enable_tailscale)}
           </div>
         </div>
@@ -1969,7 +2010,7 @@ ${storageSnippet}
           <div class="card-left">
             <div class="card-icon">📏</div>
             <div class="card-text">
-              <div class="card-title">Server partition size (${state.dual_boot_Allocation_gb} GB)</div>
+              <div class="card-title" id="lblDualBootSize">Server partition size (${state.dual_boot_Allocation_gb} GB)</div>
               <div class="card-desc">Space reserved for Instant Server alongside your existing system</div>
             </div>
           </div>
@@ -1978,7 +2019,7 @@ ${storageSnippet}
           </div>
         </div>
       ` : state.install_mode === "auto_erase" ? `
-        <div class="notice-banner ${state.confirm_erase_main_drive ? "notice-banner-warning" : ""}">
+        <div class="notice-banner ${state.confirm_erase_main_drive ? "notice-banner-warning" : ""}" id="bannerAutoErase">
           <div style="font-weight:600;">Warning: This will erase all files on the target laptop's main drive</div>
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:4px;">
             <input type="checkbox" data-action="toggle-confirm-erase" ${state.confirm_erase_main_drive ? "checked" : ""} style="accent-color:var(--danger);width:16px;height:16px;" />
@@ -2107,8 +2148,8 @@ ${storageSnippet}
             <div class="card-left">
               <div class="card-icon">🔋</div>
               <div class="card-text">
-                <div class="card-title">Battery health limiter (${state.battery_charge_start_pct}% – ${state.battery_charge_stop_pct}%)</div>
-                <div class="card-desc">Caps charging at ${state.battery_charge_stop_pct}% while plugged in 24/7 to protect the battery</div>
+                <div class="card-title" id="lblBatCapTitle">Battery health limiter (${state.battery_charge_start_pct}% – ${state.battery_charge_stop_pct}%)</div>
+                <div class="card-desc" id="lblBatCapDesc">Caps charging at ${state.battery_charge_stop_pct}% while plugged in 24/7 to protect the battery</div>
               </div>
             </div>
             <div class="card-right">
@@ -2120,8 +2161,8 @@ ${storageSnippet}
             <div class="card-left">
               <div class="card-icon">⚡</div>
               <div class="card-text">
-                <div class="card-title">Safe shutdown during power outage (${state.ups_shutdown_battery_pct}%)</div>
-                <div class="card-desc">Uses the laptop battery as a built-in UPS and shuts down cleanly when battery drops to ${state.ups_shutdown_battery_pct}%</div>
+                <div class="card-title" id="lblUpsTitle">Safe shutdown during power outage (${state.ups_shutdown_battery_pct}%)</div>
+                <div class="card-desc" id="lblUpsDesc">Uses the laptop battery as a built-in UPS and shuts down cleanly when battery drops to ${state.ups_shutdown_battery_pct}%</div>
               </div>
             </div>
             <div class="card-right">
@@ -2136,7 +2177,7 @@ ${storageSnippet}
           <div class="card-left">
             <div class="card-icon">🖥</div>
             <div class="card-text">
-              <div class="card-title">Turn off laptop screen after ${esc(state.screen_blank_seconds)} seconds</div>
+              <div class="card-title" id="lblScreenBlankTitle">Turn off laptop screen after ${esc(state.screen_blank_seconds)} seconds</div>
               <div class="card-desc">Saves power and prevents screen burn-in</div>
             </div>
           </div>
@@ -2246,7 +2287,7 @@ ${storageSnippet}
     }
 
     // =========================================================================
-    // Render Mode 1: First-Run Windows Setup View
+    // Render Mode 1: First-Run Windows Setup View (Animates Only on Tab Switch)
     // =========================================================================
     function renderSetupView() {
       const topTabsEl = document.getElementById("setupTopTabs");
@@ -2280,8 +2321,11 @@ ${storageSnippet}
       else if (state.setupTab === "power") contentHtml = buildPowerSection();
       else contentHtml = buildFinishSection();
 
+      const animClass = shouldAnimateTab ? "animate-tab-switch" : "";
+      shouldAnimateTab = false;
+
       bodyEl.innerHTML = `
-        <div class="animate-view tab-flow-stack">
+        <div class="${animClass} tab-flow-stack">
           <div>
             <h1 class="setup-header-title">${esc(hdr.title)}</h1>
             <p class="setup-header-desc">${esc(hdr.desc)}</p>
@@ -2312,7 +2356,7 @@ ${storageSnippet}
     }
 
     // =========================================================================
-    // Render Mode 2: Main Settings Home Window (Windows 11 Settings Layout)
+    // Render Mode 2: Main Settings Home Window (Animates Only on Tab Switch)
     // =========================================================================
     function renderSettingsView() {
       const navEl = document.getElementById("settingsNavList");
@@ -2337,6 +2381,9 @@ ${storageSnippet}
       const currentMeta = SETTINGS_TABS[tabIdx] || SETTINGS_TABS[0];
       const isFirst = tabIdx <= 0;
       const isLast = tabIdx === SETTINGS_TABS.length - 1;
+
+      const animClass = shouldAnimateTab ? "animate-tab-switch" : "";
+      shouldAnimateTab = false;
 
       const bottomPagerHtml = `
         <div class="bottom-nav-row">
@@ -2367,12 +2414,11 @@ ${storageSnippet}
         if (state.enable_tailscale) enabledApps.push("Tailscale VPN");
 
         mainEl.innerHTML = `
-          <div class="animate-view tab-flow-stack">
+          <div class="${animClass} tab-flow-stack">
             <div class="page-header">
               <div class="breadcrumb-bar"><span>System</span></div>
             </div>
 
-            <!-- Normal Clean Server & Software Summary (Text Title Only, No IS Logo Box) -->
             <div class="system-summary-banner">
               <div class="summary-left">
                 <div class="summary-title">${esc(state.hostname || "instant-server")}</div>
@@ -2432,7 +2478,6 @@ ${storageSnippet}
               </div>
             </div>
 
-            <!-- Centered Flash Button at Bottom of Home System Tab + Progress & Logs -->
             <div class="center-flash-row">
               <button type="button" class="win-btn win-btn-accent win-btn-large" data-action="start-flash" ${state.flashing ? "disabled" : ""}>
                 ${state.flashing ? "Flashing USB..." : "Flash USB"}
@@ -2459,8 +2504,8 @@ ${storageSnippet}
                 <div class="card-left">
                   <div class="card-icon">💾</div>
                   <div class="card-text">
-                    <div class="card-title">Local configuration file</div>
-                    <div class="card-desc">Saved in app folder as ${esc(state.savedConfigPath)}</div>
+                    <div class="card-title">Local configuration & workspace folder</div>
+                    <div class="card-desc">Automatically saved in ${esc(state.savedConfigPath)}</div>
                   </div>
                 </div>
                 <div class="card-right">
@@ -2506,7 +2551,7 @@ ${storageSnippet}
       }
 
       mainEl.innerHTML = `
-        <div class="animate-view tab-flow-stack">
+        <div class="${animClass} tab-flow-stack">
           <div class="page-header">
             <div class="breadcrumb-bar">
               <span class="breadcrumb-link" data-action="switch-settings-tab" data-tab="system">System</span>
@@ -2533,7 +2578,7 @@ ${storageSnippet}
       ].filter(it => (it.title + " " + it.desc + " " + it.keys).toLowerCase().includes(q));
 
       return `
-        <div class="animate-view tab-flow-stack">
+        <div class="tab-flow-stack">
           <div class="page-header">
             <div class="breadcrumb-bar"><span>Search results for "${esc(query)}"</span></div>
             <button type="button" class="win-btn" data-action="clear-search">Clear</button>
@@ -2557,7 +2602,7 @@ ${storageSnippet}
     }
 
     // =========================================================================
-    // Master Render & Event Delegation
+    // Master Render & Flicker-Free In-Place DOM Updates
     // =========================================================================
     function renderApp() {
       document.documentElement.setAttribute("data-theme", state.theme);
@@ -2588,6 +2633,14 @@ ${storageSnippet}
       }
     }
 
+    function updateSwitchInPlace(switchEl, isOn) {
+      if (!switchEl) return;
+      switchEl.classList.toggle("on", isOn);
+      switchEl.setAttribute("aria-checked", String(isOn));
+      const lbl = switchEl.querySelector(".win-switch-label");
+      if (lbl) lbl.textContent = isOn ? "On" : "Off";
+    }
+
     // Active Scrollbar Highlight on Wheel, Scroll, or Arrow Keys
     function attachSleekScrollListeners() {
       const markScrolling = (el) => {
@@ -2614,12 +2667,17 @@ ${storageSnippet}
     // Top bar static controls
     document.getElementById("btnThemeToggle").addEventListener("click", () => {
       state.theme = state.theme === "dark" ? "light" : "dark";
-      renderApp();
+      document.documentElement.setAttribute("data-theme", state.theme);
+      const themeLabel = document.getElementById("themeToggleLabel");
+      if (themeLabel) {
+        themeLabel.textContent = state.theme === "dark" ? "☀ Light" : "🌙 Dark";
+      }
     });
 
     document.getElementById("btnToggleModeView").addEventListener("click", () => {
       state.viewMode = state.viewMode === "setup" ? "settings" : "setup";
       state.openDropdownField = null;
+      shouldAnimateTab = true;
       renderApp();
     });
 
@@ -2629,15 +2687,18 @@ ${storageSnippet}
         const idx = SETUP_TABS.findIndex(t => t.id === state.setupTab);
         if (idx > 0) {
           state.setupTab = SETUP_TABS[idx - 1].id;
+          shouldAnimateTab = true;
           renderApp();
         }
       } else {
         if (state.searchQuery) {
           state.searchQuery = "";
           document.getElementById("globalSearchInput").value = "";
+          shouldAnimateTab = true;
           renderApp();
         } else if (state.settingsTab !== "system") {
           state.settingsTab = "system";
+          shouldAnimateTab = true;
           renderApp();
         }
       }
@@ -2648,37 +2709,114 @@ ${storageSnippet}
       renderSettingsView();
     });
 
-    // Delegated Clicks (Including Custom Win11 ComboBox Flyout)
+    // Delegated Clicks (In-Place for Toggles, Expanders & Dropdowns; Tab Animation ONLY on Tab Switch)
     document.body.addEventListener("click", async (e) => {
       const target = e.target.closest("[data-action]");
 
-      // Close open dropdown if user clicks anywhere outside a combobox
+      // Close open dropdown in-place if user clicks anywhere outside a combobox
       if (!e.target.closest(".win-combobox") && state.openDropdownField !== null) {
         state.openDropdownField = null;
-        renderApp();
+        document.querySelectorAll(".win-combobox.open").forEach(cb => cb.classList.remove("open"));
       }
 
       if (!target) return;
       const action = target.getAttribute("data-action");
 
+      // 1. Custom Win11 ComboBox Dropdown (In-Place, Zero Flicker)
       if (action === "toggle-dropdown") {
         const field = target.getAttribute("data-field");
-        state.openDropdownField = state.openDropdownField === field ? null : field;
-        renderApp();
+        const box = target.closest(".win-combobox");
+        const willOpen = state.openDropdownField !== field;
+        document.querySelectorAll(".win-combobox.open").forEach(cb => cb.classList.remove("open"));
+        state.openDropdownField = willOpen ? field : null;
+        if (box && willOpen) box.classList.add("open");
         return;
       } else if (action === "select-dropdown-option") {
         const field = target.getAttribute("data-field");
         const val = target.getAttribute("data-value");
+        const label = target.getAttribute("data-label") || val;
         if (field) {
           state[field] = val;
         }
         state.openDropdownField = null;
-        renderApp();
+        const box = target.closest(".win-combobox");
+        if (box) {
+          box.classList.remove("open");
+          const trigLbl = box.querySelector(".win-combobox-label");
+          if (trigLbl) trigLbl.textContent = label;
+          box.querySelectorAll(".win-combobox-option").forEach(opt => {
+            const sel = opt.getAttribute("data-value") === val;
+            opt.classList.toggle("selected", sel);
+            opt.setAttribute("aria-selected", String(sel));
+          });
+        }
+        if (field === "screen_blank_seconds") {
+          const blankTitle = document.getElementById("lblScreenBlankTitle");
+          if (blankTitle) blankTitle.textContent = `Turn off laptop screen after ${val} seconds`;
+        }
         return;
       }
 
+      // 2. Advanced Options Expander (In-Place CSS Grid Transition, Zero Flicker)
+      if (action === "toggle-expander") {
+        const key = target.getAttribute("data-expander");
+        if (key) {
+          state.advancedExpanded[key] = !state.advancedExpanded[key];
+          const wrap = target.closest(".expander-wrap");
+          if (wrap) {
+            wrap.classList.toggle("open", state.advancedExpanded[key]);
+          }
+        }
+        return;
+      }
+
+      // 3. Toggle Switches (In-Place Thumb Slide, Zero Flicker)
+      if (action === "toggle-tethering") {
+        state.enable_usb_tethering = !state.enable_usb_tethering;
+        updateSwitchInPlace(target, state.enable_usb_tethering);
+        return;
+      } else if (action === "toggle-pihole") {
+        state.enable_pihole_dns_prep = !state.enable_pihole_dns_prep;
+        updateSwitchInPlace(target, state.enable_pihole_dns_prep);
+        return;
+      } else if (action === "toggle-samba") {
+        state.enable_samba_nas = !state.enable_samba_nas;
+        updateSwitchInPlace(target, state.enable_samba_nas);
+        return;
+      } else if (action === "toggle-vaapi") {
+        state.enable_intel_vaapi = !state.enable_intel_vaapi;
+        updateSwitchInPlace(target, state.enable_intel_vaapi);
+        return;
+      } else if (action === "toggle-tailscale") {
+        state.enable_tailscale = !state.enable_tailscale;
+        updateSwitchInPlace(target, state.enable_tailscale);
+        const authIn = document.getElementById("tailscaleAuthInput");
+        if (authIn) authIn.style.display = state.enable_tailscale ? "" : "none";
+        return;
+      } else if (action === "toggle-lid") {
+        state.ignore_lid_switch = !state.ignore_lid_switch;
+        updateSwitchInPlace(target, state.ignore_lid_switch);
+        return;
+      } else if (action === "toggle-zram") {
+        state.enable_low_ram_zram = !state.enable_low_ram_zram;
+        updateSwitchInPlace(target, state.enable_low_ram_zram);
+        return;
+      } else if (action === "toggle-nomodeset") {
+        state.safe_gpu_nomodeset = !state.safe_gpu_nomodeset;
+        updateSwitchInPlace(target, state.safe_gpu_nomodeset);
+        return;
+      } else if (action === "toggle-confirm-erase") {
+        state.confirm_erase_main_drive = !!target.checked;
+        const banner = document.getElementById("bannerAutoErase");
+        if (banner) banner.classList.toggle("notice-banner-warning", state.confirm_erase_main_drive);
+        return;
+      }
+
+      // 4. Tab Navigation Actions (Trigger Smooth Tab Switch Animation)
       if (action === "switch-setup-tab" || action === "jump-setup-tab") {
-        state.setupTab = target.getAttribute("data-tab") || "network";
+        const nextTab = target.getAttribute("data-tab") || "network";
+        if (state.setupTab !== nextTab) shouldAnimateTab = true;
+        state.setupTab = nextTab;
         state.validationErrors = [];
         state.openDropdownField = null;
         renderApp();
@@ -2687,6 +2825,7 @@ ${storageSnippet}
         if (idx > 0) {
           state.setupTab = SETUP_TABS[idx - 1].id;
           state.openDropdownField = null;
+          shouldAnimateTab = true;
           renderApp();
         }
       } else if (action === "setup-skip" || action === "setup-next") {
@@ -2694,17 +2833,13 @@ ${storageSnippet}
         if (idx < SETUP_TABS.length - 1) {
           state.setupTab = SETUP_TABS[idx + 1].id;
           state.openDropdownField = null;
-          renderApp();
-        }
-      } else if (action === "toggle-expander") {
-        const key = target.getAttribute("data-expander");
-        if (key) {
-          state.advancedExpanded[key] = !state.advancedExpanded[key];
-          state.openDropdownField = null;
+          shouldAnimateTab = true;
           renderApp();
         }
       } else if (action === "switch-settings-tab") {
-        state.settingsTab = target.getAttribute("data-tab") || "system";
+        const nextTab = target.getAttribute("data-tab") || "system";
+        if (state.settingsTab !== nextTab || state.searchQuery) shouldAnimateTab = true;
+        state.settingsTab = nextTab;
         state.searchQuery = "";
         state.openDropdownField = null;
         const sInput = document.getElementById("globalSearchInput");
@@ -2715,6 +2850,7 @@ ${storageSnippet}
         if (idx > 0) {
           state.settingsTab = SETTINGS_TABS[idx - 1].id;
           state.openDropdownField = null;
+          shouldAnimateTab = true;
           renderApp();
         }
       } else if (action === "settings-next") {
@@ -2722,11 +2858,13 @@ ${storageSnippet}
         if (idx < SETTINGS_TABS.length - 1) {
           state.settingsTab = SETTINGS_TABS[idx + 1].id;
           state.openDropdownField = null;
+          shouldAnimateTab = true;
           renderApp();
         }
       } else if (action === "clear-search") {
         state.searchQuery = "";
         document.getElementById("globalSearchInput").value = "";
+        shouldAnimateTab = true;
         renderApp();
       } else if (action === "select-dashboard") {
         state.dashboard_choice = target.getAttribute("data-value") || "both";
@@ -2737,38 +2875,11 @@ ${storageSnippet}
           state.confirm_erase_main_drive = false;
         }
         renderApp();
-      } else if (action === "toggle-confirm-erase") {
-        state.confirm_erase_main_drive = !state.confirm_erase_main_drive;
-        renderApp();
       } else if (action === "select-usb") {
         state.selectedUsbId = target.getAttribute("data-usb") || "";
         renderApp();
       } else if (action === "scan-usb") {
         await scanUsbDrives(false);
-      } else if (action === "toggle-tethering") {
-        state.enable_usb_tethering = !state.enable_usb_tethering;
-        renderApp();
-      } else if (action === "toggle-pihole") {
-        state.enable_pihole_dns_prep = !state.enable_pihole_dns_prep;
-        renderApp();
-      } else if (action === "toggle-samba") {
-        state.enable_samba_nas = !state.enable_samba_nas;
-        renderApp();
-      } else if (action === "toggle-vaapi") {
-        state.enable_intel_vaapi = !state.enable_intel_vaapi;
-        renderApp();
-      } else if (action === "toggle-tailscale") {
-        state.enable_tailscale = !state.enable_tailscale;
-        renderApp();
-      } else if (action === "toggle-lid") {
-        state.ignore_lid_switch = !state.ignore_lid_switch;
-        renderApp();
-      } else if (action === "toggle-zram") {
-        state.enable_low_ram_zram = !state.enable_low_ram_zram;
-        renderApp();
-      } else if (action === "toggle-nomodeset") {
-        state.safe_gpu_nomodeset = !state.safe_gpu_nomodeset;
-        renderApp();
       } else if (action === "save-config-home") {
         await saveConfigurationAndOpenHome();
       } else if (action === "start-flash") {
@@ -2804,13 +2915,30 @@ ${storageSnippet}
       }
     });
 
-    // Delegated Field Inputs
+    // Delegated Field Inputs (In-Place Slider & Text Updates — Zero Re-Render Flicker!)
     document.body.addEventListener("input", (e) => {
       const field = e.target.getAttribute("data-field");
       if (!field) return;
       state[field] = e.target.value;
-      if (field === "dual_boot_Allocation_gb" || field === "battery_charge_stop_pct" || field === "ups_shutdown_battery_pct") {
-        renderApp();
+
+      if (field === "hostname") {
+        const hostDesc = document.getElementById("descServerHostname");
+        if (hostDesc) {
+          hostDesc.textContent = `Name used to reach your server on your home network (${state.hostname || "instant-server"}.local)`;
+        }
+      } else if (field === "dual_boot_Allocation_gb") {
+        const lbl = document.getElementById("lblDualBootSize");
+        if (lbl) lbl.textContent = `Server partition size (${state.dual_boot_Allocation_gb} GB)`;
+      } else if (field === "battery_charge_stop_pct") {
+        const t = document.getElementById("lblBatCapTitle");
+        const d = document.getElementById("lblBatCapDesc");
+        if (t) t.textContent = `Battery health limiter (${state.battery_charge_start_pct}% – ${state.battery_charge_stop_pct}%)`;
+        if (d) d.textContent = `Caps charging at ${state.battery_charge_stop_pct}% while plugged in 24/7 to protect the battery`;
+      } else if (field === "ups_shutdown_battery_pct") {
+        const t = document.getElementById("lblUpsTitle");
+        const d = document.getElementById("lblUpsDesc");
+        if (t) t.textContent = `Safe shutdown during power outage (${state.ups_shutdown_battery_pct}%)`;
+        if (d) d.textContent = `Uses the laptop battery as a built-in UPS and shuts down cleanly when battery drops to ${state.ups_shutdown_battery_pct}%`;
       }
     });
 

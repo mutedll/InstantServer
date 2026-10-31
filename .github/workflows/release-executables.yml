@@ -2,19 +2,28 @@ name: Build Instant Server Executables (Windows, macOS, Linux)
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   self-test-suite:
     name: Verify All 10 Instant Server Modules
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+
       - name: Run Deterministic Self-Tests Across All Modules
         run: |
           python3 m1_host_probe.py --self-test
@@ -34,21 +43,42 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-24.04, windows-2022, macos-15-intel]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+
       - name: Install PyInstaller 6.x
         run: pip install pyinstaller
-      - name: Generate Packaging Spec & Platform Manifests
-        run: python3 build_executables.py --emit-configs ./build_dist
+
+      - name: Generate Packaging Spec, Taskbar Icon & Platform Manifests
+        run: python build_executables.py --emit-configs ./build_dist
+
       - name: Build Standalone Binary via PyInstaller
+        shell: bash
         run: |
           cp ./build_dist/InstantServer.spec ./InstantServer.spec
+          cp ./build_dist/instant_server_icon.ico ./instant_server_icon.ico
+          cp ./build_dist/instant_server_icon.png ./instant_server_icon.png
           pyinstaller --clean --noconfirm InstantServer.spec
+
       - name: Ad-Hoc Codesign & Package DMG (macOS)
-        if: matrix.os == 'macos-latest'
+        if: startsWith(matrix.os, 'macos')
+        shell: bash
         run: bash ./build_dist/macos_codesign_and_dmg.sh
+
+      # === NEW STEP TO UPLOAD THE ARTIFACTS ===
+      - name: Upload Executable Package
+        uses: actions/upload-artifact@v6
+        with:
+          name: instant-server-${{ matrix.os }}
+          path: |
+            dist/
+            *.dmg
+          if-no-files-found: error

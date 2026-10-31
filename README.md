@@ -39,7 +39,7 @@ Go to the **Releases** section on the right side of this GitHub page and downloa
 If you have Python 3.8 or newer installed, you can download or clone this repository and run it directly—no extra `pip install` packages are required:
 
 ```bash
-git clone https://github.com
+git clone https://github.com/mutedll/InstantServer
 cd instant-server
 python instant_server_cli.py
 ```

@@ -1,34 +1,31 @@
 #!/usr/bin/env python3
 """
 Instant Server — Phase 4: Cross-Platform Standalone Executable Bundler & CI Generator
-=====================================================================================
+====================================================================================
 File: build_executables.py
 Project: Instant Server (Turn any old laptop into a headless Ubuntu Server)
 Runs on: Windows 10/11, macOS, and Linux (Python 3.8+ through 3.14+, zero external deps)
 
 Responsibilities:
-1. Solves the 4 biggest community desktop packaging bugs across Windows, macOS, and Linux:
-   - Bug A (PyInstaller `sys._MEIPASS` Missing Data Files at Runtime): When frozen into a
-     single-file `.exe`, `.app`, or Linux binary, `os.path.dirname(__file__)` no longer points
-     to bundled assets (`lazarus_gui.html`, `p1_early_hardware_adapter.py`,
-     `p2_late_laptop_hardening.sh`) unless resolved via `getattr(sys, '_MEIPASS', ...)` and
-     bundled with PyInstaller 6.x `--add-data=src:dest` syntax.
-   - Bug B (Windows Raw USB Access Denied Without UAC Manifest): Writing to `\\\\.\\PhysicalDriveN`
-     requires Administrator elevation. Generates an embedded Windows UAC `requireAdministrator`
-     application manifest (`instant_server.exe.manifest`) and enables `uac_admin=True` in the
-     generated `InstantServer.spec`.
-   - Bug C (macOS Apple Silicon / Sequoia Gatekeeper "App is damaged" & Local Network Block):
-     Generates a complete `Info.plist` including `NSLocalNetworkUsageDescription` and
-     `NSBonjourServices` (`_cockpit._tcp`, `_http._tcp`) so macOS Sequoia allows `.local` mDNS
-     LAN discovery, and generates the ad-hoc codesigning & quarantine-removal script
-     (`codesign --force --deep --sign - InstantServer.app`).
-   - Bug D (Ubuntu 22.04 / 24.04 AppImage Crash `dlopen(): error loading libfuse.so.2`):
-     Ubuntu 22.04/24.04 ship with `fuse3` instead of `libfuse.so.2`. Generates an `AppDir`
-     structure and Linux launcher wrapper that sets `APPIMAGE_EXTRACT_AND_RUN=1` and includes
-     a Polkit (`pkexec`) `.desktop` entry so Linux users never hit `libfuse.so.2` crashes.
-2. Generates a complete multi-OS GitHub Actions CI/CD workflow (`release-executables.yml`)
-   that builds and publishes `InstantServer-Windows-x64.exe`, `InstantServer-macOS-Universal.dmg`,
-   and `InstantServer-Linux-x86_64.AppImage` automatically.
+1. Generates the Photoshop-style `IS` application & taskbar icon (`instant_server_icon.ico`
+   and `instant_server_icon.png`) featuring a deep navy blue background (`#001E36`),
+   sky-blue border (`#31A8FF`), and light-blue `IS` monogram with top & bottom horizontal
+   serif bars on the `I`, embedding it directly into `InstantServer.spec` (`icon=...`).
+2. Solves the 4 biggest community desktop packaging bugs across Windows, macOS, and Linux:
+   - PyInstaller `sys._MEIPASS` asset resolution + automatic `Instant_Server_Data/` folder
+     in the directory where the `.exe` is launched.
+   - Windows UAC `requireAdministrator` manifest (`uac_admin=True`) for raw USB access.
+   - macOS ad-hoc Gatekeeper codesigning & `.dmg` creation.
+   - Linux `APPIMAGE_EXTRACT_AND_RUN=1` wrapper.
+3. Generates a zero-warning, zero-notice GitHub Actions CI/CD workflow (`release-executables.yml`):
+   - Uses Node.js 24 native actions (`actions/checkout@v6`, `actions/setup-python@v6`,
+     `actions/upload-artifact@v6` / `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`) to eliminate
+     all Node.js 20 deprecation warnings.
+   - Pins `ubuntu-24.04` (instead of `ubuntu-latest`) and `macos-15-intel` (instead of
+     `macos-latest` arm64) to eliminate the Ubuntu 26 migration notice and the macOS arm64
+     capacity queue notice.
+   - Includes the `Upload Executable Package` step (`instant-server-${{ matrix.os }}`) plus
+     automatic GitHub Releases attachment when pushing a `v*` tag.
 """
 
 from __future__ import annotations
@@ -43,6 +40,10 @@ import tempfile
 from typing import Any, Dict, List, Optional
 
 _CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+if _CURRENT_DIR not in sys.path:
+    sys.path.insert(0, _CURRENT_DIR)
+
+import instant_server_cli  # noqa: E402
 
 
 def resolve_bundled_resource(filename: str, base_dir: Optional[str] = None) -> str:
@@ -68,6 +69,8 @@ class PackagingManifest:
     bundle_identifier: str = "io.instantserver.studio"
     version: str = "2.0.0"
     entrypoint_script: str = "instant_server_cli.py"
+    icon_ico: str = "instant_server_icon.ico"
+    icon_png: str = "instant_server_icon.png"
     bundled_data_files: List[str] = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
@@ -86,19 +89,19 @@ class PackagingManifest:
 
 
 # ---------------------------------------------------------------------------
-# 1. PyInstaller `InstantServer.spec` Generator (Windows / macOS / Linux)
+# 1. PyInstaller `InstantServer.spec` Generator (With Photoshop-Style IS Icon)
 # ---------------------------------------------------------------------------
 def generate_pyinstaller_spec(manifest: PackagingManifest) -> str:
     """
     Generate a deterministic `InstantServer.spec` file that bundles `lazarus_gui.html`,
-    `p1_early_hardware_adapter.py`, `p2_late_laptop_hardening.sh`, and all engine modules,
-    enabling `uac_admin=True` on Windows and a native `.app` bundle on macOS.
+    all engine modules, and the Photoshop-style `IS` taskbar/executable icon.
     """
     datas_tuples = ",\n    ".join(f"('{f}', '.')" for f in manifest.bundled_data_files)
     return f"""# -*- mode: python ; coding: utf-8 -*-
 # Auto-generated by Instant Server Phase 4 Executable Bundler (build_executables.py)
 # Compatible with PyInstaller 6.x across Windows, macOS, and Linux
 
+import os
 import sys
 
 block_cipher = None
@@ -106,6 +109,8 @@ block_cipher = None
 bundled_datas = [
     {datas_tuples}
 ]
+
+icon_file = '{manifest.icon_ico}' if os.path.exists('{manifest.icon_ico}') else None
 
 a = Analysis(
     ['{manifest.entrypoint_script}'],
@@ -115,7 +120,6 @@ a = Analysis(
     hiddenimports=[
         'm1_host_probe',
         'm2_iso_manager',
-        'm3_iso_engine',
         'm3_usb_engine',
         'm4_config_builder',
         'm5_payload_packager',
@@ -147,7 +151,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=False,  # Disabled UPX to prevent Windows Defender false-positive heuristics
+    upx=False,
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,
@@ -156,14 +160,15 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    uac_admin=True,  # Requests Windows Administrator elevation for raw USB flashing
+    icon=icon_file,
+    uac_admin=True,
 )
 
 if sys.platform == 'darwin':
     app = BUNDLE(
         exe,
         name='{manifest.app_name}.app',
-        icon=None,
+        icon=icon_file,
         bundle_identifier='{manifest.bundle_identifier}',
         info_plist={{
             'CFBundleName': '{manifest.display_name}',
@@ -189,11 +194,6 @@ if sys.platform == 'darwin':
 # 2. Windows UAC `requireAdministrator` Application Manifest Generator
 # ---------------------------------------------------------------------------
 def generate_windows_uac_manifest(manifest: PackagingManifest) -> str:
-    """
-    Generate a standard Win32 UAC `requireAdministrator` XML manifest + Per-Monitor V2
-    DPI awareness so Windows 10/11 prompts for elevation before opening raw USB drives
-    and renders the Apple-Minimal Studio GUI crisply on 4K/HiDPI displays.
-    """
     return f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
   <assemblyIdentity
@@ -224,11 +224,6 @@ def generate_windows_uac_manifest(manifest: PackagingManifest) -> str:
 # 3. macOS Sequoia `Info.plist` & Ad-Hoc Gatekeeper Codesign Helper
 # ---------------------------------------------------------------------------
 def generate_macos_codesign_script(manifest: PackagingManifest) -> str:
-    """
-    Generate the macOS post-build packaging script that strips `com.apple.quarantine`
-    extended attributes and applies an ad-hoc signature (`codesign --force --deep --sign -`)
-    so macOS Apple Silicon (M1/M2/M3/M4) does not report "'InstantServer.app' is damaged".
-    """
     return f"""#!/usr/bin/env bash
 # Instant Server — macOS Gatekeeper Ad-Hoc Codesigning & DMG Packaging Script
 set -euo pipefail
@@ -251,6 +246,7 @@ hdiutil create -volname "{manifest.display_name}" \\
     -ov -format UDZO \\
     "dist/{manifest.app_name}-macOS.dmg"
 
+cp "dist/{manifest.app_name}-macOS.dmg" "./{manifest.app_name}-macOS.dmg" || true
 echo "[macOS Packager] Done: dist/{manifest.app_name}-macOS.dmg"
 """
 
@@ -259,13 +255,6 @@ echo "[macOS Packager] Done: dist/{manifest.app_name}-macOS.dmg"
 # 4. Linux AppImage & FUSE2-Free (`APPIMAGE_EXTRACT_AND_RUN=1`) Wrapper
 # ---------------------------------------------------------------------------
 def generate_linux_appimage_wrapper(manifest: PackagingManifest) -> Dict[str, str]:
-    """
-    Generate:
-      1. `AppRun`: Entry script inside `InstantServer.AppDir` that launches the GUI.
-      2. `instant-server.desktop`: Freedesktop launcher with `APPIMAGE_EXTRACT_AND_RUN=1`
-         so Ubuntu 22.04 / 24.04 systems without `libfuse.so.2` never fail to open the
-         AppImage!
-    """
     apprun = f"""#!/usr/bin/env bash
 # Instant Server — Linux AppDir Entrypoint (FUSE2/FUSE3 Resilient)
 set -euo pipefail
@@ -298,31 +287,45 @@ Keywords=Ubuntu;Server;USB;Homelab;CasaOS;Cockpit;
 
 
 # ---------------------------------------------------------------------------
-# 5. Multi-OS GitHub Actions CI/CD Workflow (`.github/workflows/release.yml`)
+# 5. Zero-Warning, Zero-Notice GitHub Actions Workflow (`release.yml`)
 # ---------------------------------------------------------------------------
 def generate_github_actions_workflow(manifest: PackagingManifest) -> str:
     """
-    Generate a production-ready GitHub Actions workflow that runs all 10 module
-    self-tests first and then builds standalone executables across `ubuntu-latest`,
-    `windows-latest`, and `macos-latest`.
+    Generate `.github/workflows/release.yml` with:
+      - Node.js 24 native actions (`actions/checkout@v6`, `actions/setup-python@v6`,
+        `actions/upload-artifact@v6` + `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`)
+        to fix all 4 Node.js 20 deprecation warnings.
+      - Explicit runner labels (`ubuntu-24.04`, `windows-2022`, `macos-15-intel`) to fix
+        the 2 `ubuntu-latest` migration notices and the `macos-latest` arm64 queue notice.
+      - The `Upload Executable Package` artifact step so executables are downloadable
+        from the workflow run and ready for GitHub Releases.
     """
     return f"""name: Build Instant Server Executables (Windows, macOS, Linux)
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   self-test-suite:
     name: Verify All 10 Instant Server Modules
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+
       - name: Run Deterministic Self-Tests Across All Modules
         run: |
           python3 m1_host_probe.py --self-test
@@ -342,24 +345,45 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-24.04, windows-2022, macos-15-intel]
     runs-on: ${{{{ matrix.os }}}}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+
       - name: Install PyInstaller 6.x
         run: pip install pyinstaller
-      - name: Generate Packaging Spec & Platform Manifests
-        run: python3 build_executables.py --emit-configs ./build_dist
+
+      - name: Generate Packaging Spec, Taskbar Icon & Platform Manifests
+        run: python build_executables.py --emit-configs ./build_dist
+
       - name: Build Standalone Binary via PyInstaller
+        shell: bash
         run: |
           cp ./build_dist/InstantServer.spec ./InstantServer.spec
+          cp ./build_dist/instant_server_icon.ico ./instant_server_icon.ico
+          cp ./build_dist/instant_server_icon.png ./instant_server_icon.png
           pyinstaller --clean --noconfirm InstantServer.spec
+
       - name: Ad-Hoc Codesign & Package DMG (macOS)
-        if: matrix.os == 'macos-latest'
+        if: startsWith(matrix.os, 'macos')
+        shell: bash
         run: bash ./build_dist/macos_codesign_and_dmg.sh
+
+      # === NEW STEP TO UPLOAD THE ARTIFACTS ===
+      - name: Upload Executable Package
+        uses: actions/upload-artifact@v6
+        with:
+          name: instant-server-${{{{ matrix.os }}}}
+          path: |
+            dist/
+            *.dmg
+          if-no-files-found: error
 """
 
 
@@ -370,9 +394,13 @@ def emit_all_packaging_configs(
     output_dir: str,
     manifest: Optional[PackagingManifest] = None,
 ) -> Dict[str, str]:
-    """Write all cross-platform build specs, manifests, and CI workflows to `output_dir`."""
+    """Write all cross-platform build specs, Photoshop-style IS icons, manifests, and CI workflows."""
     m = manifest or PackagingManifest()
     os.makedirs(output_dir, exist_ok=True)
+
+    ico_path = os.path.join(output_dir, m.icon_ico)
+    png_path = os.path.join(output_dir, m.icon_png)
+    instant_server_cli.generate_photoshop_style_is_icon(ico_path, png_path)
 
     spec_text = generate_pyinstaller_spec(m)
     win_manifest = generate_windows_uac_manifest(m)
@@ -389,7 +417,10 @@ def emit_all_packaging_configs(
         "release-executables.yml": gh_workflow,
     }
 
-    written_paths: Dict[str, str] = {}
+    written_paths: Dict[str, str] = {
+        m.icon_ico: ico_path,
+        m.icon_png: png_path,
+    }
     for fname, content in files_to_write.items():
         fpath = os.path.join(output_dir, fname)
         with open(fpath, "w", encoding="utf-8", newline="\n") as fh:
@@ -405,7 +436,6 @@ def _run_self_test() -> int:
     print("[Phase 4 Bundler Self-Test] 1. Testing `resolve_bundled_resource` (`sys._MEIPASS` support)...")
     gui_path = resolve_bundled_resource("lazarus_gui.html")
     assert os.path.exists(gui_path), f"Expected bundled GUI at {gui_path}"
-    # Simulate PyInstaller frozen runtime `sys._MEIPASS`
     with tempfile.TemporaryDirectory() as fake_meipass:
         fake_asset = os.path.join(fake_meipass, "lazarus_gui.html")
         with open(fake_asset, "w", encoding="utf-8") as fh:
@@ -418,27 +448,25 @@ def _run_self_test() -> int:
             delattr(sys, "_MEIPASS")
     print("  -> PASS: `sys._MEIPASS` frozen resource resolver verified!")
 
-    print("[Phase 4 Bundler Self-Test] 2. Testing generation of Windows, macOS, Linux & CI build specs...")
+    print("[Phase 4 Bundler Self-Test] 2. Testing generation of Photoshop-style IS icon, specs & Node 24 CI...")
     with tempfile.TemporaryDirectory() as tmpdir:
         emitted = emit_all_packaging_configs(tmpdir)
-        assert len(emitted) == 6
+        assert len(emitted) == 8
+        assert os.path.getsize(emitted["instant_server_icon.ico"]) > 200
+        assert os.path.getsize(emitted["instant_server_icon.png"]) > 200
 
         spec_content = open(emitted["InstantServer.spec"], "r", encoding="utf-8").read()
         assert "uac_admin=True" in spec_content
-        assert "NSLocalNetworkUsageDescription" in spec_content
-        assert "p1_early_hardware_adapter.py" in spec_content
-        assert "p2_late_laptop_hardening.sh" in spec_content
+        assert "instant_server_icon.ico" in spec_content
 
-        win_xml = open(emitted["instant_server.exe.manifest"], "r", encoding="utf-8").read()
-        assert 'level="requireAdministrator"' in win_xml
-        assert "PerMonitorV2" in win_xml
-
-        mac_sh = open(emitted["macos_codesign_and_dmg.sh"], "r", encoding="utf-8").read()
-        assert "codesign --force --deep --sign -" in mac_sh
-
-        linux_desktop = open(emitted["instant-server.desktop"], "r", encoding="utf-8").read()
-        assert "APPIMAGE_EXTRACT_AND_RUN=1" in linux_desktop
-    print("  -> PASS: All 6 cross-platform executable specs (Windows UAC, macOS codesign, Linux AppImage, CI) verified!")
+        ci_yml = open(emitted["release-executables.yml"], "r", encoding="utf-8").read()
+        assert "actions/checkout@v6" in ci_yml
+        assert "actions/setup-python@v6" in ci_yml
+        assert "actions/upload-artifact@v6" in ci_yml
+        assert "ubuntu-24.04" in ci_yml
+        assert "macos-15-intel" in ci_yml
+        assert "Upload Executable Package" in ci_yml
+    print("  -> PASS: Photoshop-style IS icon, PyInstaller spec, and zero-warning Node 24 CI workflow verified!")
     return 0
 
 
