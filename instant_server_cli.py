@@ -11,16 +11,19 @@ Responsibilities:
    - Detects the folder where the `.exe` or script was launched from (`sys.executable` when
      frozen by PyInstaller, or script directory when run via Python) and automatically creates
      `Instant_Server_Data/` containing `instant-server-config.json`, `cidata/`, `iso_cache/`,
-     `logs/`, and the taskbar icon `instant_server_icon.ico`.
+     `logs/`, and the taskbar icons (`instant_server_icon.ico`, `.png`, `.icns`).
 2. Guaranteed Automatic Config Read on Next Launch:
    - Reads `Instant_Server_Data/instant-server-config.json` (or `./instant-server-config.json`)
-     on startup and injects it directly into the HTML payload (`window.__INSTANT_SERVER_SAVED_CONFIG__`)
+     on startup and injects it directly into the HTML payload (`window.__INSTANT_SERVER_BOOT_CONFIG__`)
      as well as serving `/api/load-config` so the app always opens straight to the Home Settings
      view whenever a saved configuration exists.
 3. Photoshop-Style Taskbar & Executable Icon (`IS` with Serif `I` Top & Bottom Bars):
-   - Pure-Python generator creates a crisp 256x256 `.ico` and `.png` with a deep navy blue
-     background (`#001E36`), sky-blue border (`#31A8FF`), and light-blue `IS` monogram where
-     `I` has top and bottom horizontal bars, setting the Windows taskbar AppUserModelID.
+   - Pure-Python generator creates crisp `.ico` (Windows), `.icns` (macOS), and `.png` (Linux)
+     icons with a deep navy blue background (`#001E36`), sky-blue border (`#31A8FF`), and
+     light-blue `IS` monogram where `I` has top and bottom horizontal bars.
+4. Zero PowerShell / Console Flash on Windows:
+   - Uses `CREATE_NO_WINDOW` (`0x08000000`) on all Windows child subprocesses so no console
+     or PowerShell window ever flashes when launching `InstantServer.exe`.
 """
 
 from __future__ import annotations
@@ -52,6 +55,13 @@ import zlib
 _BUNDLED_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
 if _BUNDLED_DIR not in sys.path:
     sys.path.insert(0, _BUNDLED_DIR)
+
+
+def _win_no_window_kwargs() -> Dict[str, Any]:
+    """Return `creationflags=CREATE_NO_WINDOW` on Windows to suppress console popups."""
+    if sys.platform.startswith("win"):
+        return {"creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)}
+    return {}
 
 
 def get_launch_root_dir() -> str:
@@ -96,9 +106,10 @@ def ensure_workspace_folder(base_dir: Optional[str] = None) -> Dict[str, str]:
 
     icon_ico_path = os.path.join(workspace_dir, "instant_server_icon.ico")
     icon_png_path = os.path.join(workspace_dir, "instant_server_icon.png")
-    if not os.path.isfile(icon_ico_path) or not os.path.isfile(icon_png_path):
+    icon_icns_path = os.path.join(workspace_dir, "instant_server_icon.icns")
+    if not (os.path.isfile(icon_ico_path) and os.path.isfile(icon_png_path) and os.path.isfile(icon_icns_path)):
         try:
-            generate_photoshop_style_is_icon(icon_ico_path, icon_png_path)
+            generate_photoshop_style_is_icon(icon_ico_path, icon_png_path, icon_icns_path)
         except Exception:
             pass
 
@@ -112,6 +123,7 @@ def ensure_workspace_folder(base_dir: Optional[str] = None) -> Dict[str, str]:
         "logs_dir": logs_dir,
         "icon_ico_path": icon_ico_path,
         "icon_png_path": icon_png_path,
+        "icon_icns_path": icon_icns_path,
     }
 
 
@@ -134,7 +146,6 @@ def load_saved_config(base_dir: Optional[str] = None) -> Dict[str, Any]:
                 with open(cfg_path, "r", encoding="utf-8") as fh:
                     data = json.load(fh)
                 if isinstance(data, dict) and data:
-                    # Ensure a copy is also in the canonical workspace folder
                     if cfg_path != paths["config_path"]:
                         try:
                             with open(paths["config_path"], "w", encoding="utf-8") as out_fh:
@@ -190,14 +201,13 @@ def _filter_server_profile_kwargs(raw: Dict[str, Any]) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# 0b. Pure-Python Photoshop-Style `IS` Taskbar Icon Generator (.ico & .png)
+# 0b. Pure-Python Photoshop-Style `IS` Icon Generator (.ico, .png, .icns)
 # ---------------------------------------------------------------------------
 def _render_photoshop_is_rgba(size: int = 128) -> bytes:
     """
     Render a Photoshop-inspired dark blue rounded-square icon (`#001E36`) with a
-    sky-blue border (`#31A8FF`) and light-blue `IS` letters (`#31A8FF`) where the
+    sky-blue border (`#31A8FF`) and light-blue `IS` letters (`#66C4FF`) where the
     capital `I` has distinct top and bottom horizontal serif bars.
-    Returns raw RGBA scanlines with leading filter byte `0x00` per row for PNG encoding.
     """
     bg_rgb = (0, 30, 54)         # Deep Photoshop navy blue (#001E36)
     border_rgb = (49, 168, 255)  # Photoshop sky blue (#31A8FF)
@@ -208,12 +218,11 @@ def _render_photoshop_is_rgba(size: int = 128) -> bytes:
     border_w = max(2.0, size * 0.045)
 
     for y in range(size):
-        rows.append(0)  # PNG filter type 0 (None)
+        rows.append(0)
         ny = y / float(size)
         for x in range(size):
             nx = x / float(size)
 
-            # Rounded rectangle signed distance check
             dx = max(abs(x - (size - 1) / 2.0) - (size / 2.0 - radius), 0.0)
             dy = max(abs(y - (size - 1) / 2.0) - (size / 2.0 - radius), 0.0)
             dist = math.hypot(dx, dy) - radius
@@ -225,39 +234,27 @@ def _render_photoshop_is_rgba(size: int = 128) -> bytes:
             alpha = 255 if dist < -0.8 else int(255 * (0.8 - dist) / 1.6)
             is_border = dist >= -border_w
 
-            # Normalized coordinates for 'I' (with top & bottom horizontal bars) and 'S'
-            # Vertical bounds for both letters: ny in [0.24, 0.76]
             in_i = False
             if 0.24 <= ny <= 0.76:
-                # Top bar of 'I' (ny in [0.24, 0.315]) or Bottom bar of 'I' (ny in [0.685, 0.76])
                 if (0.24 <= ny <= 0.315 or 0.685 <= ny <= 0.76) and (0.18 <= nx <= 0.42):
                     in_i = True
-                # Vertical stem of 'I'
                 elif 0.265 <= nx <= 0.335:
                     in_i = True
 
-            # Geometric 'S' in nx in [0.48, 0.80], ny in [0.24, 0.76]
             in_s = False
             if 0.24 <= ny <= 0.76 and 0.47 <= nx <= 0.81:
-                # Top arc / bar
                 if 0.24 <= ny <= 0.315 and 0.51 <= nx <= 0.79:
                     in_s = True
-                # Bottom arc / bar
                 elif 0.685 <= ny <= 0.76 and 0.48 <= nx <= 0.76:
                     in_s = True
-                # Middle bar
                 elif 0.465 <= ny <= 0.535 and 0.51 <= nx <= 0.76:
                     in_s = True
-                # Upper-left curve
                 elif 0.28 <= ny <= 0.50 and 0.48 <= nx <= 0.555:
                     in_s = True
-                # Lower-right curve
                 elif 0.50 <= ny <= 0.72 and 0.725 <= nx <= 0.80:
                     in_s = True
-                # Top-right serif tip
                 elif 0.26 <= ny <= 0.35 and 0.725 <= nx <= 0.795:
                     in_s = True
-                # Bottom-left serif tip
                 elif 0.65 <= ny <= 0.74 and 0.48 <= nx <= 0.55:
                     in_s = True
 
@@ -286,23 +283,35 @@ def build_png_bytes(size: int = 128) -> bytes:
     return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", idat) + chunk(b"IEND", b"")
 
 
-def generate_photoshop_style_is_icon(ico_path: str, png_path: Optional[str] = None) -> None:
+def generate_photoshop_style_is_icon(
+    ico_path: str,
+    png_path: Optional[str] = None,
+    icns_path: Optional[str] = None,
+) -> None:
     """
-    Write a Windows `.ico` file (wrapping a 256x256/128x128 PNG) and optional `.png`
-    file for the taskbar and PyInstaller executable icon.
+    Write:
+      - `ico_path`: Windows `.ico` file (wrapping a 128x128 PNG)
+      - `png_path`: Standard `.png` file
+      - `icns_path`: Apple macOS `.icns` file (`icns` header + `ic07` 128x128 PNG chunk)
+        so macOS PyInstaller `BUNDLE(...)` natively accepts the icon without needing Pillow!
     """
     png_data = build_png_bytes(size=128)
     if png_path:
         with open(png_path, "wb") as pfh:
             pfh.write(png_data)
 
-    # ICO header (6 bytes): Reserved=0, Type=1 (ICO), Count=1
     ico_header = struct.pack("<HHH", 0, 1, 1)
-    # ICO directory entry (16 bytes): Width=128, Height=128, ColorCount=0, Reserved=0,
-    # Planes=1, BitCount=32, BytesInRes=len(png_data), ImageOffset=22
     ico_entry = struct.pack("<BBBBHHII", 128, 128, 0, 0, 1, 32, len(png_data), 22)
     with open(ico_path, "wb") as ifh:
         ifh.write(ico_header + ico_entry + png_data)
+
+    if icns_path:
+        # Apple ICNS container: 'icns' (4B) + total_len (4B) + 'ic07' (4B, 128x128 PNG) + chunk_len (4B) + png_data
+        chunk_len = 8 + len(png_data)
+        total_len = 8 + chunk_len
+        icns_bytes = b"icns" + struct.pack(">I", total_len) + b"ic07" + struct.pack(">I", chunk_len) + png_data
+        with open(icns_path, "wb") as mfh:
+            mfh.write(icns_bytes)
 
 
 # ---------------------------------------------------------------------------
@@ -313,7 +322,6 @@ MDNS_PORT = 5353
 
 
 def build_mdns_query_packet(qname: str, qtype: int = 1) -> bytes:
-    """Build a minimal RFC 6762 / RFC 1035 DNS query packet for `qname`."""
     header = struct.pack(">HHHHHH", 0, 0, 1, 0, 0, 0)
     labels: List[bytes] = []
     for part in qname.strip(".").split("."):
@@ -327,7 +335,6 @@ def build_mdns_query_packet(qname: str, qtype: int = 1) -> bytes:
 
 
 def parse_mdns_a_record_response(packet: bytes) -> Optional[str]:
-    """Extract the first IPv4 A-record address from a raw DNS/mDNS response packet."""
     if len(packet) < 12:
         return None
     _tid, flags, qdcount, ancount, _nscount, _arcount = struct.unpack(">HHHHHH", packet[:12])
@@ -367,7 +374,6 @@ def parse_mdns_a_record_response(packet: bytes) -> Optional[str]:
 
 
 def query_mdns_hostname(hostname: str, timeout: float = 0.6) -> Optional[str]:
-    """Resolve `<hostname>.local` via OS resolver first, then UDP multicast query."""
     fqdn = hostname if hostname.endswith(".local") else f"{hostname}.local"
     try:
         ip = socket.gethostbyname(fqdn)
@@ -396,7 +402,6 @@ def probe_tcp_service(
     ports: Tuple[int, ...] = (9090, 80, 22),
     timeout: float = 0.25,
 ) -> Dict[str, Any]:
-    """Probe a single IPv4 host for Instant Server ports (9090, 80, 22)."""
     open_ports: List[int] = []
     ssh_banner = ""
 
@@ -430,7 +435,6 @@ def probe_tcp_service(
 
 
 def get_local_ipv4_and_arp_neighbors() -> Tuple[str, List[str]]:
-    """Return the primary local LAN IPv4 address and known ARP neighbor IPs."""
     local_ip = "127.0.0.1"
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -458,6 +462,7 @@ def get_local_ipv4_and_arp_neighbors() -> Tuple[str, List[str]]:
                 stderr=subprocess.PIPE,
                 text=True,
                 check=False,
+                **_win_no_window_kwargs(),
             )
             for match in re.findall(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", res.stdout or ""):
                 if not match.startswith(("224.", "239.", "255.")):
@@ -474,7 +479,6 @@ def discover_instant_servers_on_lan(
     ports: Tuple[int, ...] = (9090, 80, 22),
     timeout: float = 0.25,
 ) -> Dict[str, Any]:
-    """Discover Instant Server nodes across the user's LAN."""
     mdns_ip = query_mdns_hostname(hostname, timeout=timeout)
     local_ip, arp_ips = get_local_ipv4_and_arp_neighbors()
 
@@ -513,8 +517,6 @@ def discover_instant_servers_on_lan(
 # 2. Asynchronous Job Runner & Local HTTP / `pywebview` GUI Bridge
 # ---------------------------------------------------------------------------
 class AsyncPipelineManager:
-    """Runs M1-M5 tasks on a background daemon thread."""
-
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self.status: str = "IDLE"
@@ -616,11 +618,6 @@ class AsyncPipelineManager:
 
 
 class InstantServerJsApi:
-    """
-    JavaScript-callable API exposed to `pywebview.create_window(..., js_api=...)`
-    and mirrored by the local HTTP server endpoints.
-    """
-
     def __init__(self, base_dir: Optional[str] = None) -> None:
         self.base_dir = base_dir or get_launch_root_dir()
         ensure_workspace_folder(self.base_dir)
@@ -663,7 +660,6 @@ class InstantServerJsApi:
 
 
 def _set_windows_taskbar_app_id() -> None:
-    """Set Windows AppUserModelID so the taskbar displays the custom Photoshop-style `IS` icon."""
     if sys.platform.startswith("win"):
         try:
             import ctypes
@@ -673,10 +669,6 @@ def _set_windows_taskbar_app_id() -> None:
 
 
 def _open_standalone_desktop_window(url: str) -> None:
-    """
-    Launch `url` in a standalone frameless desktop app window (`--app=url`)
-    using Microsoft Edge, Google Chrome, Brave, or Chromium.
-    """
     candidates: List[str] = []
     if sys.platform.startswith("win"):
         prog_files = [
@@ -717,6 +709,7 @@ def _open_standalone_desktop_window(url: str) -> None:
                 [exe, f"--app={url}", "--window-size=1220,820"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                **_win_no_window_kwargs(),
             )
             return
         except Exception:
@@ -726,12 +719,6 @@ def _open_standalone_desktop_window(url: str) -> None:
 
 
 def _render_gui_html_with_boot_config(gui_html_path: str, base_dir: Optional[str] = None) -> bytes:
-    """
-    Read `lazarus_gui.html` and inject `window.__INSTANT_SERVER_BOOT_CONFIG__` with the
-    current saved config from `Instant_Server_Data/instant-server-config.json` so the UI
-    immediately boots into the Home Settings screen on the very first frame if a saved
-    config exists on disk.
-    """
     with open(gui_html_path, "r", encoding="utf-8") as fh:
         html = fh.read()
     boot_state = load_saved_config(base_dir)
@@ -742,12 +729,6 @@ def _render_gui_html_with_boot_config(gui_html_path: str, base_dir: Optional[str
 
 
 def launch_desktop_or_browser_gui(port: int = 8765, open_browser: bool = True) -> None:
-    """
-    Launch the Instant Server desktop application (`lazarus_gui.html`).
-    Automatically creates `Instant_Server_Data/` in the folder where the `.exe` or script
-    was opened from, generates the Photoshop-style `IS` taskbar icon, and loads any saved
-    configuration automatically.
-    """
     _set_windows_taskbar_app_id()
     paths = ensure_workspace_folder()
     gui_html_path = os.path.join(_BUNDLED_DIR, "lazarus_gui.html")
@@ -830,8 +811,6 @@ def launch_desktop_or_browser_gui(port: int = 8765, open_browser: bool = True) -
     server = http.server.ThreadingHTTPServer(("127.0.0.1", port), GuiHandler)
     url = f"http://127.0.0.1:{port}/"
 
-    # Try native pywebview pointed at our local HTTP server so both window.pywebview.api
-    # AND synchronous boot-config injection work seamlessly
     try:
         import webview  # type: ignore
 
@@ -868,7 +847,6 @@ def launch_desktop_or_browser_gui(port: int = 8765, open_browser: bool = True) -
 # 3. Interactive 3-Question Terminal Wizard (`--wizard`)
 # ---------------------------------------------------------------------------
 def run_interactive_cli_wizard(output_dir: str) -> Dict[str, Any]:
-    """Run the 3-Question Beginner Wizard interactively in the terminal."""
     print("=" * 76)
     print("  INSTANT SERVER — 3-Question Headless Laptop Server Wizard")
     print("=" * 76)
@@ -907,7 +885,7 @@ def run_interactive_cli_wizard(output_dir: str) -> Dict[str, Any]:
 
     confirm_erase = False
     dual_boot_gb = 45
-    if install_boot_mode := install_mode == "dual_boot":
+    if install_mode == "dual_boot":
         gb_in = input("  GB to allocate for Instant Server alongside existing OS [45]: ").strip()
         if gb_in.isdigit():
             dual_boot_gb = int(gb_in)
@@ -967,12 +945,13 @@ def _run_self_test() -> int:
         srv.close()
     print("  -> PASS: Multi-threaded LAN TCP service discovery scanner verified!")
 
-    print("[CLI Self-Test] 3. Testing Automatic `Instant_Server_Data/` Folder, Icon & Config Persistence...")
+    print("[CLI Self-Test] 3. Testing Automatic `Instant_Server_Data/` Folder, Icons (.ico/.icns/.png) & Config...")
     with tempfile.TemporaryDirectory() as tmpdir:
         api = InstantServerJsApi(base_dir=tmpdir)
         ws_dir = os.path.join(tmpdir, WORKSPACE_FOLDER_NAME)
-        assert os.path.isdir(ws_dir), "Expected Instant_Server_Data folder to be created automatically"
-        assert os.path.isfile(os.path.join(ws_dir, "instant_server_icon.ico")), "Expected Photoshop-style IS .ico"
+        assert os.path.isdir(ws_dir)
+        assert os.path.isfile(os.path.join(ws_dir, "instant_server_icon.ico"))
+        assert os.path.isfile(os.path.join(ws_dir, "instant_server_icon.icns"))
         assert api.load_config()["exists"] is False
 
         save_res = api.save_config({"hostname": "instant-box", "username": "admin"})
@@ -998,7 +977,7 @@ def _run_self_test() -> int:
             time.sleep(0.05)
         assert snap["status"] == "COMPLETED", f"Async build failed: {snap}"
         assert snap["result"]["hostname"] == "instant-box"
-    print("  -> PASS: Automatic workspace folder, Photoshop-style IS icon & config auto-load verified!")
+    print("  -> PASS: Automatic workspace folder, .ico/.icns/.png icons & config auto-load verified!")
     return 0
 
 
@@ -1038,7 +1017,6 @@ def main() -> int:
         print(json.dumps(res, indent=2))
         return 0
 
-    # Default behavior: launch the desktop GUI directly!
     launch_desktop_or_browser_gui(port=args.port)
     return 0
 

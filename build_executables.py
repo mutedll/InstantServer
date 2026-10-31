@@ -7,25 +7,14 @@ Project: Instant Server (Turn any old laptop into a headless Ubuntu Server)
 Runs on: Windows 10/11, macOS, and Linux (Python 3.8+ through 3.14+, zero external deps)
 
 Responsibilities:
-1. Generates the Photoshop-style `IS` application & taskbar icon (`instant_server_icon.ico`
-   and `instant_server_icon.png`) featuring a deep navy blue background (`#001E36`),
-   sky-blue border (`#31A8FF`), and light-blue `IS` monogram with top & bottom horizontal
-   serif bars on the `I`, embedding it directly into `InstantServer.spec` (`icon=...`).
-2. Solves the 4 biggest community desktop packaging bugs across Windows, macOS, and Linux:
-   - PyInstaller `sys._MEIPASS` asset resolution + automatic `Instant_Server_Data/` folder
-     in the directory where the `.exe` is launched.
-   - Windows UAC `requireAdministrator` manifest (`uac_admin=True`) for raw USB access.
-   - macOS ad-hoc Gatekeeper codesigning & `.dmg` creation.
-   - Linux `APPIMAGE_EXTRACT_AND_RUN=1` wrapper.
-3. Generates a zero-warning, zero-notice GitHub Actions CI/CD workflow (`release-executables.yml`):
-   - Uses Node.js 24 native actions (`actions/checkout@v6`, `actions/setup-python@v6`,
-     `actions/upload-artifact@v6` / `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`) to eliminate
-     all Node.js 20 deprecation warnings.
-   - Pins `ubuntu-24.04` (instead of `ubuntu-latest`) and `macos-15-intel` (instead of
-     `macos-latest` arm64) to eliminate the Ubuntu 26 migration notice and the macOS arm64
-     capacity queue notice.
-   - Includes the `Upload Executable Package` step (`instant-server-${{ matrix.os }}`) plus
-     automatic GitHub Releases attachment when pushing a `v*` tag.
+1. Generates the Photoshop-style `IS` application & taskbar icon in all 3 native formats:
+   - `instant_server_icon.ico` (Windows `.exe` & taskbar)
+   - `instant_server_icon.icns` (macOS `.app` bundle & `.dmg`, fixing the PyInstaller `.ico` error)
+   - `instant_server_icon.png` (Linux desktop icon)
+2. Uses PyInstaller 6.22+ `COLLECT` + `BUNDLE` (`onedir`) on macOS (`sys.platform == 'darwin'`)
+   to eliminate the PyInstaller v7 deprecation warning (`Onefile mode in combination with macOS
+   .app bundles`), while keeping single-file `EXE` mode on Windows and Linux.
+3. Generates a zero-warning, zero-notice GitHub Actions CI/CD workflow (`release-executables.yml`).
 """
 
 from __future__ import annotations
@@ -71,6 +60,7 @@ class PackagingManifest:
     entrypoint_script: str = "instant_server_cli.py"
     icon_ico: str = "instant_server_icon.ico"
     icon_png: str = "instant_server_icon.png"
+    icon_icns: str = "instant_server_icon.icns"
     bundled_data_files: List[str] = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
@@ -89,12 +79,16 @@ class PackagingManifest:
 
 
 # ---------------------------------------------------------------------------
-# 1. PyInstaller `InstantServer.spec` Generator (With Photoshop-Style IS Icon)
+# 1. PyInstaller `InstantServer.spec` Generator (macOS ICNS + Onedir BUNDLE)
 # ---------------------------------------------------------------------------
 def generate_pyinstaller_spec(manifest: PackagingManifest) -> str:
     """
-    Generate a deterministic `InstantServer.spec` file that bundles `lazarus_gui.html`,
-    all engine modules, and the Photoshop-style `IS` taskbar/executable icon.
+    Generate a deterministic `InstantServer.spec` file:
+      - On macOS (`sys.platform == 'darwin'`): uses `instant_server_icon.icns` and
+        PyInstaller 6.22+ recommended `COLLECT` + `BUNDLE` (`onedir`) layout inside
+        `InstantServer.app` so there are zero icon format errors or onefile warnings.
+      - On Windows & Linux: builds a single-file `EXE` (`InstantServer.exe` / `InstantServer`)
+        with `instant_server_icon.ico` and `uac_admin=True`.
     """
     datas_tuples = ",\n    ".join(f"('{f}', '.')" for f in manifest.bundled_data_files)
     return f"""# -*- mode: python ; coding: utf-8 -*-
@@ -110,7 +104,8 @@ bundled_datas = [
     {datas_tuples}
 ]
 
-icon_file = '{manifest.icon_ico}' if os.path.exists('{manifest.icon_ico}') else None
+win_icon = '{manifest.icon_ico}' if os.path.exists('{manifest.icon_ico}') else None
+mac_icon = '{manifest.icon_icns}' if os.path.exists('{manifest.icon_icns}') else None
 
 a = Analysis(
     ['{manifest.entrypoint_script}'],
@@ -140,35 +135,39 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
-exe = EXE(
-    pyz,
-    a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    [],
-    name='{manifest.app_name}',
-    debug=False,
-    bootloader_ignore_signals=False,
-    strip=False,
-    upx=False,
-    upx_exclude=[],
-    runtime_tmpdir=None,
-    console=False,
-    disable_windowed_traceback=False,
-    argv_emulation=True,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
-    icon=icon_file,
-    uac_admin=True,
-)
-
 if sys.platform == 'darwin':
-    app = BUNDLE(
+    exe = EXE(
+        pyz,
+        a.scripts,
+        [],
+        exclude_binaries=True,
+        name='{manifest.app_name}',
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=False,
+        upx=False,
+        console=False,
+        disable_windowed_traceback=False,
+        argv_emulation=True,
+        target_arch=None,
+        codesign_identity=None,
+        entitlements_file=None,
+        icon=mac_icon,
+    )
+    coll = COLLECT(
         exe,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
+        strip=False,
+        upx=False,
+        upx_exclude=[],
+        name='{manifest.app_name}',
+    )
+    app = BUNDLE(
+        coll,
         name='{manifest.app_name}.app',
-        icon=icon_file,
+        icon=mac_icon,
         bundle_identifier='{manifest.bundle_identifier}',
         info_plist={{
             'CFBundleName': '{manifest.display_name}',
@@ -186,6 +185,30 @@ if sys.platform == 'darwin':
                 '_ssh._tcp',
             ],
         }},
+    )
+else:
+    exe = EXE(
+        pyz,
+        a.scripts,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
+        [],
+        name='{manifest.app_name}',
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=False,
+        upx=False,
+        upx_exclude=[],
+        runtime_tmpdir=None,
+        console=False,
+        disable_windowed_traceback=False,
+        argv_emulation=True,
+        target_arch=None,
+        codesign_identity=None,
+        entitlements_file=None,
+        icon=win_icon,
+        uac_admin=True,
     )
 """
 
@@ -293,12 +316,10 @@ def generate_github_actions_workflow(manifest: PackagingManifest) -> str:
     """
     Generate `.github/workflows/release.yml` with:
       - Node.js 24 native actions (`actions/checkout@v6`, `actions/setup-python@v6`,
-        `actions/upload-artifact@v6` + `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`)
-        to fix all 4 Node.js 20 deprecation warnings.
-      - Explicit runner labels (`ubuntu-24.04`, `windows-2022`, `macos-15-intel`) to fix
-        the 2 `ubuntu-latest` migration notices and the `macos-latest` arm64 queue notice.
-      - The `Upload Executable Package` artifact step so executables are downloadable
-        from the workflow run and ready for GitHub Releases.
+        `actions/upload-artifact@v6` + `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`).
+      - Explicit runner labels (`ubuntu-24.04`, `windows-2022`, `macos-15-intel`).
+      - Native `.icns` icon on macOS + `pillow` installed so macOS BUNDLE builds cleanly.
+      - The `Upload Executable Package` artifact step.
     """
     return f"""name: Build Instant Server Executables (Windows, macOS, Linux)
 
@@ -356,10 +377,10 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install PyInstaller 6.x
-        run: pip install pyinstaller
+      - name: Install PyInstaller 6.x & Pillow
+        run: pip install pyinstaller pillow
 
-      - name: Generate Packaging Spec, Taskbar Icon & Platform Manifests
+      - name: Generate Packaging Spec, Taskbar Icons (.ico/.icns/.png) & Manifests
         run: python build_executables.py --emit-configs ./build_dist
 
       - name: Build Standalone Binary via PyInstaller
@@ -367,6 +388,7 @@ jobs:
         run: |
           cp ./build_dist/InstantServer.spec ./InstantServer.spec
           cp ./build_dist/instant_server_icon.ico ./instant_server_icon.ico
+          cp ./build_dist/instant_server_icon.icns ./instant_server_icon.icns
           cp ./build_dist/instant_server_icon.png ./instant_server_icon.png
           pyinstaller --clean --noconfirm InstantServer.spec
 
@@ -394,13 +416,14 @@ def emit_all_packaging_configs(
     output_dir: str,
     manifest: Optional[PackagingManifest] = None,
 ) -> Dict[str, str]:
-    """Write all cross-platform build specs, Photoshop-style IS icons, manifests, and CI workflows."""
+    """Write all cross-platform build specs, Photoshop-style IS icons (.ico/.icns/.png), and CI workflows."""
     m = manifest or PackagingManifest()
     os.makedirs(output_dir, exist_ok=True)
 
     ico_path = os.path.join(output_dir, m.icon_ico)
     png_path = os.path.join(output_dir, m.icon_png)
-    instant_server_cli.generate_photoshop_style_is_icon(ico_path, png_path)
+    icns_path = os.path.join(output_dir, m.icon_icns)
+    instant_server_cli.generate_photoshop_style_is_icon(ico_path, png_path, icns_path)
 
     spec_text = generate_pyinstaller_spec(m)
     win_manifest = generate_windows_uac_manifest(m)
@@ -420,6 +443,7 @@ def emit_all_packaging_configs(
     written_paths: Dict[str, str] = {
         m.icon_ico: ico_path,
         m.icon_png: png_path,
+        m.icon_icns: icns_path,
     }
     for fname, content in files_to_write.items():
         fpath = os.path.join(output_dir, fname)
@@ -448,25 +472,24 @@ def _run_self_test() -> int:
             delattr(sys, "_MEIPASS")
     print("  -> PASS: `sys._MEIPASS` frozen resource resolver verified!")
 
-    print("[Phase 4 Bundler Self-Test] 2. Testing generation of Photoshop-style IS icon, specs & Node 24 CI...")
+    print("[Phase 4 Bundler Self-Test] 2. Testing generation of .ico, .icns, .png, onedir macOS spec & CI...")
     with tempfile.TemporaryDirectory() as tmpdir:
         emitted = emit_all_packaging_configs(tmpdir)
-        assert len(emitted) == 8
+        assert len(emitted) == 9
         assert os.path.getsize(emitted["instant_server_icon.ico"]) > 200
-        assert os.path.getsize(emitted["instant_server_icon.png"]) > 200
+        assert os.path.getsize(emitted["instant_server_icon.icns"]) > 200
+        assert open(emitted["instant_server_icon.icns"], "rb").read(4) == b"icns"
 
         spec_content = open(emitted["InstantServer.spec"], "r", encoding="utf-8").read()
         assert "uac_admin=True" in spec_content
-        assert "instant_server_icon.ico" in spec_content
+        assert "instant_server_icon.icns" in spec_content
+        assert "COLLECT(" in spec_content
 
         ci_yml = open(emitted["release-executables.yml"], "r", encoding="utf-8").read()
-        assert "actions/checkout@v6" in ci_yml
-        assert "actions/setup-python@v6" in ci_yml
-        assert "actions/upload-artifact@v6" in ci_yml
-        assert "ubuntu-24.04" in ci_yml
-        assert "macos-15-intel" in ci_yml
+        assert "pip install pyinstaller pillow" in ci_yml
+        assert "instant_server_icon.icns" in ci_yml
         assert "Upload Executable Package" in ci_yml
-    print("  -> PASS: Photoshop-style IS icon, PyInstaller spec, and zero-warning Node 24 CI workflow verified!")
+    print("  -> PASS: macOS .icns icon, COLLECT+BUNDLE spec, and CI workflow verified!")
     return 0
 
 

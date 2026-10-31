@@ -13,18 +13,15 @@ Responsibilities:
      `C:\\`, macOS APFS System/Data volumes, or active swap.
    - Lock 3 (Capacity & Fingerprint Check): Flags large external hard drives (>128 GB)
      and provides human-readable vendor/model/serial/capacity metadata.
+   - Uses `CREATE_NO_WINDOW` (`0x08000000`) + `-WindowStyle Hidden` on Windows so scanning
+     drives never flashes a PowerShell console window when running from the `.exe`.
 2. Pure-Python UEFI GPT Backup Header Relocator & `cidata` Partition Injector:
-   - Modern Ubuntu 22.04 / 24.04 hybrid ISOs place the backup GPT header at the end of the
-     ~2.6 GB ISO image rather than the physical end of the 16 GB–64 GB USB drive.
-   - Because Windows and macOS do not ship with `sgdisk`, this module includes a
-     100% pure-Python UEFI GPT parser and binary patcher (`relocate_gpt_and_append_cidata`)
-     that moves the backup GPT table to `last_lba`, updates `AlternateLBA` and `LastUsableLBA`,
+   - Moves the backup GPT table to `last_lba`, updates `AlternateLBA` and `LastUsableLBA`,
      inserts a 128 MB Microsoft Basic Data (`EBD0A0A2-B9E5-4433-87C0-68B6B72699C7`) partition
      entry named `cidata`, and recomputes all UEFI POSIX CRC-32 checksums.
 3. Connected Hardware Provisioner (`provision_usb_drive`):
-   - Streams the cached Ubuntu Server ISO to the selected USB device (when raw device access
-     and an ISO image are provided) or provisions the staged `cidata` cloud-init payload onto
-     a mounted USB volume, emitting live progress and log events to the desktop UI.
+   - Streams the cached Ubuntu Server ISO to the selected USB device or provisions the staged
+     `cidata` cloud-init payload onto a mounted USB volume with live progress events.
 """
 
 from __future__ import annotations
@@ -51,6 +48,17 @@ GPT_REVISION_1_0 = 0x00010000
 # Microsoft Basic Data Partition Type GUID (used for FAT32 `cidata`)
 # EBD0A0A2-B9E5-4433-87C0-68B6B72699C7
 BASIC_DATA_GUID_BYTES = uuid.UUID("EBD0A0A2-B9E5-4433-87C0-68B6B72699C7").bytes_le
+
+
+def _win_no_window_kwargs() -> Dict[str, Any]:
+    """
+    Return `creationflags=CREATE_NO_WINDOW` on Windows so spawning `powershell.exe`
+    from a GUI `.exe` (`console=False`) never flashes a console window on screen.
+    """
+    if sys.platform.startswith("win"):
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+        return {"creationflags": flags}
+    return {}
 
 
 @dataclass
@@ -304,11 +312,12 @@ def _scan_windows_powershell(allow_large_usb: bool = False) -> List[UsbDeviceCan
     )
     try:
         res = subprocess.run(
-            ["powershell", "-NoProfile", "-Command", ps_cmd],
+            ["powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", ps_cmd],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
             check=False,
+            **_win_no_window_kwargs(),
         )
         raw = json.loads(res.stdout or "[]")
         if isinstance(raw, dict):
@@ -358,14 +367,6 @@ def relocate_gpt_and_append_cidata(
 ) -> Dict[str, Any]:
     """
     Pure-Python replacement for `sgdisk -e` + `sfdisk --append`!
-    1. Reads the primary GPT header at LBA 1 and partition entry table at LBA 2..33.
-    2. Relocates the backup GPT partition array and backup GPT header to the physical
-       end of the USB drive/image (`total_sectors - 1`), unlocking the unallocated
-       space beyond the ~2.6 GB ISO boundary.
-    3. Appends a new `cidata_size_mb` partition (Microsoft Basic Data GUID, name='cidata')
-       aligned to 1 MiB (2048 sectors).
-    4. Recomputes `PartitionEntryArrayCRC32` and `HeaderCRC32` for both primary and
-       backup GPT headers and writes them atomically.
     """
     total_bytes = os.path.getsize(disk_or_image_path)
     total_sectors = total_bytes // SECTOR_SIZE
@@ -373,7 +374,6 @@ def relocate_gpt_and_append_cidata(
         raise ValueError(f"Disk/image {disk_or_image_path} is too small ({total_bytes} bytes) for GPT.")
 
     with open(disk_or_image_path, "r+b") as fh:
-        # Read Primary GPT Header at LBA 1
         fh.seek(1 * SECTOR_SIZE)
         lba1 = fh.read(SECTOR_SIZE)
         unpacked = list(struct.unpack(GPT_HDR_FMT, lba1[:GPT_HDR_SIZE]))
@@ -400,11 +400,9 @@ def relocate_gpt_and_append_cidata(
         table_bytes_len = num_entries * entry_size
         table_sectors = (table_bytes_len + SECTOR_SIZE - 1) // SECTOR_SIZE
 
-        # Read Primary Partition Entry Array
         fh.seek(part_lba * SECTOR_SIZE)
         entries_raw = bytearray(fh.read(table_bytes_len))
 
-        # Find highest used ending LBA and first free partition slot
         max_used_lba = first_usable - 1
         free_slot_idx: Optional[int] = None
         for idx in range(num_entries):
@@ -423,12 +421,10 @@ def relocate_gpt_and_append_cidata(
         if free_slot_idx is None:
             raise RuntimeError("No free GPT partition slots remaining to append cidata partition.")
 
-        # New Backup GPT locations at physical end of device
         new_backup_hdr_lba = total_sectors - 1
         new_backup_table_lba = new_backup_hdr_lba - table_sectors
         new_last_usable_lba = new_backup_table_lba - 1
 
-        # Calculate 1 MiB (2048-sector) aligned start and end LBA for `cidata`
         align = 2048
         cidata_start_lba = ((max_used_lba + align) // align) * align
         cidata_sectors = (cidata_size_mb * 1024 * 1024) // SECTOR_SIZE
@@ -440,7 +436,6 @@ def relocate_gpt_and_append_cidata(
                 f"(needed LBA {cidata_start_lba}..{cidata_end_lba}, last usable LBA is {new_last_usable_lba})."
             )
 
-        # Write new `cidata` partition entry into `free_slot_idx`
         part_guid_le = uuid.uuid4().bytes_le
         name_bytes = "cidata".encode("utf-16le").ljust(72, b"\x00")[:72]
         new_entry = struct.pack(
@@ -457,20 +452,19 @@ def relocate_gpt_and_append_cidata(
 
         new_entries_crc = zlib.crc32(entries_raw) & 0xFFFFFFFF
 
-        # Build updated Primary GPT Header (LBA 1)
         primary_hdr_zero_crc = struct.pack(
             GPT_HDR_FMT,
             GPT_HEADER_SIGNATURE,
             rev,
             GPT_HDR_SIZE,
-            0,  # HeaderCRC32 zeroed for calculation
             0,
-            1,  # MyLBA = 1
-            new_backup_hdr_lba,  # AlternateLBA = physical end of USB
+            0,
+            1,
+            new_backup_hdr_lba,
             first_usable,
             new_last_usable_lba,
             disk_guid,
-            part_lba,  # Primary table at LBA 2
+            part_lba,
             num_entries,
             entry_size,
             new_entries_crc,
@@ -482,7 +476,6 @@ def relocate_gpt_and_append_cidata(
             + primary_hdr_zero_crc[20:]
         ).ljust(SECTOR_SIZE, b"\x00")
 
-        # Build updated Backup GPT Header (at `new_backup_hdr_lba`)
         backup_hdr_zero_crc = struct.pack(
             GPT_HDR_FMT,
             GPT_HEADER_SIGNATURE,
@@ -490,12 +483,12 @@ def relocate_gpt_and_append_cidata(
             GPT_HDR_SIZE,
             0,
             0,
-            new_backup_hdr_lba,  # MyLBA = backup LBA
-            1,  # AlternateLBA = 1
+            new_backup_hdr_lba,
+            1,
             first_usable,
             new_last_usable_lba,
             disk_guid,
-            new_backup_table_lba,  # Backup partition entry array LBA
+            new_backup_table_lba,
             num_entries,
             entry_size,
             new_entries_crc,
@@ -507,13 +500,11 @@ def relocate_gpt_and_append_cidata(
             + backup_hdr_zero_crc[20:]
         ).ljust(SECTOR_SIZE, b"\x00")
 
-        # Write Primary Header & Partition Table
         fh.seek(1 * SECTOR_SIZE)
         fh.write(primary_hdr_final)
         fh.seek(part_lba * SECTOR_SIZE)
         fh.write(entries_raw)
 
-        # Write Backup Partition Table & Backup Header at physical end of USB
         fh.seek(new_backup_table_lba * SECTOR_SIZE)
         fh.write(entries_raw)
         fh.seek(new_backup_hdr_lba * SECTOR_SIZE)
@@ -550,20 +541,10 @@ def provision_usb_drive(
     iso_path: Optional[str] = None,
     event_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> Dict[str, Any]:
-    """
-    Provision the selected USB drive or target mountpoint with the staged `cidata` files:
-    - Always verifies Triple-Lock safety if `target_device` matches a scanned disk.
-    - If `target_device` has a mounted filesystem path (or is a directory/drive letter),
-      copies the `cidata` cloud-init files directly to the USB volume and syncs buffers.
-    - If `iso_path` is provided and `target_device` is a writable disk image or block node,
-      streams the ISO in 4 MB chunks with live progress callbacks and relocates the GPT
-      header to append `cidata`.
-    """
     copied_files: List[str] = []
     target_mount: Optional[str] = None
 
     if target_device:
-        # Check if target_device matches a scanned USB disk with a mountpoint
         scanned = scan_host_usb_devices()
         for dev in scanned:
             if target_device in (dev.device_id, dev.device_node, dev.raw_device_node):
@@ -646,10 +627,6 @@ def provision_usb_drive(
 # 4. Synthetic Hybrid GPT Disk Generator & Built-In Self-Test
 # ---------------------------------------------------------------------------
 def _create_synthetic_hybrid_iso_usb_image(path: str, iso_mb: int = 8, usb_total_mb: int = 32) -> None:
-    """
-    Create a synthetic disk image simulating an 8 MB hybrid Ubuntu ISO flashed
-    onto a 32 MB USB stick (where the original backup GPT header sits at 8 MB).
-    """
     total_bytes = usb_total_mb * 1024 * 1024
     iso_sectors = (iso_mb * 1024 * 1024) // SECTOR_SIZE
     num_entries = 128

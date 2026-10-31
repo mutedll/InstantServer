@@ -54,10 +54,10 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install PyInstaller 6.x
-        run: pip install pyinstaller
+      - name: Install PyInstaller 6.x & Pillow
+        run: pip install pyinstaller pillow
 
-      - name: Generate Packaging Spec, Taskbar Icon & Platform Manifests
+      - name: Generate Packaging Spec, Taskbar Icons (.ico/.icns/.png) & Manifests
         run: python build_executables.py --emit-configs ./build_dist
 
       - name: Build Standalone Binary via PyInstaller
@@ -65,6 +65,7 @@ jobs:
         run: |
           cp ./build_dist/InstantServer.spec ./InstantServer.spec
           cp ./build_dist/instant_server_icon.ico ./instant_server_icon.ico
+          cp ./build_dist/instant_server_icon.icns ./instant_server_icon.icns
           cp ./build_dist/instant_server_icon.png ./instant_server_icon.png
           pyinstaller --clean --noconfirm InstantServer.spec
 
