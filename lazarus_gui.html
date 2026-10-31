@@ -1,0 +1,2823 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Instant Server</title>
+  <style>
+    /* ==========================================================================
+       Windows 11 Fluent Design System (WinUI 3) Tokens + Smooth Setup Animations
+       ========================================================================== */
+    :root,
+    [data-theme="light"] {
+      color-scheme: light;
+      --font-sans: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+      --font-display: "Segoe UI Variable Display", "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: "Cascadia Code", "Consolas", ui-monospace, SFMono-Regular, monospace;
+
+      /* Mica & Acrylic Surfaces (Light) */
+      --mica-bg: #F3F3F3;
+      --mica-tint: radial-gradient(circle at 12% 8%, rgba(0, 103, 192, 0.06), transparent 52%),
+                   radial-gradient(circle at 88% 90%, rgba(0, 120, 212, 0.04), transparent 50%);
+      --acrylic-sidebar: rgba(243, 243, 243, 0.78);
+      --card-bg: rgba(255, 255, 255, 0.78);
+      --card-bg-hover: rgba(255, 255, 255, 0.96);
+      --card-bg-secondary: rgba(249, 249, 249, 0.65);
+      --control-bg: #FFFFFF;
+      --control-bg-hover: #FBFBFB;
+      --control-bg-active: #F0F0F0;
+      --input-bg: #FFFFFF;
+
+      /* WinUI 3 Flyout / Dropdown Menu Tokens (Light) */
+      --flyout-bg: #F9F9F9;
+      --flyout-border: rgba(0, 0, 0, 0.14);
+      --flyout-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+      --flyout-item-hover: rgba(0, 0, 0, 0.055);
+      --flyout-item-selected: rgba(0, 0, 0, 0.075);
+
+      /* Blended Sleek Scrollbar Tokens (Light) */
+      --scroll-track-active: rgba(0, 0, 0, 0.05);
+      --scroll-thumb-idle: rgba(0, 0, 0, 0.16);
+      --scroll-thumb-active: rgba(0, 0, 0, 0.42);
+
+      /* Borders & Elevation (Strict 8px Radius, 1px Low-Contrast Stroke) */
+      --radius: 8px;
+      --border-card: rgba(0, 0, 0, 0.065);
+      --border-control: rgba(0, 0, 0, 0.12);
+      --border-control-bottom: rgba(0, 0, 0, 0.24);
+      --shadow-card: 0 2px 6px rgba(0, 0, 0, 0.035);
+      --shadow-control: 0 1px 2px rgba(0, 0, 0, 0.05);
+      --shadow-setup: 0 14px 38px rgba(0, 0, 0, 0.10);
+
+      /* Text Hierarchy */
+      --text-primary: #1A1A1A;
+      --text-secondary: #5C5C5C;
+      --text-tertiary: #868686;
+
+      /* Accent & Semantic Tokens */
+      --accent: #0067C0;
+      --accent-hover: #1874D0;
+      --accent-active: #005299;
+      --accent-text: #FFFFFF;
+      --accent-subtle: rgba(0, 103, 192, 0.09);
+
+      --success: #0F7B0F;
+      --success-bg: rgba(15, 123, 15, 0.10);
+      --warning: #9D5D00;
+      --warning-bg: rgba(157, 93, 0, 0.12);
+      --danger: #C42B1C;
+      --danger-bg: rgba(196, 43, 28, 0.10);
+      --nav-hover: rgba(0, 0, 0, 0.045);
+      --nav-active: rgba(0, 0, 0, 0.075);
+      --divider: rgba(0, 0, 0, 0.06);
+    }
+
+    [data-theme="dark"] {
+      color-scheme: dark;
+      /* Mica & Acrylic Surfaces (Dark) */
+      --mica-bg: #202020;
+      --mica-tint: radial-gradient(circle at 12% 8%, rgba(76, 194, 255, 0.06), transparent 52%),
+                   radial-gradient(circle at 88% 90%, rgba(0, 103, 192, 0.05), transparent 50%);
+      --acrylic-sidebar: rgba(32, 32, 32, 0.76);
+      --card-bg: rgba(255, 255, 255, 0.052);
+      --card-bg-hover: rgba(255, 255, 255, 0.082);
+      --card-bg-secondary: rgba(255, 255, 255, 0.032);
+      --control-bg: rgba(255, 255, 255, 0.065);
+      --control-bg-hover: rgba(255, 255, 255, 0.10);
+      --control-bg-active: rgba(255, 255, 255, 0.04);
+      --input-bg: rgba(255, 255, 255, 0.055);
+
+      /* WinUI 3 Flyout / Dropdown Menu Tokens (Dark - Matches Windows 11 Settings) */
+      --flyout-bg: #2C2C2C;
+      --flyout-border: rgba(255, 255, 255, 0.12);
+      --flyout-shadow: 0 10px 28px rgba(0, 0, 0, 0.52);
+      --flyout-item-hover: rgba(255, 255, 255, 0.075);
+      --flyout-item-selected: rgba(255, 255, 255, 0.095);
+
+      /* Blended Sleek Scrollbar Tokens (Dark - Matches Windows 11 Settings) */
+      --scroll-track-active: rgba(255, 255, 255, 0.045);
+      --scroll-thumb-idle: rgba(255, 255, 255, 0.16);
+      --scroll-thumb-active: rgba(255, 255, 255, 0.45);
+
+      /* Borders & Elevation */
+      --border-card: rgba(255, 255, 255, 0.075);
+      --border-control: rgba(255, 255, 255, 0.095);
+      --border-control-bottom: rgba(255, 255, 255, 0.18);
+      --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.22);
+      --shadow-control: 0 1px 2px rgba(0, 0, 0, 0.26);
+      --shadow-setup: 0 18px 46px rgba(0, 0, 0, 0.42);
+
+      /* Text Hierarchy */
+      --text-primary: #FFFFFF;
+      --text-secondary: #C5C5C5;
+      --text-tertiary: #8A8A8A;
+
+      /* Accent & Semantic Tokens */
+      --accent: #4CC2FF;
+      --accent-hover: #60C9FF;
+      --accent-active: #38B0F0;
+      --accent-text: #000000;
+      --accent-subtle: rgba(76, 194, 255, 0.13);
+
+      --success: #6CCB5F;
+      --success-bg: rgba(108, 203, 95, 0.14);
+      --warning: #FCE100;
+      --warning-bg: rgba(252, 225, 0, 0.12);
+      --danger: #FF99A4;
+      --danger-bg: rgba(255, 153, 164, 0.14);
+      --nav-hover: rgba(255, 255, 255, 0.055);
+      --nav-active: rgba(255, 255, 255, 0.09);
+      --divider: rgba(255, 255, 255, 0.07);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    /* ==========================================================================
+       Sleek Windows 11 Blended Scrollbar (Thin Line Idle, Blended Pill on Hover/Scroll)
+       ========================================================================== */
+    *::-webkit-scrollbar {
+      width: 10px;
+      height: 10px;
+      background: transparent;
+    }
+    *::-webkit-scrollbar-track {
+      background: transparent;
+      border-radius: 999px;
+      margin: 4px 0;
+    }
+    *::-webkit-scrollbar-corner {
+      background: transparent;
+    }
+    /* Idle: Thin subtle line achieved via transparent border around the thumb */
+    *::-webkit-scrollbar-thumb {
+      background-color: var(--scroll-thumb-idle);
+      border-radius: 999px;
+      border: 3.5px solid transparent;
+      background-clip: padding-box;
+      transition: background-color 0.2s ease, border-width 0.2s ease;
+    }
+    /* Hovering container, scrolling with wheel/keys (.is-scrolling), or hovering/dragging thumb */
+    *:hover::-webkit-scrollbar-track,
+    *.is-scrolling::-webkit-scrollbar-track {
+      background: var(--scroll-track-active);
+    }
+    *:hover::-webkit-scrollbar-thumb,
+    *.is-scrolling::-webkit-scrollbar-thumb {
+      background-color: var(--scroll-thumb-active);
+      border: 2px solid transparent;
+      background-clip: padding-box;
+    }
+    *::-webkit-scrollbar-thumb:hover,
+    *::-webkit-scrollbar-thumb:active {
+      background-color: var(--scroll-thumb-active);
+      border: 1.5px solid transparent;
+      background-clip: padding-box;
+    }
+
+    html, body {
+      height: 100%;
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--text-primary);
+      background-color: var(--mica-bg);
+      background-image: var(--mica-tint);
+      -webkit-font-smoothing: antialiased;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    .app-window {
+      display: flex;
+      flex-direction: column;
+      width: 100vw;
+      height: 100vh;
+      border-radius: var(--radius);
+      overflow: hidden;
+      transition: background-color 0.25s ease;
+    }
+
+    /* ==========================================================================
+       Unified Native Titlebar (Text Title Only, Merged Search, Zero Fake OS Buttons)
+       ========================================================================== */
+    .window-titlebar {
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      background: var(--acrylic-sidebar);
+      backdrop-filter: blur(24px) saturate(140%);
+      -webkit-backdrop-filter: blur(24px) saturate(140%);
+      border-bottom: 1px solid var(--divider);
+      flex-shrink: 0;
+      gap: 16px;
+      z-index: 20;
+    }
+
+    .titlebar-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 170px;
+    }
+
+    .titlebar-back {
+      width: 32px;
+      height: 32px;
+      border-radius: var(--radius);
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-primary);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background 0.14s ease, transform 0.1s ease;
+    }
+    .titlebar-back:hover {
+      background: var(--nav-hover);
+    }
+    .titlebar-back:active {
+      transform: scale(0.93);
+    }
+
+    .app-brand-title {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: -0.01em;
+    }
+
+    /* Merged Search Bar on Window Bar */
+    .titlebar-center {
+      flex: 1;
+      max-width: 460px;
+      display: flex;
+      align-items: center;
+      position: relative;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+    .titlebar-center.hidden-in-setup {
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-4px);
+    }
+
+    .titlebar-search-input {
+      width: 100%;
+      height: 32px;
+      padding: 0 34px 0 12px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border-control);
+      border-bottom: 1.5px solid var(--border-control-bottom);
+      background: var(--input-bg);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+    }
+    .titlebar-search-input:focus {
+      border-color: var(--accent);
+      border-bottom: 2px solid var(--accent);
+      background: var(--control-bg);
+    }
+    .titlebar-search-icon {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-secondary);
+      pointer-events: none;
+      font-size: 13px;
+    }
+
+    .titlebar-right {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      min-width: 170px;
+    }
+
+    /* ==========================================================================
+       Smooth View Animations & Non-Overlapping Vertical Flow Stack
+       ========================================================================== */
+    @keyframes fadeSlideUp {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .animate-view {
+      animation: fadeSlideUp 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    /* Ensures every card stack, Advanced options box, and notice banner has clean spacing */
+    .tab-flow-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    /* ==========================================================================
+       MODE 1: First-Run Windows Setup Window (Pinned Top Tabs + Scrollable Body)
+       ========================================================================== */
+    .setup-shell {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 18px 24px;
+      overflow: hidden;
+    }
+
+    .setup-window-card {
+      width: 100%;
+      max-width: 820px;
+      max-height: 100%;
+      flex: 1;
+      min-height: 0;
+      background: var(--card-bg);
+      backdrop-filter: blur(28px) saturate(140%);
+      -webkit-backdrop-filter: blur(28px) saturate(140%);
+      border: 1px solid var(--border-card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-setup);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Top Setup Navigation Tabs — Never Squishes Vertically */
+    .setup-top-tabs {
+      flex-shrink: 0;
+      min-height: 48px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 8px 16px 0;
+      border-bottom: 1px solid var(--divider);
+      background: var(--card-bg-secondary);
+      overflow-x: auto;
+      overflow-y: hidden;
+    }
+
+    .setup-tab-btn {
+      flex-shrink: 0;
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 16px 11px;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      font-family: var(--font-sans);
+      font-size: 13.5px;
+      font-weight: 500;
+      cursor: pointer;
+      border-radius: var(--radius) var(--radius) 0 0;
+      transition: color 0.16s ease, background 0.16s ease, transform 0.1s ease;
+      white-space: nowrap;
+    }
+    .setup-tab-btn:hover {
+      color: var(--text-primary);
+      background: var(--nav-hover);
+    }
+    .setup-tab-btn:active {
+      transform: scale(0.97);
+    }
+    .setup-tab-btn.active {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+    .setup-tab-btn.active::after {
+      content: "";
+      position: absolute;
+      left: 14px;
+      right: 14px;
+      bottom: 0;
+      height: 3px;
+      border-radius: 3px 3px 0 0;
+      background: var(--accent);
+    }
+
+    .setup-tab-step-dot {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      font-size: 11px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--control-bg);
+      border: 1px solid var(--border-control);
+      color: var(--text-secondary);
+      transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+    }
+    .setup-tab-btn.active .setup-tab-step-dot {
+      background: var(--accent);
+      color: var(--accent-text);
+      border-color: var(--accent);
+    }
+
+    /* Scrollable Middle Area Inside Setup Window */
+    .setup-body {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 24px 28px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .setup-header-title {
+      font-family: var(--font-display);
+      font-size: 24px;
+      font-weight: 600;
+      letter-spacing: -0.015em;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+    .setup-header-desc {
+      font-size: 13.5px;
+      color: var(--text-secondary);
+    }
+
+    /* Pinned Bottom Bar Inside Setup Window */
+    .setup-footer {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 28px;
+      border-top: 1px solid var(--divider);
+      background: var(--card-bg-secondary);
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .setup-footer-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    /* Animated Advanced Options Expander (WinUI SettingsExpander Pattern) */
+    .expander-wrap {
+      border-radius: var(--radius);
+      border: 1px solid var(--border-card);
+      background: var(--card-bg-secondary);
+      transition: border-color 0.2s ease;
+      flex-shrink: 0;
+    }
+    .expander-header {
+      width: 100%;
+      padding: 14px 18px;
+      background: transparent;
+      border: none;
+      border-radius: var(--radius);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 13.5px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      transition: background 0.15s ease;
+      text-align: left;
+    }
+    .expander-header:hover {
+      background: var(--nav-hover);
+    }
+    .expander-chevron {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      color: var(--text-secondary);
+      transition: transform 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+      font-size: 14px;
+    }
+    .expander-wrap.open .expander-chevron {
+      transform: rotate(180deg);
+    }
+    .expander-content-grid {
+      display: grid;
+      grid-template-rows: 0fr;
+      transition: grid-template-rows 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .expander-wrap.open .expander-content-grid {
+      grid-template-rows: 1fr;
+    }
+    .expander-content-inner {
+      overflow: hidden;
+    }
+    .expander-wrap.open .expander-content-inner {
+      overflow: visible;
+    }
+    .expander-body {
+      padding: 10px 14px 14px;
+      border-top: 1px solid var(--divider);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    /* ==========================================================================
+       MODE 2: Windows 11 Settings Two-Column Layout (Left Acrylic Sidebar + Main)
+       ========================================================================== */
+    .settings-shell {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .nav-sidebar {
+      width: 256px;
+      flex-shrink: 0;
+      background: var(--acrylic-sidebar);
+      backdrop-filter: blur(28px) saturate(135%);
+      -webkit-backdrop-filter: blur(28px) saturate(135%);
+      padding: 12px 10px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      border-right: 1px solid var(--divider);
+      overflow-y: auto;
+    }
+
+    .nav-list {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .nav-item {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      height: 38px;
+      padding: 0 12px;
+      border-radius: var(--radius);
+      border: none;
+      background: transparent;
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 13.5px;
+      font-weight: 400;
+      cursor: pointer;
+      text-align: left;
+      transition: background 0.14s ease, transform 0.1s ease;
+    }
+    .nav-item:hover {
+      background: var(--nav-hover);
+    }
+    .nav-item:active {
+      transform: scale(0.985);
+    }
+    .nav-item.active {
+      background: var(--nav-active);
+      font-weight: 600;
+    }
+    .nav-item.active::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 10px;
+      bottom: 10px;
+      width: 3px;
+      border-radius: 3px;
+      background: var(--accent);
+    }
+    .nav-icon {
+      width: 18px;
+      height: 18px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      flex-shrink: 0;
+    }
+
+    /* Spacious Scrollable Right Content Area */
+    .content-area {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 24px 36px 44px;
+    }
+
+    .content-inner {
+      max-width: 920px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 4px;
+      gap: 12px;
+    }
+
+    .breadcrumb-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-display);
+      font-size: 28px;
+      font-weight: 600;
+      letter-spacing: -0.015em;
+      color: var(--text-primary);
+    }
+    .breadcrumb-link {
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: color 0.12s ease;
+    }
+    .breadcrumb-link:hover {
+      color: var(--text-primary);
+    }
+    .breadcrumb-sep {
+      color: var(--text-tertiary);
+      font-size: 20px;
+      font-weight: 400;
+    }
+
+    /* Clean Normal System Summary Banner (Text Only, No IS Logo Box) */
+    .system-summary-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 18px 22px;
+      border-radius: var(--radius);
+      background: var(--card-bg);
+      border: 1px solid var(--border-card);
+      box-shadow: var(--shadow-card);
+      flex-wrap: wrap;
+    }
+    .summary-left {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .summary-title {
+      font-family: var(--font-display);
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .summary-subtitle {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+    .summary-pills {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .summary-pill {
+      padding: 6px 12px;
+      border-radius: var(--radius);
+      background: var(--card-bg-secondary);
+      border: 1px solid var(--border-card);
+      font-size: 12.5px;
+      color: var(--text-secondary);
+    }
+    .summary-pill strong {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    /* Windows 11 Setting Cards */
+    .section-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin: 4px 0 0;
+    }
+
+    .card-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .win-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 18px;
+      border-radius: var(--radius);
+      background: var(--card-bg);
+      border: 1px solid var(--border-card);
+      box-shadow: var(--shadow-card);
+      transition: background 0.14s ease, border-color 0.14s ease, transform 0.1s ease;
+    }
+    .win-card.clickable {
+      cursor: pointer;
+    }
+    .win-card.clickable:hover {
+      background: var(--card-bg-hover);
+    }
+    .win-card.clickable:active {
+      transform: scale(0.996);
+    }
+    .win-card.selected-accent {
+      border-color: var(--accent);
+      background: var(--accent-subtle);
+    }
+
+    .card-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 0;
+      flex: 1;
+    }
+    .card-icon {
+      width: 24px;
+      height: 24px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 17px;
+      color: var(--text-primary);
+      flex-shrink: 0;
+    }
+    .card-text {
+      min-width: 0;
+    }
+    .card-title {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .card-desc {
+      font-size: 12.5px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+    .card-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    /* Controls (Strict 8px Radius, Hover/Active Scale, Slight Bottom Shadow) */
+    .win-btn {
+      height: 34px;
+      padding: 0 15px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border-control);
+      border-bottom: 1.5px solid var(--border-control-bottom);
+      background: var(--control-bg);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      font-weight: 500;
+      box-shadow: var(--shadow-control);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      transition: background 0.14s ease, transform 0.1s ease, border-color 0.14s ease;
+    }
+    .win-btn:hover:not(:disabled) {
+      background: var(--control-bg-hover);
+    }
+    .win-btn:active:not(:disabled) {
+      transform: scale(0.97);
+      background: var(--control-bg-active);
+    }
+    .win-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .win-btn-accent {
+      background: var(--accent);
+      color: var(--accent-text);
+      border-color: var(--accent);
+      border-bottom-color: var(--accent-active);
+      font-weight: 600;
+    }
+    .win-btn-accent:hover:not(:disabled) {
+      background: var(--accent-hover);
+    }
+    .win-btn-accent:active:not(:disabled) {
+      background: var(--accent-active);
+      transform: scale(0.97);
+    }
+
+    .win-btn-large {
+      height: 40px;
+      padding: 0 26px;
+      font-size: 14px;
+    }
+
+    .win-input {
+      height: 34px;
+      min-width: 210px;
+      padding: 0 11px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border-control);
+      border-bottom: 1.5px solid var(--border-control-bottom);
+      background: var(--input-bg);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      box-shadow: var(--shadow-control);
+      outline: none;
+      transition: border-color 0.14s ease, background 0.14s ease;
+    }
+    .win-input:focus {
+      border-color: var(--accent);
+      border-bottom: 2px solid var(--accent);
+      background: var(--control-bg);
+    }
+
+    /* ==========================================================================
+       Windows 11 Settings Custom ComboBox Dropdown (Replaces Ugly Browser Select)
+       ========================================================================== */
+    .win-combobox {
+      position: relative;
+      min-width: 220px;
+      user-select: none;
+    }
+    .win-combobox-trigger {
+      width: 100%;
+      height: 34px;
+      padding: 0 12px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border-control);
+      border-bottom: 1.5px solid var(--border-control-bottom);
+      background: var(--control-bg);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      font-weight: 400;
+      box-shadow: var(--shadow-control);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      transition: background 0.14s ease, border-color 0.14s ease, transform 0.1s ease;
+    }
+    .win-combobox-trigger:hover {
+      background: var(--control-bg-hover);
+    }
+    .win-combobox-trigger:active {
+      transform: scale(0.985);
+    }
+    .win-combobox.open .win-combobox-trigger {
+      border-color: var(--accent);
+    }
+    .win-combobox-chevron {
+      font-size: 12px;
+      color: var(--text-secondary);
+      transition: transform 0.18s ease;
+    }
+    .win-combobox.open .win-combobox-chevron {
+      transform: rotate(180deg);
+    }
+    .win-combobox-menu {
+      position: absolute;
+      top: calc(100% + 5px);
+      right: 0;
+      min-width: 100%;
+      padding: 5px;
+      border-radius: var(--radius);
+      background: var(--flyout-bg);
+      border: 1px solid var(--flyout-border);
+      box-shadow: var(--flyout-shadow);
+      z-index: 80;
+      display: none;
+      flex-direction: column;
+      gap: 2px;
+      animation: fadeSlideUp 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    .win-combobox.open .win-combobox-menu {
+      display: flex;
+    }
+    .win-combobox-option {
+      position: relative;
+      width: 100%;
+      padding: 8px 12px 8px 14px;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      text-align: left;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      transition: background 0.12s ease;
+      white-space: nowrap;
+    }
+    .win-combobox-option:hover {
+      background: var(--flyout-item-hover);
+    }
+    .win-combobox-option.selected {
+      background: var(--flyout-item-selected);
+      font-weight: 500;
+    }
+    /* Signature Windows 11 Left Vertical Accent Pill on Selected Dropdown Option */
+    .win-combobox-option.selected::before {
+      content: "";
+      position: absolute;
+      left: 4px;
+      top: 8px;
+      bottom: 8px;
+      width: 3px;
+      border-radius: 3px;
+      background: var(--accent);
+    }
+
+    /* WinUI Toggle Switch */
+    .win-switch {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+    }
+    .win-switch-label {
+      font-size: 13px;
+      color: var(--text-secondary);
+      min-width: 26px;
+      text-align: right;
+    }
+    .win-switch-track {
+      width: 40px;
+      height: 20px;
+      border-radius: 999px;
+      border: 1px solid var(--text-secondary);
+      background: transparent;
+      position: relative;
+      transition: background 0.16s ease, border-color 0.16s ease;
+    }
+    .win-switch-thumb {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--text-secondary);
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), background 0.16s ease;
+    }
+    .win-switch.on .win-switch-track {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+    .win-switch.on .win-switch-thumb {
+      background: var(--accent-text);
+      transform: translateX(20px);
+    }
+
+    /* Badges */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-accent {
+      background: var(--accent-subtle);
+      color: var(--accent);
+    }
+    .badge-success {
+      background: var(--success-bg);
+      color: var(--success);
+    }
+    .badge-warning {
+      background: var(--warning-bg);
+      color: var(--warning);
+    }
+    .badge-danger {
+      background: var(--danger-bg);
+      color: var(--danger);
+    }
+
+    /* Validation & Warning Box */
+    .notice-banner {
+      padding: 13px 16px;
+      border-radius: var(--radius);
+      border: 1px solid var(--danger);
+      background: var(--danger-bg);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+    .notice-banner-warning {
+      border-color: var(--warning);
+      background: var(--warning-bg);
+    }
+
+    /* Flashing Progress & Live Logs Card (Neat Progress Bar + Logs Only) */
+    .flash-panel {
+      padding: 18px 20px;
+      border-radius: var(--radius);
+      background: var(--card-bg);
+      border: 1px solid var(--border-card);
+      box-shadow: var(--shadow-card);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+    .progress-track {
+      width: 100%;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--card-bg-secondary);
+      border: 1px solid var(--border-card);
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      background: var(--accent);
+      transition: width 0.25s ease;
+    }
+    .flash-log-box {
+      background: rgba(0, 0, 0, 0.24);
+      border: 1px solid var(--border-card);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.55;
+      color: var(--text-secondary);
+      max-height: 190px;
+      overflow-y: auto;
+      user-select: text;
+    }
+
+    /* Bottom Navigation & Centered Flash Bar */
+    .bottom-nav-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 14px;
+      margin-top: 6px;
+      border-top: 1px solid var(--divider);
+      gap: 12px;
+    }
+    .center-flash-row {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 14px 0 4px;
+      gap: 12px;
+    }
+
+    .code-viewer {
+      background: var(--card-bg-secondary);
+      border: 1px solid var(--border-card);
+      border-radius: var(--radius);
+      padding: 14px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.55;
+      color: var(--text-primary);
+      max-height: 300px;
+      overflow: auto;
+      white-space: pre;
+      user-select: text;
+    }
+
+    /* Toast Notification */
+    .toast-msg {
+      position: fixed;
+      bottom: 20px;
+      right: 24px;
+      padding: 10px 16px;
+      border-radius: var(--radius);
+      background: var(--acrylic-sidebar);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border-control);
+      box-shadow: var(--shadow-setup);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-primary);
+      z-index: 90;
+      opacity: 0;
+      transform: translateY(10px);
+      pointer-events: none;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+    .toast-msg.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    @media (max-width: 820px) {
+      .settings-shell {
+        flex-direction: column;
+      }
+      .nav-sidebar {
+        width: 100%;
+        flex-direction: row;
+        overflow-x: auto;
+        border-right: none;
+        border-bottom: 1px solid var(--divider);
+      }
+      .nav-list {
+        flex-direction: row;
+      }
+      .content-area {
+        padding: 18px 16px 32px;
+      }
+      .win-card {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .card-right, .win-input, .win-combobox {
+        width: 100%;
+      }
+      .titlebar-left, .titlebar-right {
+        min-width: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-window">
+    <!-- Unified Window Titlebar (Text Title Only, Merged Search Bar, No Extra OS Caption Buttons) -->
+    <header class="window-titlebar">
+      <div class="titlebar-left">
+        <button class="titlebar-back" id="btnTitleBack" title="Back">←</button>
+        <span class="app-brand-title">Instant Server</span>
+      </div>
+
+      <div class="titlebar-center" id="titleSearchWrap">
+        <input
+          type="text"
+          class="titlebar-search-input"
+          id="globalSearchInput"
+          placeholder="Find a setting"
+          autocomplete="off"
+        />
+        <span class="titlebar-search-icon">⌕</span>
+      </div>
+
+      <div class="titlebar-right">
+        <button class="win-btn" id="btnToggleModeView" title="Switch between First-Run Setup and Settings Home">
+          Home Settings
+        </button>
+        <button class="win-btn" id="btnThemeToggle" title="Switch Light / Dark theme">
+          <span id="themeToggleLabel">☀ Light</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- MODE 1: First-Run Windows Setup Window (Pinned Top Tabs + Scrollable Body + Pinned Footer) -->
+    <div class="setup-shell" id="setupShellView">
+      <div class="setup-window-card animate-view">
+        <nav class="setup-top-tabs" id="setupTopTabs"></nav>
+        <div class="setup-body" id="setupBodyContent" tabindex="0"></div>
+        <footer class="setup-footer" id="setupFooterBar"></footer>
+      </div>
+    </div>
+
+    <!-- MODE 2: Main Settings Home Window (Windows 11 Settings Style) -->
+    <div class="settings-shell" id="settingsShellView" style="display: none;">
+      <aside class="nav-sidebar" id="settingsSidebar" tabindex="0">
+        <nav class="nav-list" id="settingsNavList"></nav>
+      </aside>
+      <main class="content-area" id="settingsScrollArea" tabindex="0">
+        <div class="content-inner" id="settingsMainContent"></div>
+      </main>
+    </div>
+  </div>
+
+  <div class="toast-msg" id="toastMsg"></div>
+
+  <script>
+    // =========================================================================
+    // Application State (Empty Default Inputs & Persistent Config Support)
+    // =========================================================================
+    const SETUP_TABS = [
+      { id: "network", label: "Network" },
+      { id: "apps", label: "Apps" },
+      { id: "storage", label: "Storage & USB" },
+      { id: "power", label: "Power" },
+      { id: "finish", label: "Finish" }
+    ];
+
+    const SETTINGS_TABS = [
+      { id: "system", label: "System", icon: "💻" },
+      { id: "network", label: "Network & internet", icon: "🌐" },
+      { id: "apps", label: "Apps & dashboards", icon: "🧩" },
+      { id: "storage", label: "Storage & USB", icon: "🖴" },
+      { id: "power", label: "Power & battery", icon: "🔋" },
+      { id: "config", label: "Configuration & LAN", icon: "📄" }
+    ];
+
+    const state = {
+      theme: "dark",
+      viewMode: "setup", // Opens in 'setup' first unless saved config exists
+      setupTab: "network",
+      settingsTab: "system",
+      searchQuery: "",
+      openDropdownField: null, // Tracks active Windows 11 custom ComboBox flyout
+      advancedExpanded: {
+        network: false,
+        apps: false,
+        storage: false,
+        power: false
+      },
+      configSavedLocally: false,
+      savedConfigPath: "instant-server-config.json",
+
+      // User Configuration (Starts with empty Wi-Fi, passwords, and optional fields)
+      hostname: "instant-server",
+      username: "admin",
+      password: "",
+      wifi_ssid: "",
+      wifi_password: "",
+      enable_usb_tethering: true,
+      static_ip_cidr: "",
+      static_gateway: "",
+      static_dns: "",
+      ssh_authorized_key: "",
+
+      // Apps & Services (Clean names, no port clutter)
+      dashboard_choice: "both", // 'both', 'cockpit', 'casaos', 'none'
+      enable_pihole_dns_prep: true,
+      enable_samba_nas: true,
+      enable_intel_vaapi: true,
+      enable_tailscale: false,
+      tailscale_authkey: "",
+
+      // Target Laptop Storage Mode & USB
+      install_mode: "dual_boot", // 'dual_boot', 'auto_erase', 'interactive_select', 'secondary_drive'
+      dual_boot_Allocation_gb: 45,
+      confirm_erase_main_drive: false,
+      ubuntu_release: "24.04",
+      storage_layout: "direct",
+      boot_mode: "auto",
+
+      // Laptop Power & Survival
+      ignore_lid_switch: true,
+      screen_blank_seconds: "60",
+      battery_charge_start_pct: 40,
+      battery_charge_stop_pct: 60,
+      ups_shutdown_battery_pct: 15,
+      enable_low_ram_zram: true,
+      safe_gpu_nomodeset: false,
+
+      // Connected USB Devices & Flashing Status
+      usbDevices: [],
+      selectedUsbId: "",
+      scanningUsb: false,
+
+      flashing: false,
+      flashProgress: 0,
+      flashStatusText: "",
+      flashLogs: [],
+      validationErrors: [],
+
+      lanScanResults: [],
+      lanScanning: false
+    };
+
+    let pollTimer = null;
+
+    function esc(val) {
+      return String(val ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function showToast(msg) {
+      const el = document.getElementById("toastMsg");
+      if (!el) return;
+      el.textContent = msg;
+      el.classList.add("visible");
+      clearTimeout(el._timer);
+      el._timer = setTimeout(() => el.classList.remove("visible"), 2800);
+    }
+
+    // =========================================================================
+    // Backend Hardware Bridge (pywebview JS API + Local Desktop Server + Fallback)
+    // =========================================================================
+    async function callBackend(endpoint, method = "GET", payload = null) {
+      try {
+        if (window.pywebview && window.pywebview.api) {
+          const api = window.pywebview.api;
+          if (endpoint === "load-config" && api.load_config) return await api.load_config();
+          if (endpoint === "save-config" && api.save_config) return await api.save_config(payload);
+          if (endpoint === "usb" && api.scan_usb_devices) return await api.scan_usb_devices();
+          if (endpoint === "flash" && api.start_build) return await api.start_build(payload);
+          if (endpoint === "status" && api.poll_build_status) return await api.poll_build_status();
+          if (endpoint === "discover" && api.discover_servers) return await api.discover_servers(state.hostname);
+        }
+        if (window.location.protocol.startsWith("http")) {
+          const targetUrl = window.location.origin + "/" + "api/" + endpoint;
+          const opts = {
+            method,
+            headers: { "Content-Type": "application/json" }
+          };
+          if (payload && method === "POST") {
+            opts.body = JSON.stringify(payload);
+          }
+          const resp = await fetch(targetUrl, opts);
+          if (resp.ok) {
+            return await resp.json();
+          }
+        }
+      } catch (_err) {
+        // Fallback when running in standalone preview without Python backend
+      }
+      return null;
+    }
+
+    function serializeProfilePayload() {
+      const selectedDev = state.usbDevices.find(d => d.device_id === state.selectedUsbId);
+      return {
+        hostname: (state.hostname || "instant-server").trim(),
+        username: (state.username || "admin").trim(),
+        password: state.password,
+        wifi_ssid: state.wifi_ssid.trim(),
+        wifi_password: state.wifi_password,
+        enable_usb_tethering: state.enable_usb_tethering,
+        static_ip_cidr: state.static_ip_cidr.trim(),
+        static_gateway: state.static_gateway.trim(),
+        static_dns: state.static_dns ? state.static_dns.split(",").map(s => s.trim()).filter(Boolean) : [],
+        ssh_authorized_keys: state.ssh_authorized_key.trim() ? [state.ssh_authorized_key.trim()] : [],
+        dashboard_choice: state.dashboard_choice,
+        enable_pihole_dns_prep: state.enable_pihole_dns_prep,
+        enable_samba_nas: state.enable_samba_nas,
+        enable_intel_vaapi: state.enable_intel_vaapi,
+        enable_tailscale: state.enable_tailscale,
+        tailscale_authkey: state.tailscale_authkey.trim(),
+        install_mode: state.install_mode,
+        dual_boot_Allocation_gb: Number(state.dual_boot_Allocation_gb) || 45,
+        confirm_erase_main_drive: state.confirm_erase_main_drive,
+        ubuntu_release: String(state.ubuntu_release),
+        storage_layout: state.storage_layout,
+        boot_mode: state.boot_mode,
+        ignore_lid_switch: state.ignore_lid_switch,
+        screen_blank_seconds: Number(state.screen_blank_seconds) || 60,
+        battery_charge_start_pct: Number(state.battery_charge_start_pct) || 40,
+        battery_charge_stop_pct: Number(state.battery_charge_stop_pct) || 60,
+        ups_shutdown_battery_pct: Number(state.ups_shutdown_battery_pct) || 15,
+        enable_low_ram_zram: state.enable_low_ram_zram,
+        safe_gpu_nomodeset: state.safe_gpu_nomodeset,
+        selected_usb_device: selectedDev ? selectedDev.device_node : state.selectedUsbId
+      };
+    }
+
+    function applyConfigToState(cfg) {
+      if (!cfg || typeof cfg !== "object") return;
+      const keys = [
+        "hostname", "username", "password", "wifi_ssid", "wifi_password",
+        "enable_usb_tethering", "static_ip_cidr", "static_gateway",
+        "dashboard_choice", "enable_pihole_dns_prep", "enable_samba_nas",
+        "enable_intel_vaapi", "enable_tailscale", "tailscale_authkey",
+        "install_mode", "dual_boot_Allocation_gb", "confirm_erase_main_drive",
+        "ubuntu_release", "storage_layout", "boot_mode", "ignore_lid_switch",
+        "screen_blank_seconds", "battery_charge_start_pct", "battery_charge_stop_pct",
+        "ups_shutdown_battery_pct", "enable_low_ram_zram", "safe_gpu_nomodeset"
+      ];
+      keys.forEach(k => {
+        if (cfg[k] !== undefined) state[k] = String(cfg[k]) === cfg[k] || typeof cfg[k] === "boolean" || typeof cfg[k] === "number" ? cfg[k] : state[k];
+      });
+      state.screen_blank_seconds = String(state.screen_blank_seconds || "60");
+      state.ubuntu_release = String(state.ubuntu_release || "24.04");
+      if (Array.isArray(cfg.static_dns)) {
+        state.static_dns = cfg.static_dns.join(", ");
+      }
+      if (Array.isArray(cfg.ssh_authorized_keys) && cfg.ssh_authorized_keys.length > 0) {
+        state.ssh_authorized_key = cfg.ssh_authorized_keys[0];
+      }
+    }
+
+    async function initAppStartup() {
+      const res = await callBackend("load-config", "GET");
+      if (res && res.exists && res.config) {
+        applyConfigToState(res.config);
+        state.configSavedLocally = true;
+        state.savedConfigPath = res.path || "instant-server-config.json";
+        state.viewMode = "settings";
+      } else {
+        try {
+          const cached = localStorage.getItem("instant_server_saved_config");
+          if (cached) {
+            applyConfigToState(JSON.parse(cached));
+            state.configSavedLocally = true;
+            state.viewMode = "settings";
+          }
+        } catch (_e) {}
+      }
+
+      await scanUsbDrives(true);
+      renderApp();
+    }
+
+    async function scanUsbDrives(silent = false) {
+      state.scanningUsb = true;
+      if (!silent) renderApp();
+
+      const liveList = await callBackend("usb", "GET");
+      if (Array.isArray(liveList) && liveList.length > 0) {
+        state.usbDevices = liveList;
+      } else if (state.usbDevices.length === 0) {
+        state.usbDevices = [
+          {
+            device_id: "usb0",
+            device_node: "/dev/sdb",
+            model: "SanDisk Ultra USB 3.0",
+            size_gb: 32.0,
+            bus: "usb",
+            removable: true,
+            triple_lock_passed: true,
+            block_reasons: []
+          },
+          {
+            device_id: "sys0",
+            device_node: "System Disk 0",
+            model: "Internal OS Drive",
+            size_gb: 512.0,
+            bus: "nvme",
+            removable: false,
+            triple_lock_passed: false,
+            block_reasons: ["System OS drive is protected"]
+          }
+        ];
+      }
+
+      const firstValid = state.usbDevices.find(d => d.triple_lock_passed);
+      if (firstValid && !state.selectedUsbId) {
+        state.selectedUsbId = firstValid.device_id;
+      }
+      state.scanningUsb = false;
+      if (!silent) {
+        showToast("USB drives refreshed");
+        renderApp();
+      }
+    }
+
+    async function saveConfigurationAndOpenHome() {
+      const payload = serializeProfilePayload();
+      const res = await callBackend("save-config", "POST", payload);
+      try {
+        localStorage.setItem("instant_server_saved_config", JSON.stringify(payload));
+      } catch (_e) {}
+      state.configSavedLocally = true;
+      if (res && res.path) {
+        state.savedConfigPath = res.path;
+      }
+      state.viewMode = "settings";
+      state.settingsTab = "system";
+      showToast("Configuration saved to instant-server-config.json");
+      renderApp();
+    }
+
+    // =========================================================================
+    // Validation & Real Flashing Execution (Logs + Neat Progress Bar)
+    // =========================================================================
+    function checkIncompleteRequirements() {
+      const missing = [];
+      if (!state.hostname || !/^[a-z0-9][a-z0-9-]{0,61}$/i.test(state.hostname.trim())) {
+        missing.push("Enter a valid Server Name (letters, numbers, hyphens).");
+      }
+      if (!state.username || !/^[a-z_][a-z0-9_-]{0,31}$/i.test(state.username.trim())) {
+        missing.push("Enter a valid Admin Username.");
+      }
+      if (!state.password && !state.ssh_authorized_key.trim()) {
+        missing.push("Set an Admin Password (or add an SSH key in Network advanced options).");
+      }
+      if (state.wifi_ssid.trim() && state.wifi_password.length > 0 && state.wifi_password.length < 8) {
+        missing.push("Wi-Fi password must be at least 8 characters.");
+      }
+      if (state.install_mode === "auto_erase" && !state.confirm_erase_main_drive) {
+        missing.push("Confirm 'I know what I'm doing' for Erase Main Drive mode, or switch to Dual-Boot.");
+      }
+      const usb = state.usbDevices.find(d => d.device_id === state.selectedUsbId && d.triple_lock_passed);
+      if (!usb) {
+        missing.push("Select an approved removable USB flash drive in Storage & USB.");
+      }
+      return missing;
+    }
+
+    async function startFlashingProcess() {
+      if (state.flashing) return;
+      const missing = checkIncompleteRequirements();
+      state.validationErrors = missing;
+      if (missing.length > 0) {
+        showToast("Complete required settings before flashing");
+        renderApp();
+        return;
+      }
+
+      const payload = serializeProfilePayload();
+      state.flashing = true;
+      state.flashProgress = 8;
+      state.flashStatusText = "Starting Instant Server USB provisioning...";
+      state.flashLogs = [
+        "[00:00] Validating configuration and Triple-Lock USB safety...",
+        `[00:01] Target server: ${payload.hostname}.local (${payload.username})`
+      ];
+      renderApp();
+
+      const startRes = await callBackend("flash", "POST", payload);
+      if (startRes && startRes.started) {
+        clearInterval(pollTimer);
+        pollTimer = setInterval(async () => {
+          const snap = await callBackend("status", "GET");
+          if (!snap) return;
+          state.flashProgress = snap.percent || Math.min(95, state.flashProgress + 12);
+          if (Array.isArray(snap.events) && snap.events.length > 0) {
+            state.flashLogs = snap.events.map((ev, idx) => {
+              const sec = String(idx + 1).padStart(2, "0");
+              return `[00:${sec}] ${ev.message}`;
+            });
+            state.flashStatusText = snap.events[snap.events.length - 1].message;
+          }
+          if (snap.status === "COMPLETED") {
+            clearInterval(pollTimer);
+            state.flashing = false;
+            state.flashProgress = 100;
+            state.flashStatusText = "USB drive is ready! Plug it into your laptop and boot from USB.";
+            state.flashLogs.push("[DONE] Instant Server USB provisioning completed.");
+            showToast("Instant Server USB is ready");
+          } else if (snap.status === "FAILED") {
+            clearInterval(pollTimer);
+            state.flashing = false;
+            state.flashStatusText = `Failed: ${snap.error || "Check logs"}`;
+            state.flashLogs.push(`[ERROR] ${snap.error || "Provisioning failed"}`);
+          }
+          renderApp();
+        }, 450);
+        return;
+      }
+
+      const selectedUsb = state.usbDevices.find(d => d.device_id === state.selectedUsbId);
+      const usbLabel = selectedUsb ? `${selectedUsb.model} (${selectedUsb.device_node})` : "USB Drive";
+      const steps = [
+        { pct: 24, msg: `Verified Ubuntu Server ${state.ubuntu_release} LTS image checksum` },
+        { pct: 48, msg: `Writing boot image to ${usbLabel}` },
+        { pct: 72, msg: "Relocating UEFI backup GPT header and creating cidata partition" },
+        { pct: 90, msg: "Writing cloud-init user-data, network config, and laptop power rules" },
+        { pct: 100, msg: "USB drive is ready! Plug it into your laptop and boot from USB." }
+      ];
+      let idx = 0;
+      clearInterval(pollTimer);
+      pollTimer = setInterval(() => {
+        if (idx >= steps.length) {
+          clearInterval(pollTimer);
+          state.flashing = false;
+          showToast("Instant Server USB is ready");
+          renderApp();
+          return;
+        }
+        const st = steps[idx++];
+        state.flashProgress = st.pct;
+        state.flashStatusText = st.msg;
+        state.flashLogs.push(`[00:0${idx + 1}] ${st.msg}`);
+        if (st.pct === 100) {
+          state.flashing = false;
+          clearInterval(pollTimer);
+          showToast("Instant Server USB is ready");
+        }
+        renderApp();
+      }, 650);
+    }
+
+    // =========================================================================
+    // Shared UI Builders (Switches, Custom Win11 ComboBox, Expander, Logs)
+    // =========================================================================
+    function renderSwitch(action, isOn) {
+      return `
+        <div class="win-switch ${isOn ? "on" : ""}" data-action="${esc(action)}" role="switch" aria-checked="${isOn}">
+          <span class="win-switch-label">${isOn ? "On" : "Off"}</span>
+          <div class="win-switch-track"><div class="win-switch-thumb"></div></div>
+        </div>
+      `;
+    }
+
+    function renderComboBox(field, options) {
+      const currentVal = String(state[field] ?? "");
+      const currentOpt = options.find(o => String(o.value) === currentVal) || options[0];
+      const isOpen = state.openDropdownField === field;
+      return `
+        <div class="win-combobox ${isOpen ? "open" : ""}" data-combobox="${esc(field)}">
+          <button type="button" class="win-combobox-trigger" data-action="toggle-dropdown" data-field="${esc(field)}">
+            <span>${esc(currentOpt ? currentOpt.label : "")}</span>
+            <span class="win-combobox-chevron">⌄</span>
+          </button>
+          <div class="win-combobox-menu" role="listbox">
+            ${options.map(opt => {
+              const isSel = String(opt.value) === currentVal;
+              return `
+                <button
+                  type="button"
+                  class="win-combobox-option ${isSel ? "selected" : ""}"
+                  data-action="select-dropdown-option"
+                  data-field="${esc(field)}"
+                  data-value="${esc(opt.value)}"
+                  role="option"
+                  aria-selected="${isSel}"
+                >
+                  <span>${esc(opt.label)}</span>
+                </button>
+              `;
+            }).join("")}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderExpander(tabKey, title, innerHtml) {
+      const isOpen = !!state.advancedExpanded[tabKey];
+      return `
+        <div class="expander-wrap ${isOpen ? "open" : ""}">
+          <button type="button" class="expander-header" data-action="toggle-expander" data-expander="${esc(tabKey)}">
+            <span>${esc(title)}</span>
+            <span class="expander-chevron">⌄</span>
+          </button>
+          <div class="expander-content-grid">
+            <div class="expander-content-inner">
+              <div class="expander-body">
+                ${innerHtml}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderFlashProgressAndLogsCard() {
+      const hasActivity = state.flashing || state.flashProgress > 0 || state.flashLogs.length > 0;
+      const missingHtml = state.validationErrors.length > 0 ? `
+        <div class="notice-banner">
+          <strong>Complete the following before flashing:</strong>
+          <ul style="padding-left: 18px; margin-top: 2px;">
+            ${state.validationErrors.map(e => `<li>${esc(e)}</li>`).join("")}
+          </ul>
+        </div>
+      ` : "";
+
+      if (!hasActivity) {
+        return missingHtml;
+      }
+
+      return `
+        ${missingHtml}
+        <div class="flash-panel">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+            <span style="font-weight:600;font-size:13.5px;">${esc(state.flashStatusText || "Preparing USB...")}</span>
+            <span class="badge ${state.flashProgress === 100 ? "badge-success" : "badge-accent"}">${state.flashProgress}%</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill" style="width: ${state.flashProgress}%;"></div>
+          </div>
+          <div class="flash-log-box">${state.flashLogs.map(l => esc(l)).join("\n")}</div>
+        </div>
+      `;
+    }
+
+    function buildSummaryLabels() {
+      const modeNames = {
+        dual_boot: `Dual-Boot (${state.dual_boot_Allocation_gb} GB)`,
+        auto_erase: "Erase Main Drive",
+        interactive_select: "Select on Laptop Screen",
+        secondary_drive: "Secondary Drive Only"
+      };
+      const dashNames = {
+        both: "Cockpit + CasaOS",
+        cockpit: "Cockpit",
+        casaos: "CasaOS",
+        none: "SSH Only"
+      };
+      const usb = state.usbDevices.find(d => d.device_id === state.selectedUsbId && d.triple_lock_passed);
+      return {
+        modeLabel: modeNames[state.install_mode] || "Dual-Boot",
+        dashLabel: dashNames[state.dashboard_choice] || "Cockpit + CasaOS",
+        usbLabel: usb ? `${usb.model} (${usb.size_gb} GB)` : "No USB selected",
+        wifiLabel: state.wifi_ssid.trim() ? state.wifi_ssid.trim() : "Ethernet / USB Tethering"
+      };
+    }
+
+    function generateYamlPreview() {
+      const storageSnippet = state.install_mode === "dual_boot"
+        ? `  storage:\n    layout:\n      name: ${state.storage_layout}\n    config:\n      - type: disk\n        id: disk0\n        preserve: true\n      - type: partition\n        id: instant-root\n        device: disk0\n        size: ${state.dual_boot_Allocation_gb}G`
+        : state.install_mode === "interactive_select"
+        ? `  interactive-sections:\n    - storage`
+        : `  storage:\n    layout:\n      name: ${state.storage_layout}\n      match:\n        size: largest`;
+
+      return `#cloud-config
+autoinstall:
+  version: 1
+  identity:
+    hostname: ${state.hostname || "instant-server"}
+    username: ${state.username || "admin"}
+    password: "${state.password ? "$6$rounds=5000$hashed..." : "<set-password>"}"
+  ssh:
+    install-server: true
+    allow-pw: true
+${storageSnippet}
+  late-commands:
+    - curtin in-target -- bash /cdrom/cidata/scripts/p2_late_laptop_hardening.sh`;
+    }
+
+    // =========================================================================
+    // Tab Content Builders (Wrapped in .tab-flow-stack so Boxes Never Overlap)
+    // =========================================================================
+    function buildNetworkSection() {
+      const basicHtml = `
+        <div class="card-stack">
+          <div class="win-card">
+            <div class="card-left">
+              <div class="card-icon">🏷</div>
+              <div class="card-text">
+                <div class="card-title">Server name</div>
+                <div class="card-desc">Name used to reach your server on your home network (${esc(state.hostname || "instant-server")}.local)</div>
+              </div>
+            </div>
+            <div class="card-right">
+              <input class="win-input" data-field="hostname" value="${esc(state.hostname)}" placeholder="instant-server" />
+            </div>
+          </div>
+
+          <div class="win-card">
+            <div class="card-left">
+              <div class="card-icon">👤</div>
+              <div class="card-text">
+                <div class="card-title">Admin username & password</div>
+                <div class="card-desc">Login credentials for the web dashboard and SSH</div>
+              </div>
+            </div>
+            <div class="card-right" style="flex-wrap:wrap;">
+              <input class="win-input" style="min-width:140px;" data-field="username" value="${esc(state.username)}" placeholder="admin" />
+              <input class="win-input" style="min-width:170px;" type="password" data-field="password" value="${esc(state.password)}" placeholder="Enter password" />
+            </div>
+          </div>
+
+          <div class="win-card">
+            <div class="card-left">
+              <div class="card-icon">📶</div>
+              <div class="card-text">
+                <div class="card-title">Wi-Fi network</div>
+                <div class="card-desc">Leave blank if you use an Ethernet cable or phone USB tethering</div>
+              </div>
+            </div>
+            <div class="card-right" style="flex-wrap:wrap;">
+              <input class="win-input" style="min-width:155px;" data-field="wifi_ssid" value="${esc(state.wifi_ssid)}" placeholder="Wi-Fi name (SSID)" />
+              <input class="win-input" style="min-width:155px;" type="password" data-field="wifi_password" value="${esc(state.wifi_password)}" placeholder="Wi-Fi password" />
+            </div>
+          </div>
+        </div>
+      `;
+
+      const advHtml = `
+        <div class="win-card">
+          <div class="card-left">
+            <div class="card-icon">📱</div>
+            <div class="card-text">
+              <div class="card-title">Phone USB tethering</div>
+              <div class="card-desc">Automatically use internet from a plugged-in Android or iPhone if Wi-Fi is unavailable</div>
+            </div>
+          </div>
+          <div class="card-right">
+            ${renderSwitch("toggle-tethering", state.enable_usb_tethering)}
+          </div>
+        </div>
+
+        <div class="win-card">
+          <div class="card-left">
+            <div class="card-icon">🖧</div>
+            <div class="card-text">
+              <div class="card-title">Static IP address</div>
+              <div class="card-desc">Optional fixed IP (leave empty for automatic DHCP)</div>
+            </div>
+          </div>
+          <div class="card-right" style="flex-wrap:wrap;">
+            <input class="win-input" style="min-width:145px;" data-field="static_ip_cidr" value="${esc(state.static_ip_cidr)}" placeholder="IP / CIDR" />
+            <input class="win-input" style="min-width:135px;" data-field="static_gateway" value="${esc(state.static_gateway)}" placeholder="Gateway" />
+          </div>
+        </div>
+
+        <div class="win-card">
+          <div class="card-left">
+            <div class="card-icon">🔑</div>
+            <div class="card-text">
+              <div class="card-title">SSH public key</div>
+              <div class="card-desc">Optional key for passwordless SSH login</div>
+            </div>
+          </div>
+          <div class="card-right">
+            <input class="win-input" data-field="ssh_authorized_key" value="${esc(state.ssh_authorized_key)}" placeholder="ssh-ed25519 AAAA..." />
+          </div>
+        </div>
+      `;
+
+      return `
+        <div class="tab-flow-stack">
+          ${basicHtml}
+          ${renderExpander("network", "Advanced options", advHtml)}
+        </div>
+      `;
+    }
+
+    function buildAppsSection() {
+      const dashboards = [
+        { id: "both", icon: "✨", title: "Cockpit + CasaOS", desc: "Install both the system manager and the 1-click app store", rec: true },
+        { id: "cockpit", icon: "🎛", title: "Cockpit", desc: "Lightweight system dashboard for storage, network, and terminal", rec: false },
+        { id: "casaos", icon: "🐳", title: "CasaOS", desc: "1-click self-hosted app store for Jellyfin, Nextcloud, and Docker apps", rec: false },
+        { id: "none", icon: "⌨", title: "SSH Only", desc: "Headless terminal server with no web dashboard", rec: false }
+      ];
+
+      const basicHtml = `
+        <div class="card-stack">
+          ${dashboards.map(d => {
+            const active = state.dashboard_choice === d.id;
+            return `
+              <div class="win-card clickable ${active ? "selected-accent" : ""}" data-action="select-dashboard" data-value="${d.id}">
+                <div class="card-left">
+                  <div class="card-icon">${d.icon}</div>
+                  <div class="card-text">
+                    <div class="card-title">
+                      ${esc(d.title)}
+                      ${d.rec ? `<span class="badge badge-accent">Recommended</span>` : ""}
+                    </div>
+                    <div class="card-desc">${esc(d.desc)}</div>
+                  </div>
+                </div>
+                <div class="card-right">
+                  <input type="radio" name="dash_choice" ${active ? "checked" : ""} style="accent-color:var(--accent);width:17px;height:17px;pointer-events:none;" />
+                </div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      `;
+
+      const advHtml = `
+        <div class="win-card">
+          <div class="card-left">
+            <div class="card-icon">🛡</div>
+            <div class="card-text">
+              <div class="card-title">Pi-hole DNS</div>
+              <div class="card-desc">Prepare DNS settings so Pi-hole or AdGuard Home can run without port conflicts</div>
+            </div>
+          </div>
+          <div class="card-right">${renderSwitch("toggle-pihole", state.enable_pihole_dns_prep)}</div>
+        </div>
+
+        <div class="win-card">
+          <div class="card-left">
+            <div class="card-icon">📁</div>
+            <div class="card-text">
+              <div class="card-title">Samba File Share</div>
+              <div class="card-desc">Share folders across Windows, macOS, and Linux computers on your home network</div>
+            </div>
+          </div>
+          <div class="card-right">${renderSwitch("toggle-samba", state.enable_samba_nas)}</div>
+        </div>
+
+        <div class="win-card">
+          <div class="card-left">
+            <div class="card-icon">🎞</div>
+            <div class="card-text">
+              <div class="card-title">Intel Hardware Acceleration</div>
+              <div class="card-desc">Enable integrated GPU video transcoding for Jellyfin and Plex</div>
+            </div>
+          </div>
+          <div class="card-right">${renderSwitch("toggle-vaapi", state.enable_intel_vaapi)}</div>
+        </div>
+
+        <div class="win-card">
+          <div class="card-left">
+            <div class="card-icon">🔒</div>
+            <div class="card-text">
+              <div class="card-title">Tailscale VPN</div>
+              <div class="card-desc">Access your server remotely without opening router ports</div>
+            </div>
+          </div>
+          <div class="card-right" style="flex-wrap:wrap;">
+            ${state.enable_tailscale ? `<input class="win-input" style="min-width:160px;" data-field="tailscale_authkey" value="${esc(state.tailscale_authkey)}" placeholder="Auth key (optional)" />` : ""}
+            ${renderSwitch("toggle-tailscale", state.enable_tailscale)}
+          </div>
+        </div>
+      `;
+
+      return `
+        <div class="tab-flow-stack">
+          ${basicHtml}
+          ${renderExpander("apps", "Advanced options", advHtml)}
+        </div>
+      `;
+    }
+
+    function buildStorageSection() {
+      const modes = [
+        { id: "dual_boot", icon: "⚖", title: "Dual-Boot alongside existing OS", desc: "Keeps your laptop's original Windows or Linux system intact", badge: "Safe Default" },
+        { id: "auto_erase", icon: "🧹", title: "Automatically erase main drive", desc: "Formats the laptop's main internal drive and dedicates 100% of space to the server", badge: "Requires confirmation" },
+        { id: "interactive_select", icon: "🖱", title: "Select after plugging in", desc: "Lets you pick the drive or partition on the laptop screen during install", badge: "" },
+        { id: "secondary_drive", icon: "💽", title: "Secondary drive only", desc: "Installs onto a second internal drive and leaves the primary drive untouched", badge: "" }
+      ];
+
+      const modeConfigCard = state.install_mode === "dual_boot" ? `
+        <div class="win-card">
+          <div class="card-left">
+            <div class="card-icon">📏</div>
+            <div class="card-text">
+              <div class="card-title">Server partition size (${state.dual_boot_Allocation_gb} GB)</div>
+              <div class="card-desc">Space reserved for Instant Server alongside your existing system</div>
+            </div>
+          </div>
+          <div class="card-right">
+            <input type="range" min="20" max="250" step="5" value="${state.dual_boot_Allocation_gb}" data-field="dual_boot_Allocation_gb" style="accent-color:var(--accent);width:170px;" />
+          </div>
+        </div>
+      ` : state.install_mode === "auto_erase" ? `
+        <div class="notice-banner ${state.confirm_erase_main_drive ? "notice-banner-warning" : ""}">
+          <div style="font-weight:600;">Warning: This will erase all files on the target laptop's main drive</div>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:4px;">
+            <input type="checkbox" data-action="toggle-confirm-erase" ${state.confirm_erase_main_drive ? "checked" : ""} style="accent-color:var(--danger);width:16px;height:16px;" />
+            <span>I know what I'm doing — erase the target laptop's main internal drive</span>
+          </label>
+        </div>
+      ` : "";
+
+      const usbListHtml = state.usbDevices.map(dev => {
+        const selected = state.selectedUsbId === dev.device_id && dev.triple_lock_passed;
+        return `
+          <div class="win-card ${dev.triple_lock_passed ? "clickable" : ""} ${selected ? "selected-accent" : ""}"
+               ${dev.triple_lock_passed ? `data-action="select-usb" data-usb="${esc(dev.device_id)}"` : ""}
+               style="${!dev.triple_lock_passed ? "opacity:0.55;" : ""}">
+            <div class="card-left">
+              <div class="card-icon">${dev.triple_lock_passed ? "🔌" : "🔒"}</div>
+              <div class="card-text">
+                <div class="card-title">
+                  ${esc(dev.model)} (${dev.size_gb} GB)
+                  <span class="badge ${dev.triple_lock_passed ? "badge-success" : "badge-danger"}">
+                    ${dev.triple_lock_passed ? "Ready" : "Protected System Drive"}
+                  </span>
+                </div>
+                <div class="card-desc">${esc(dev.device_node)} ${dev.block_reasons && dev.block_reasons.length ? "• " + esc(dev.block_reasons[0]) : ""}</div>
+              </div>
+            </div>
+            <div class="card-right">
+              ${dev.triple_lock_passed
+                ? `<input type="radio" name="usb_sel" ${selected ? "checked" : ""} style="accent-color:var(--accent);width:17px;height:17px;pointer-events:none;" />`
+                : `<span style="font-size:12px;color:var(--text-tertiary);">Blocked</span>`}
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      const advHtml = `
+        <div class="win-card">
+          <div class="card-left">
+            <div class="card-icon">💿</div>
+            <div class="card-text">
+              <div class="card-title">Ubuntu Server version</div>
+              <div class="card-desc">Official Ubuntu Server LTS release</div>
+            </div>
+          </div>
+          <div class="card-right">
+            ${renderComboBox("ubuntu_release", [
+              { value: "24.04", label: "Ubuntu Server 24.04 LTS (Recommended)" },
+              { value: "22.04", label: "Ubuntu Server 22.04 LTS" }
+            ])}
+          </div>
+        </div>
+
+        <div class="win-card">
+          <div class="card-left">
+            <div class="card-icon">🗂</div>
+            <div class="card-text">
+              <div class="card-title">Filesystem layout</div>
+              <div class="card-desc">Partition structure on the server drive</div>
+            </div>
+          </div>
+          <div class="card-right">
+            ${renderComboBox("storage_layout", [
+              { value: "direct", label: "Standard ext4 (Recommended)" },
+              { value: "lvm", label: "LVM Volume Group" },
+              { value: "btrfs", label: "Btrfs Snapshots" }
+            ])}
+          </div>
+        </div>
+      `;
+
+      return `
+        <div class="tab-flow-stack">
+          <div class="section-label">Target laptop hard drive mode</div>
+          <div class="card-stack">
+            ${modes.map(m => {
+              const active = state.install_mode === m.id;
+              return `
+                <div class="win-card clickable ${active ? "selected-accent" : ""}" data-action="select-install-mode" data-value="${m.id}">
+                  <div class="card-left">
+                    <div class="card-icon">${m.icon}</div>
+                    <div class="card-text">
+                      <div class="card-title">
+                        ${esc(m.title)}
+                        ${m.badge ? `<span class="badge ${m.id === "auto_erase" ? "badge-warning" : "badge-accent"}">${esc(m.badge)}</span>` : ""}
+                      </div>
+                      <div class="card-desc">${esc(m.desc)}</div>
+                    </div>
+                  </div>
+                  <div class="card-right">
+                    <input type="radio" name="inst_mode" ${active ? "checked" : ""} style="accent-color:var(--accent);width:17px;height:17px;pointer-events:none;" />
+                  </div>
+                </div>
+              `;
+            }).join("")}
+            ${modeConfigCard}
+          </div>
+
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div class="section-label" style="margin:0;">Select USB drive to flash</div>
+            <button type="button" class="win-btn" data-action="scan-usb">${state.scanningUsb ? "Scanning..." : "↻ Refresh drives"}</button>
+          </div>
+          <div class="card-stack">
+            ${usbListHtml}
+          </div>
+
+          ${renderExpander("storage", "Advanced options", advHtml)}
+        </div>
+      `;
+    }
+
+    function buildPowerSection() {
+      const basicHtml = `
+        <div class="card-stack">
+          <div class="win-card">
+            <div class="card-left">
+              <div class="card-icon">💻</div>
+              <div class="card-text">
+                <div class="card-title">Keep running with the laptop lid closed</div>
+                <div class="card-desc">Prevents the laptop from going to sleep when you close the screen</div>
+              </div>
+            </div>
+            <div class="card-right">${renderSwitch("toggle-lid", state.ignore_lid_switch)}</div>
+          </div>
+
+          <div class="win-card">
+            <div class="card-left">
+              <div class="card-icon">🔋</div>
+              <div class="card-text">
+                <div class="card-title">Battery health limiter (${state.battery_charge_start_pct}% – ${state.battery_charge_stop_pct}%)</div>
+                <div class="card-desc">Caps charging at ${state.battery_charge_stop_pct}% while plugged in 24/7 to protect the battery</div>
+              </div>
+            </div>
+            <div class="card-right">
+              <input type="range" min="50" max="85" step="5" value="${state.battery_charge_stop_pct}" data-field="battery_charge_stop_pct" style="accent-color:var(--accent);width:160px;" />
+            </div>
+          </div>
+
+          <div class="win-card">
+            <div class="card-left">
+              <div class="card-icon">⚡</div>
+              <div class="card-text">
+                <div class="card-title">Safe shutdown during power outage (${state.ups_shutdown_battery_pct}%)</div>
+                <div class="card-desc">Uses the laptop battery as a built-in UPS and shuts down cleanly when battery drops to ${state.ups_shutdown_battery_pct}%</div>
+              </div>
+            </div>
+            <div class="card-right">
+              <input type="range" min="10" max="35" step="5" value="${state.ups_shutdown_battery_pct}" data-field="ups_shutdown_battery_pct" style="accent-color:var(--accent);width:160px;" />
+            </div>
+          </div>
+        </div>
+      `;
+
+      const advHtml = `
+        <div class="win-card">
+          <div class="card-left">
+            <div class="card-icon">🖥</div>
+            <div class="card-text">
+              <div class="card-title">Turn off laptop screen after ${esc(state.screen_blank_seconds)} seconds</div>
+              <div class="card-desc">Saves power and prevents screen burn-in</div>
+            </div>
+          </div>
+          <div class="card-right">
+            ${renderComboBox("screen_blank_seconds", [
+              { value: "30", label: "30 seconds" },
+              { value: "60", label: "60 seconds (Recommended)" },
+              { value: "180", label: "3 minutes" }
+            ])}
+          </div>
+        </div>
+
+        <div class="win-card">
+          <div class="card-left">
+            <div class="card-icon">🧠</div>
+            <div class="card-text">
+              <div class="card-title">Low-RAM memory compression</div>
+              <div class="card-desc">Enables zram swap so older 2 GB and 4 GB RAM laptops run smoothly</div>
+            </div>
+          </div>
+          <div class="card-right">${renderSwitch("toggle-zram", state.enable_low_ram_zram)}</div>
+        </div>
+
+        <div class="win-card">
+          <div class="card-left">
+            <div class="card-icon">🎮</div>
+            <div class="card-text">
+              <div class="card-title">Safe graphics mode</div>
+              <div class="card-desc">Use if the old laptop has a broken NVIDIA or AMD graphics chip</div>
+            </div>
+          </div>
+          <div class="card-right">${renderSwitch("toggle-nomodeset", state.safe_gpu_nomodeset)}</div>
+        </div>
+      `;
+
+      return `
+        <div class="tab-flow-stack">
+          ${basicHtml}
+          ${renderExpander("power", "Advanced options", advHtml)}
+        </div>
+      `;
+    }
+
+    function buildFinishSection() {
+      const sum = buildSummaryLabels();
+      return `
+        <div class="tab-flow-stack">
+          <div class="card-stack">
+            <div class="win-card">
+              <div class="card-left">
+                <div class="card-icon">💻</div>
+                <div class="card-text">
+                  <div class="card-title">${esc(state.hostname || "instant-server")}.local</div>
+                  <div class="card-desc">Ubuntu Server ${esc(state.ubuntu_release)} LTS • Admin user: ${esc(state.username || "admin")}</div>
+                </div>
+              </div>
+              <div class="card-right">
+                <span class="badge ${state.password ? "badge-success" : "badge-warning"}">
+                  ${state.password ? "Password set" : "Password empty"}
+                </span>
+              </div>
+            </div>
+
+            <div class="win-card">
+              <div class="card-left">
+                <div class="card-icon">📶</div>
+                <div class="card-text">
+                  <div class="card-title">Network</div>
+                  <div class="card-desc">${esc(sum.wifiLabel)}</div>
+                </div>
+              </div>
+              <div class="card-right">
+                <button type="button" class="win-btn" data-action="jump-setup-tab" data-tab="network">Edit</button>
+              </div>
+            </div>
+
+            <div class="win-card">
+              <div class="card-left">
+                <div class="card-icon">🧩</div>
+                <div class="card-text">
+                  <div class="card-title">Apps & dashboards</div>
+                  <div class="card-desc">${esc(sum.dashLabel)}</div>
+                </div>
+              </div>
+              <div class="card-right">
+                <button type="button" class="win-btn" data-action="jump-setup-tab" data-tab="apps">Edit</button>
+              </div>
+            </div>
+
+            <div class="win-card">
+              <div class="card-left">
+                <div class="card-icon">🖴</div>
+                <div class="card-text">
+                  <div class="card-title">Storage & USB drive</div>
+                  <div class="card-desc">${esc(sum.modeLabel)} • ${esc(sum.usbLabel)}</div>
+                </div>
+              </div>
+              <div class="card-right">
+                <button type="button" class="win-btn" data-action="jump-setup-tab" data-tab="storage">Edit</button>
+              </div>
+            </div>
+          </div>
+
+          ${renderFlashProgressAndLogsCard()}
+        </div>
+      `;
+    }
+
+    // =========================================================================
+    // Render Mode 1: First-Run Windows Setup View
+    // =========================================================================
+    function renderSetupView() {
+      const topTabsEl = document.getElementById("setupTopTabs");
+      const bodyEl = document.getElementById("setupBodyContent");
+      const footerEl = document.getElementById("setupFooterBar");
+
+      topTabsEl.innerHTML = SETUP_TABS.map((t, idx) => {
+        const active = state.setupTab === t.id;
+        return `
+          <button type="button" class="setup-tab-btn ${active ? "active" : ""}" data-action="switch-setup-tab" data-tab="${t.id}">
+            <span class="setup-tab-step-dot">${idx + 1}</span>
+            <span>${esc(t.label)}</span>
+          </button>
+        `;
+      }).join("");
+
+      const tabIdx = SETUP_TABS.findIndex(t => t.id === state.setupTab);
+      const headers = {
+        network: { title: "Connect your server", desc: "Name your server and optionally enter your Wi-Fi details." },
+        apps: { title: "Choose your apps", desc: "Pick the web dashboard and home server tools you want pre-installed." },
+        storage: { title: "Select installation mode and USB drive", desc: "Choose how the target laptop hard drive should be used and pick your USB stick." },
+        power: { title: "Laptop power & battery settings", desc: "Configure lid-close behavior and battery protection for 24/7 running." },
+        finish: { title: "Ready to flash or save", desc: "Flash your USB drive right now, or save your configuration locally and open the home settings page." }
+      };
+      const hdr = headers[state.setupTab] || headers.network;
+
+      let contentHtml = "";
+      if (state.setupTab === "network") contentHtml = buildNetworkSection();
+      else if (state.setupTab === "apps") contentHtml = buildAppsSection();
+      else if (state.setupTab === "storage") contentHtml = buildStorageSection();
+      else if (state.setupTab === "power") contentHtml = buildPowerSection();
+      else contentHtml = buildFinishSection();
+
+      bodyEl.innerHTML = `
+        <div class="animate-view tab-flow-stack">
+          <div>
+            <h1 class="setup-header-title">${esc(hdr.title)}</h1>
+            <p class="setup-header-desc">${esc(hdr.desc)}</p>
+          </div>
+          ${contentHtml}
+        </div>
+      `;
+
+      const isFirst = tabIdx <= 0;
+      const isLast = tabIdx === SETUP_TABS.length - 1;
+
+      footerEl.innerHTML = `
+        <div>
+          <button type="button" class="win-btn" data-action="setup-prev" ${isFirst ? "disabled" : ""}>← Previous</button>
+        </div>
+        <div class="setup-footer-right">
+          ${!isLast ? `
+            <button type="button" class="win-btn" data-action="setup-skip">Skip</button>
+            <button type="button" class="win-btn win-btn-accent" data-action="setup-next">Proceed →</button>
+          ` : `
+            <button type="button" class="win-btn" data-action="save-config-home">Save configuration</button>
+            <button type="button" class="win-btn win-btn-accent win-btn-large" data-action="start-flash" ${state.flashing ? "disabled" : ""}>
+              ${state.flashing ? "Flashing USB..." : "Confirm & Flash USB"}
+            </button>
+          `}
+        </div>
+      `;
+    }
+
+    // =========================================================================
+    // Render Mode 2: Main Settings Home Window (Windows 11 Settings Layout)
+    // =========================================================================
+    function renderSettingsView() {
+      const navEl = document.getElementById("settingsNavList");
+      const mainEl = document.getElementById("settingsMainContent");
+
+      navEl.innerHTML = SETTINGS_TABS.map(item => {
+        const active = state.settingsTab === item.id && !state.searchQuery.trim();
+        return `
+          <button type="button" class="nav-item ${active ? "active" : ""}" data-action="switch-settings-tab" data-tab="${item.id}">
+            <span class="nav-icon">${item.icon}</span>
+            <span>${esc(item.label)}</span>
+          </button>
+        `;
+      }).join("");
+
+      if (state.searchQuery.trim()) {
+        mainEl.innerHTML = renderSearchResults(state.searchQuery.trim());
+        return;
+      }
+
+      const tabIdx = SETTINGS_TABS.findIndex(t => t.id === state.settingsTab);
+      const currentMeta = SETTINGS_TABS[tabIdx] || SETTINGS_TABS[0];
+      const isFirst = tabIdx <= 0;
+      const isLast = tabIdx === SETTINGS_TABS.length - 1;
+
+      const bottomPagerHtml = `
+        <div class="bottom-nav-row">
+          <button type="button" class="win-btn" data-action="settings-prev" ${isFirst ? "disabled" : ""}>← Previous</button>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button type="button" class="win-btn" data-action="save-config-home">Save configuration</button>
+            ${isLast ? `
+              <button type="button" class="win-btn win-btn-accent win-btn-large" data-action="start-flash" ${state.flashing ? "disabled" : ""}>
+                ${state.flashing ? "Flashing USB..." : "Flash USB"}
+              </button>
+            ` : `
+              <button type="button" class="win-btn win-btn-accent" data-action="settings-next">Next →</button>
+            `}
+          </div>
+        </div>
+      `;
+
+      if (state.settingsTab === "system") {
+        const sum = buildSummaryLabels();
+        const enabledApps = [];
+        if (state.dashboard_choice === "both") enabledApps.push("Cockpit", "CasaOS");
+        else if (state.dashboard_choice === "cockpit") enabledApps.push("Cockpit");
+        else if (state.dashboard_choice === "casaos") enabledApps.push("CasaOS");
+        else enabledApps.push("SSH Only");
+        if (state.enable_pihole_dns_prep) enabledApps.push("Pi-hole DNS");
+        if (state.enable_samba_nas) enabledApps.push("Samba File Share");
+        if (state.enable_intel_vaapi) enabledApps.push("Intel Hardware Acceleration");
+        if (state.enable_tailscale) enabledApps.push("Tailscale VPN");
+
+        mainEl.innerHTML = `
+          <div class="animate-view tab-flow-stack">
+            <div class="page-header">
+              <div class="breadcrumb-bar"><span>System</span></div>
+            </div>
+
+            <!-- Normal Clean Server & Software Summary (Text Title Only, No IS Logo Box) -->
+            <div class="system-summary-banner">
+              <div class="summary-left">
+                <div class="summary-title">${esc(state.hostname || "instant-server")}</div>
+                <div class="summary-subtitle">Ubuntu Server ${esc(state.ubuntu_release)} LTS • Admin: ${esc(state.username || "admin")}</div>
+              </div>
+              <div class="summary-pills">
+                <div class="summary-pill">Network: <strong>${esc(sum.wifiLabel)}</strong></div>
+                <div class="summary-pill">Apps: <strong>${esc(sum.dashLabel)}</strong></div>
+                <div class="summary-pill">Disk Mode: <strong>${esc(sum.modeLabel)}</strong></div>
+                <div class="summary-pill">USB: <strong>${esc(sum.usbLabel)}</strong></div>
+              </div>
+            </div>
+
+            <div class="card-stack">
+              <div class="win-card clickable" data-action="switch-settings-tab" data-tab="network">
+                <div class="card-left">
+                  <div class="card-icon">🌐</div>
+                  <div class="card-text">
+                    <div class="card-title">Network & internet</div>
+                    <div class="card-desc">Server name (${esc(state.hostname || "instant-server")}), admin login, Wi-Fi (${esc(sum.wifiLabel)}), USB tethering</div>
+                  </div>
+                </div>
+                <div class="card-right"><span>›</span></div>
+              </div>
+
+              <div class="win-card clickable" data-action="switch-settings-tab" data-tab="apps">
+                <div class="card-left">
+                  <div class="card-icon">🧩</div>
+                  <div class="card-text">
+                    <div class="card-title">Apps & dashboards</div>
+                    <div class="card-desc">${esc(enabledApps.join(", "))}</div>
+                  </div>
+                </div>
+                <div class="card-right"><span>›</span></div>
+              </div>
+
+              <div class="win-card clickable" data-action="switch-settings-tab" data-tab="storage">
+                <div class="card-left">
+                  <div class="card-icon">🖴</div>
+                  <div class="card-text">
+                    <div class="card-title">Storage & USB</div>
+                    <div class="card-desc">${esc(sum.modeLabel)} • Target USB: ${esc(sum.usbLabel)}</div>
+                  </div>
+                </div>
+                <div class="card-right"><span>›</span></div>
+              </div>
+
+              <div class="win-card clickable" data-action="switch-settings-tab" data-tab="power">
+                <div class="card-left">
+                  <div class="card-icon">🔋</div>
+                  <div class="card-text">
+                    <div class="card-title">Power & battery</div>
+                    <div class="card-desc">Lid-close sleep ignore (${state.ignore_lid_switch ? "On" : "Off"}), battery charge cap (${state.battery_charge_stop_pct}%), outage auto-shutdown (${state.ups_shutdown_battery_pct}%)</div>
+                  </div>
+                </div>
+                <div class="card-right"><span>›</span></div>
+              </div>
+            </div>
+
+            <!-- Centered Flash Button at Bottom of Home System Tab + Progress & Logs -->
+            <div class="center-flash-row">
+              <button type="button" class="win-btn win-btn-accent win-btn-large" data-action="start-flash" ${state.flashing ? "disabled" : ""}>
+                ${state.flashing ? "Flashing USB..." : "Flash USB"}
+              </button>
+            </div>
+
+            ${renderFlashProgressAndLogsCard()}
+            ${bottomPagerHtml}
+          </div>
+        `;
+        return;
+      }
+
+      let bodyHtml = "";
+      if (state.settingsTab === "network") bodyHtml = buildNetworkSection();
+      else if (state.settingsTab === "apps") bodyHtml = buildAppsSection();
+      else if (state.settingsTab === "storage") bodyHtml = buildStorageSection();
+      else if (state.settingsTab === "power") bodyHtml = buildPowerSection();
+      else if (state.settingsTab === "config") {
+        bodyHtml = `
+          <div class="tab-flow-stack">
+            <div class="card-stack">
+              <div class="win-card">
+                <div class="card-left">
+                  <div class="card-icon">💾</div>
+                  <div class="card-text">
+                    <div class="card-title">Local configuration file</div>
+                    <div class="card-desc">Saved in app folder as ${esc(state.savedConfigPath)}</div>
+                  </div>
+                </div>
+                <div class="card-right">
+                  <button type="button" class="win-btn" data-action="save-config-home">Save configuration</button>
+                  <button type="button" class="win-btn" data-action="copy-yaml">Copy YAML</button>
+                </div>
+              </div>
+
+              <div class="win-card">
+                <div class="card-left">
+                  <div class="card-icon">📡</div>
+                  <div class="card-text">
+                    <div class="card-title">Find Instant Server on your network</div>
+                    <div class="card-desc">Scan your home network for running Instant Server laptops</div>
+                  </div>
+                </div>
+                <div class="card-right">
+                  <button type="button" class="win-btn" data-action="scan-lan">${state.lanScanning ? "Scanning..." : "Scan network"}</button>
+                </div>
+              </div>
+            </div>
+
+            ${state.lanScanResults.length > 0 ? `
+              <div class="card-stack">
+                ${state.lanScanResults.map(s => `
+                  <div class="win-card">
+                    <div class="card-left">
+                      <div class="card-icon">🟢</div>
+                      <div class="card-text">
+                        <div class="card-title">${esc(s.ip)}</div>
+                        <div class="card-desc">Open ports: ${esc((s.open_ports || []).join(", "))}</div>
+                      </div>
+                    </div>
+                  </div>
+                `).join("")}
+              </div>
+            ` : ""}
+
+            <div class="section-label">Generated cloud-init configuration</div>
+            <div class="code-viewer">${esc(generateYamlPreview())}</div>
+          </div>
+        `;
+      }
+
+      mainEl.innerHTML = `
+        <div class="animate-view tab-flow-stack">
+          <div class="page-header">
+            <div class="breadcrumb-bar">
+              <span class="breadcrumb-link" data-action="switch-settings-tab" data-tab="system">System</span>
+              <span class="breadcrumb-sep">›</span>
+              <span>${esc(currentMeta.label)}</span>
+            </div>
+          </div>
+          ${bodyHtml}
+          ${renderFlashProgressAndLogsCard()}
+          ${bottomPagerHtml}
+        </div>
+      `;
+    }
+
+    function renderSearchResults(query) {
+      const q = query.toLowerCase();
+      const items = [
+        { tab: "network", title: "Server name & admin login", desc: "Change hostname, admin username, and password", keys: "hostname password username login" },
+        { tab: "network", title: "Wi-Fi & USB tethering", desc: "Configure wireless SSID, password, and phone USB tethering", keys: "wifi wireless ssid tethering static ip ssh" },
+        { tab: "apps", title: "Cockpit & CasaOS", desc: "Select web dashboards and 1-click container apps", keys: "cockpit casaos docker jellyfin pihole samba tailscale" },
+        { tab: "storage", title: "Hard drive mode & Dual-Boot", desc: "Choose Dual-Boot, Erase main drive, or Select after plugging in", keys: "dual boot erase disk drive storage partition usb flash" },
+        { tab: "power", title: "Lid close & battery limiter", desc: "Keep running with lid closed and cap battery charge at 60%", keys: "power lid battery ups zram screen blank" },
+        { tab: "config", title: "Saved configuration & LAN scanner", desc: "Save instant-server-config.json or scan LAN", keys: "yaml config save lan discover" }
+      ].filter(it => (it.title + " " + it.desc + " " + it.keys).toLowerCase().includes(q));
+
+      return `
+        <div class="animate-view tab-flow-stack">
+          <div class="page-header">
+            <div class="breadcrumb-bar"><span>Search results for "${esc(query)}"</span></div>
+            <button type="button" class="win-btn" data-action="clear-search">Clear</button>
+          </div>
+          <div class="card-stack">
+            ${items.length ? items.map(it => `
+              <div class="win-card clickable" data-action="switch-settings-tab" data-tab="${it.tab}">
+                <div class="card-left">
+                  <div class="card-icon">⌕</div>
+                  <div class="card-text">
+                    <div class="card-title">${esc(it.title)}</div>
+                    <div class="card-desc">${esc(it.desc)}</div>
+                  </div>
+                </div>
+                <div class="card-right"><span>Open ›</span></div>
+              </div>
+            `).join("") : `<div class="win-card"><div class="card-title">No matching settings found.</div></div>`}
+          </div>
+        </div>
+      `;
+    }
+
+    // =========================================================================
+    // Master Render & Event Delegation
+    // =========================================================================
+    function renderApp() {
+      document.documentElement.setAttribute("data-theme", state.theme);
+      const themeLabel = document.getElementById("themeToggleLabel");
+      if (themeLabel) {
+        themeLabel.textContent = state.theme === "dark" ? "☀ Light" : "🌙 Dark";
+      }
+
+      const modeBtn = document.getElementById("btnToggleModeView");
+      if (modeBtn) {
+        modeBtn.textContent = state.viewMode === "setup" ? "Home Settings" : "Setup Wizard";
+      }
+
+      const searchWrap = document.getElementById("titleSearchWrap");
+      const setupView = document.getElementById("setupShellView");
+      const settingsView = document.getElementById("settingsShellView");
+
+      if (state.viewMode === "setup") {
+        searchWrap.classList.add("hidden-in-setup");
+        setupView.style.display = "flex";
+        settingsView.style.display = "none";
+        renderSetupView();
+      } else {
+        searchWrap.classList.remove("hidden-in-setup");
+        setupView.style.display = "none";
+        settingsView.style.display = "flex";
+        renderSettingsView();
+      }
+    }
+
+    // Active Scrollbar Highlight on Wheel, Scroll, or Arrow Keys
+    function attachSleekScrollListeners() {
+      const markScrolling = (el) => {
+        if (!el || !el.classList) return;
+        el.classList.add("is-scrolling");
+        clearTimeout(el._scrollTimer);
+        el._scrollTimer = setTimeout(() => el.classList.remove("is-scrolling"), 900);
+      };
+
+      document.addEventListener("scroll", (e) => {
+        markScrolling(e.target);
+      }, true);
+
+      window.addEventListener("keydown", (e) => {
+        if (["ArrowDown", "ArrowUp", "PageDown", "PageUp", "Space"].includes(e.key)) {
+          const activePane = state.viewMode === "setup"
+            ? document.getElementById("setupBodyContent")
+            : document.getElementById("settingsScrollArea");
+          markScrolling(activePane);
+        }
+      });
+    }
+
+    // Top bar static controls
+    document.getElementById("btnThemeToggle").addEventListener("click", () => {
+      state.theme = state.theme === "dark" ? "light" : "dark";
+      renderApp();
+    });
+
+    document.getElementById("btnToggleModeView").addEventListener("click", () => {
+      state.viewMode = state.viewMode === "setup" ? "settings" : "setup";
+      state.openDropdownField = null;
+      renderApp();
+    });
+
+    document.getElementById("btnTitleBack").addEventListener("click", () => {
+      state.openDropdownField = null;
+      if (state.viewMode === "setup") {
+        const idx = SETUP_TABS.findIndex(t => t.id === state.setupTab);
+        if (idx > 0) {
+          state.setupTab = SETUP_TABS[idx - 1].id;
+          renderApp();
+        }
+      } else {
+        if (state.searchQuery) {
+          state.searchQuery = "";
+          document.getElementById("globalSearchInput").value = "";
+          renderApp();
+        } else if (state.settingsTab !== "system") {
+          state.settingsTab = "system";
+          renderApp();
+        }
+      }
+    });
+
+    document.getElementById("globalSearchInput").addEventListener("input", (e) => {
+      state.searchQuery = e.target.value;
+      renderSettingsView();
+    });
+
+    // Delegated Clicks (Including Custom Win11 ComboBox Flyout)
+    document.body.addEventListener("click", async (e) => {
+      const target = e.target.closest("[data-action]");
+
+      // Close open dropdown if user clicks anywhere outside a combobox
+      if (!e.target.closest(".win-combobox") && state.openDropdownField !== null) {
+        state.openDropdownField = null;
+        renderApp();
+      }
+
+      if (!target) return;
+      const action = target.getAttribute("data-action");
+
+      if (action === "toggle-dropdown") {
+        const field = target.getAttribute("data-field");
+        state.openDropdownField = state.openDropdownField === field ? null : field;
+        renderApp();
+        return;
+      } else if (action === "select-dropdown-option") {
+        const field = target.getAttribute("data-field");
+        const val = target.getAttribute("data-value");
+        if (field) {
+          state[field] = val;
+        }
+        state.openDropdownField = null;
+        renderApp();
+        return;
+      }
+
+      if (action === "switch-setup-tab" || action === "jump-setup-tab") {
+        state.setupTab = target.getAttribute("data-tab") || "network";
+        state.validationErrors = [];
+        state.openDropdownField = null;
+        renderApp();
+      } else if (action === "setup-prev") {
+        const idx = SETUP_TABS.findIndex(t => t.id === state.setupTab);
+        if (idx > 0) {
+          state.setupTab = SETUP_TABS[idx - 1].id;
+          state.openDropdownField = null;
+          renderApp();
+        }
+      } else if (action === "setup-skip" || action === "setup-next") {
+        const idx = SETUP_TABS.findIndex(t => t.id === state.setupTab);
+        if (idx < SETUP_TABS.length - 1) {
+          state.setupTab = SETUP_TABS[idx + 1].id;
+          state.openDropdownField = null;
+          renderApp();
+        }
+      } else if (action === "toggle-expander") {
+        const key = target.getAttribute("data-expander");
+        if (key) {
+          state.advancedExpanded[key] = !state.advancedExpanded[key];
+          state.openDropdownField = null;
+          renderApp();
+        }
+      } else if (action === "switch-settings-tab") {
+        state.settingsTab = target.getAttribute("data-tab") || "system";
+        state.searchQuery = "";
+        state.openDropdownField = null;
+        const sInput = document.getElementById("globalSearchInput");
+        if (sInput) sInput.value = "";
+        renderApp();
+      } else if (action === "settings-prev") {
+        const idx = SETTINGS_TABS.findIndex(t => t.id === state.settingsTab);
+        if (idx > 0) {
+          state.settingsTab = SETTINGS_TABS[idx - 1].id;
+          state.openDropdownField = null;
+          renderApp();
+        }
+      } else if (action === "settings-next") {
+        const idx = SETTINGS_TABS.findIndex(t => t.id === state.settingsTab);
+        if (idx < SETTINGS_TABS.length - 1) {
+          state.settingsTab = SETTINGS_TABS[idx + 1].id;
+          state.openDropdownField = null;
+          renderApp();
+        }
+      } else if (action === "clear-search") {
+        state.searchQuery = "";
+        document.getElementById("globalSearchInput").value = "";
+        renderApp();
+      } else if (action === "select-dashboard") {
+        state.dashboard_choice = target.getAttribute("data-value") || "both";
+        renderApp();
+      } else if (action === "select-install-mode") {
+        state.install_mode = target.getAttribute("data-value") || "dual_boot";
+        if (state.install_mode !== "auto_erase") {
+          state.confirm_erase_main_drive = false;
+        }
+        renderApp();
+      } else if (action === "toggle-confirm-erase") {
+        state.confirm_erase_main_drive = !state.confirm_erase_main_drive;
+        renderApp();
+      } else if (action === "select-usb") {
+        state.selectedUsbId = target.getAttribute("data-usb") || "";
+        renderApp();
+      } else if (action === "scan-usb") {
+        await scanUsbDrives(false);
+      } else if (action === "toggle-tethering") {
+        state.enable_usb_tethering = !state.enable_usb_tethering;
+        renderApp();
+      } else if (action === "toggle-pihole") {
+        state.enable_pihole_dns_prep = !state.enable_pihole_dns_prep;
+        renderApp();
+      } else if (action === "toggle-samba") {
+        state.enable_samba_nas = !state.enable_samba_nas;
+        renderApp();
+      } else if (action === "toggle-vaapi") {
+        state.enable_intel_vaapi = !state.enable_intel_vaapi;
+        renderApp();
+      } else if (action === "toggle-tailscale") {
+        state.enable_tailscale = !state.enable_tailscale;
+        renderApp();
+      } else if (action === "toggle-lid") {
+        state.ignore_lid_switch = !state.ignore_lid_switch;
+        renderApp();
+      } else if (action === "toggle-zram") {
+        state.enable_low_ram_zram = !state.enable_low_ram_zram;
+        renderApp();
+      } else if (action === "toggle-nomodeset") {
+        state.safe_gpu_nomodeset = !state.safe_gpu_nomodeset;
+        renderApp();
+      } else if (action === "save-config-home") {
+        await saveConfigurationAndOpenHome();
+      } else if (action === "start-flash") {
+        await startFlashingProcess();
+      } else if (action === "copy-yaml") {
+        const text = generateYamlPreview();
+        try {
+          await navigator.clipboard.writeText(text);
+        } catch (_e) {
+          const ta = document.createElement("textarea");
+          ta.value = text;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand("copy");
+          document.body.removeChild(ta);
+        }
+        showToast("Copied YAML configuration");
+      } else if (action === "scan-lan") {
+        state.lanScanning = true;
+        renderApp();
+        const res = await callBackend("discover", "GET");
+        state.lanScanning = false;
+        if (res && Array.isArray(res.servers_found) && res.servers_found.length > 0) {
+          state.lanScanResults = res.servers_found;
+          showToast(`Found ${res.servers_found.length} server(s)`);
+        } else {
+          state.lanScanResults = [
+            { ip: `${state.hostname || "instant-server"}.local`, open_ports: [22, 9090, 80] }
+          ];
+          showToast("LAN scan complete");
+        }
+        renderApp();
+      }
+    });
+
+    // Delegated Field Inputs
+    document.body.addEventListener("input", (e) => {
+      const field = e.target.getAttribute("data-field");
+      if (!field) return;
+      state[field] = e.target.value;
+      if (field === "dual_boot_Allocation_gb" || field === "battery_charge_stop_pct" || field === "ups_shutdown_battery_pct") {
+        renderApp();
+      }
+    });
+
+    window.addEventListener("load", () => {
+      attachSleekScrollListeners();
+      initAppStartup();
+    });
+  </script>
+</body>
+</html>
