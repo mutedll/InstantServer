@@ -44,9 +44,6 @@ cd instant-server
 python instant_server_cli.py
 ```
 
-> [!NOTE]
-> **Optional:** If you want the app to open inside a native desktop window frame instead of an app window, run `pip install pywebview` first.
-
 ---
 
 ## 📖 How to use it
