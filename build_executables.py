@@ -128,11 +128,6 @@ try:
         'PyQt6.QtCore',
         'PyQt6.QtGui',
         'PyQt6.QtWidgets',
-        'PyQt6.QtNetwork',
-        'PyQt6.QtPrintSupport',
-        'PyQt6.QtWebChannel',
-        'PyQt6.QtWebEngineCore',
-        'PyQt6.QtWebEngineWidgets',
     ])
 except ImportError:
     pass
@@ -146,12 +141,37 @@ a = Analysis(
     hookspath=[],
     hooksconfig={{}},
     runtime_hooks=[],
-    excludes=['tkinter', 'matplotlib', 'numpy', 'pandas', 'scipy'],
+    excludes=[
+        'tkinter', 'matplotlib', 'numpy', 'pandas', 'scipy', 'PIL',
+        'PyQt6.QtWebEngineWidgets', 'PyQt6.QtWebEngineCore', 'PyQt6.QtWebChannel',
+        'PyQt6.QtQuick', 'PyQt6.QtQuickWidgets', 'PyQt6.QtQml',
+        'PyQt6.QtSql', 'PyQt6.QtTest', 'PyQt6.QtXml', 'PyQt6.QtMultimedia',
+        'PyQt6.QtNetwork', 'PyQt6.QtOpenGL', 'PyQt6.QtOpenGLWidgets',
+        'PyQt6.QtPdf', 'PyQt6.QtSvg', 'PyQt6.QtSvgWidgets', 'PyQt6.QtDBus',
+        'PyQt6.QtDesigner', 'PyQt6.QtHelp', 'PyQt6.QtBluetooth',
+        'PyQt6.QtPositioning', 'PyQt6.QtSensors', 'PyQt6.QtSerialPort',
+        'PyQt6.QtWebSockets', 'PyQt6.QtPrintSupport',
+    ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
     noarchive=False,
 )
+
+# Strip heavy unused Qt binaries (e.g. 21 MB opengl32sw.dll, Qt6Quick, Qt6Qml, Qt6Pdf, translations)
+_BLOAT_SUBSTRINGS = (
+    'opengl32sw', 'd3dcompiler', 'qt6quick', 'qt6qml', 'qt6pdf', 'qt6network',
+    'qt6opengl', 'qt6svg', 'qt6multimedia', 'qt6shadertools', 'qt6virtualkeyboard',
+    'qt6webengine', 'qt6dbus', 'qt6test', 'qt6sql', 'libicudata',
+)
+a.binaries = [
+    b for b in a.binaries
+    if not any(sub in b[0].lower() for sub in _BLOAT_SUBSTRINGS)
+]
+a.datas = [
+    d for d in a.datas
+    if not d[0].lower().endswith('.qm') and 'translations' not in d[0].lower()
+]
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
@@ -401,10 +421,10 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install PyInstaller 6.x, Pillow & Native Qt6 WebEngine GUI
+      - name: Install PyInstaller 6.x, Pillow & Lightweight Native PyQt6 GUI
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller pillow PyQt6 PyQt6-WebEngine
+          pip install pyinstaller pillow PyQt6
 
       - name: Generate Packaging Spec, Taskbar Icons (.ico/.icns/.png) & Manifests
         run: python build_executables.py --emit-configs ./build_dist
@@ -525,7 +545,7 @@ def _run_self_test() -> int:
         assert "COLLECT(" in spec_content
 
         ci_yml = open(emitted["release-executables.yml"], "r", encoding="utf-8").read()
-        assert "pip install pyinstaller pillow PyQt6 PyQt6-WebEngine" in ci_yml
+        assert "pip install pyinstaller pillow PyQt6" in ci_yml
         assert "InstantServer-Windows.exe" in ci_yml
         assert "InstantServer-macOS.dmg" in ci_yml
         assert "InstantServer-Linux" in ci_yml

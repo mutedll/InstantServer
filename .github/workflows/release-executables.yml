@@ -54,10 +54,10 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install PyInstaller 6.x, Pillow & Native Qt6 WebEngine GUI
+      - name: Install PyInstaller 6.x, Pillow & Lightweight Native PyQt6 GUI
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller pillow PyQt6 PyQt6-WebEngine
+          pip install pyinstaller pillow PyQt6
 
       - name: Generate Packaging Spec, Taskbar Icons (.ico/.icns/.png) & Manifests
         run: python build_executables.py --emit-configs ./build_dist
