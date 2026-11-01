@@ -3714,6 +3714,15 @@ ${storageSnippet}
       if (modal) modal.classList.add("open");
     };
 
+    window.addEventListener("pagehide", () => {
+      try {
+        if (window.location.protocol.startsWith("http") && navigator.sendBeacon) {
+          const blob = new Blob([JSON.stringify({ force: true })], { type: "application/json" });
+          navigator.sendBeacon(window.location.origin + "/api/shutdown", blob);
+        }
+      } catch (_err) {}
+    });
+
     window.addEventListener("load", () => {
       attachSleekScrollListeners();
       initAppStartup();

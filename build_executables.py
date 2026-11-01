@@ -101,13 +101,23 @@ def generate_pyinstaller_spec(manifest: PackagingManifest) -> str:
 # Compatible with PyInstaller 6.x across Windows, macOS, and Linux
 
 import os
+import subprocess
 import sys
+from PyInstaller.utils.hooks import collect_all
+
+# Guarantee pywebview is installed in the build environment before Analysis runs
+try:
+    import webview  # noqa: F401
+except ImportError:
+    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'pywebview'])
+    import webview  # noqa: F401
 
 block_cipher = None
 
 bundled_datas = [
     {datas_tuples}
 ]
+bundled_binaries = []
 
 win_icon = '{manifest.icon_ico}' if os.path.exists('{manifest.icon_ico}') else None
 mac_icon = '{manifest.icon_icns}' if os.path.exists('{manifest.icon_icns}') else None
@@ -122,28 +132,30 @@ hidden_imports = [
     'vm_test_harness',
     'http.server',
     'xmlrpc.client',
+    'webview',
+    'webview.platforms.winforms',
+    'webview.platforms.edgechromium',
+    'webview.platforms.cocoa',
+    'webview.platforms.gtk',
+    'clr_loader',
+    'pythonnet',
+    'bottle',
+    'proxy_tools',
 ]
 
-try:
-    import webview  # noqa: F401
-    hidden_imports.extend([
-        'webview',
-        'webview.platforms.winforms',
-        'webview.platforms.edgechromium',
-        'webview.platforms.cocoa',
-        'webview.platforms.gtk',
-        'clr_loader',
-        'pythonnet',
-        'bottle',
-        'proxy_tools',
-    ])
-except ImportError:
-    pass
+for _pkg in ('webview', 'bottle', 'proxy_tools', 'clr_loader', 'pythonnet'):
+    try:
+        _d, _b, _h = collect_all(_pkg)
+        bundled_datas.extend(_d)
+        bundled_binaries.extend(_b)
+        hidden_imports.extend(_h)
+    except Exception:
+        pass
 
 a = Analysis(
     ['{manifest.entrypoint_script}'],
     pathex=['.'],
-    binaries=[],
+    binaries=bundled_binaries,
     datas=bundled_datas,
     hiddenimports=hidden_imports,
     hookspath=[],
@@ -573,6 +585,14 @@ def main() -> int:
         return _run_self_test()
 
     if args.emit_configs:
+        try:
+            import webview  # noqa: F401
+        except ImportError:
+            import subprocess
+            try:
+                subprocess.check_call([sys.executable, "-m", "pip", "install", "pywebview"])
+            except Exception:
+                pass
         written = emit_all_packaging_configs(args.emit_configs)
         print(json.dumps(written, indent=2))
         return 0

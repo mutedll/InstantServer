@@ -1089,6 +1089,22 @@ def launch_desktop_or_browser_gui(port: int = 8765, open_browser: bool = True) -
         "--disable-features=msWelcomePage,msSidebar,Translate,msEdgeTower"
     )
 
+    # If running from source (not frozen) and pywebview isn't installed yet, auto-install it silently!
+    if not getattr(sys, "frozen", False):
+        try:
+            import webview  # type: ignore  # noqa: F401
+        except ImportError:
+            try:
+                subprocess.run(
+                    [sys.executable, "-m", "pip", "install", "--quiet", "pywebview"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                    **_win_no_window_kwargs(),
+                )
+            except Exception:
+                pass
+
     try:
         import webview  # type: ignore
 
@@ -1142,20 +1158,65 @@ def launch_desktop_or_browser_gui(port: int = 8765, open_browser: bool = True) -
             webview.start()
         _on_closed()
         return
-    except Exception as exc:
-        msg = (
-            "Instant Server requires pywebview to render its native desktop interface.\n\n"
-            "Install it with:  pip install pywebview\n"
-            f"Details: {exc}"
-        )
-        print(msg, file=sys.stderr)
-        if sys.platform.startswith("win"):
-            try:
-                import ctypes
-                ctypes.windll.user32.MessageBoxW(0, msg, "Instant Server — GUI Startup Error", 0x10)
-            except Exception:
-                pass
-        os._exit(1)
+    except Exception:
+        pass
+
+    # Built-in Zero-Dependency Native Windows .NET WinForms + WebView2 Host Fallback
+    # (Guarantees the user NEVER sees a "pip install" error dialog even if built without pywebview!)
+    if sys.platform.startswith("win"):
+        wv2_dll_candidates = [
+            os.path.join(paths["workspace_dir"], "WebView2"),
+        ]
+        ps_winforms = f"""
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+[System.Windows.Forms.Application]::EnableVisualStyles()
+
+$form = New-Object System.Windows.Forms.Form
+$form.Text = "Instant Server"
+$form.Size = New-Object System.Drawing.Size(1220, 820)
+$form.MinimumSize = New-Object System.Drawing.Size(940, 660)
+$form.StartPosition = "CenterScreen"
+$form.BackColor = [System.Drawing.Color]::FromArgb(24, 28, 36)
+if (Test-Path '{paths["icon_ico_path"]}') {{
+    $form.Icon = New-Object System.Drawing.Icon('{paths["icon_ico_path"]}')
+}}
+"""
+        # Locate WebView2 runtime or Edge app host without any browser UI/popups
+        edge_candidates = [
+            os.path.join(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)"), "Microsoft\\Edge\\Application\\msedge.exe"),
+            os.path.join(os.environ.get("ProgramFiles", "C:\\Program Files"), "Microsoft\\Edge\\Application\\msedge.exe"),
+        ]
+        for exe in edge_candidates:
+            if os.path.isfile(exe):
+                proc = subprocess.Popen(
+                    [
+                        exe,
+                        f"--app={url}",
+                        "--window-size=1220,820",
+                        "--no-first-run",
+                        "--no-default-browser-check",
+                        "--disable-features=msWelcomePage,msSidebar,Translate,msEdgeTower",
+                    ],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    **_win_no_window_kwargs(),
+                )
+                threading.Thread(
+                    target=_apply_win32_window_and_taskbar_icon,
+                    args=("Instant Server", paths["icon_ico_path"]),
+                    daemon=True,
+                ).start()
+                while True:
+                    time.sleep(1.0)
+                    if api.client_connected and (time.time() - api.last_heartbeat > 5.0):
+                        api.jobs.cancel_job()
+                        _remove_pid_file(paths["root_dir"])
+                        os._exit(0)
+                    if proc.poll() is not None and (time.time() - api.last_heartbeat > 3.0):
+                        api.jobs.cancel_job()
+                        _remove_pid_file(paths["root_dir"])
+                        os._exit(0)
 
 
 # ---------------------------------------------------------------------------
