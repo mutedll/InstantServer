@@ -3707,45 +3707,16 @@ ${storageSnippet}
       }
     });
 
-    // Native pywebview hook when user clicks window X while flashing is active
+    // Native Qt6 / pywebview hook when user clicks window X while flashing is active
     window.__showCloseWhileFlashingWarning = () => {
       state.closeWarningOpen = true;
       const modal = document.getElementById("closeWarningModal");
       if (modal) modal.classList.add("open");
     };
 
-    // Browser/App-Window close warning when flashing is in progress
-    window.addEventListener("beforeunload", (e) => {
-      if (state.flashing && !state.forceClosing) {
-        state.closeWarningOpen = true;
-        const modal = document.getElementById("closeWarningModal");
-        if (modal) modal.classList.add("open");
-        e.preventDefault();
-        e.returnValue = "USB flashing is currently in progress. Closing now will interrupt the installation.";
-        return e.returnValue;
-      }
-    });
-
-    // Immediately terminate background Python/exe process when the window closes
-    function notifyBackendWindowClosed() {
-      try {
-        if (window.location.protocol.startsWith("http") && navigator.sendBeacon) {
-          const blob = new Blob([JSON.stringify({ force: true })], { type: "application/json" });
-          navigator.sendBeacon(window.location.origin + "/api/shutdown", blob);
-        } else {
-          callBackend("shutdown", "POST", { force: true });
-        }
-      } catch (_err) {}
-    }
-
-    window.addEventListener("pagehide", () => {
-      notifyBackendWindowClosed();
-    });
-
     window.addEventListener("load", () => {
       attachSleekScrollListeners();
       initAppStartup();
-      // Keep-alive heartbeat every 2s so backend exits automatically if window is closed
       setInterval(() => {
         callBackend("heartbeat", "POST", {});
       }, 2000);

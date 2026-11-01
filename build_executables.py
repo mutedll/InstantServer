@@ -86,9 +86,11 @@ def generate_pyinstaller_spec(manifest: PackagingManifest) -> str:
     Generate a deterministic `InstantServer.spec` file:
       - On macOS (`sys.platform == 'darwin'`): uses `instant_server_icon.icns` and
         PyInstaller 6.22+ recommended `COLLECT` + `BUNDLE` (`onedir`) layout inside
-        `InstantServer.app` so there are zero icon format errors or onefile warnings.
-      - On Windows & Linux: builds a single-file `EXE` (`InstantServer.exe` / `InstantServer`)
-        with `instant_server_icon.ico` and `uac_admin=True`.
+        `InstantServer.app` (which `macos_codesign_and_dmg.sh` packages into `InstantServer-macOS.dmg`).
+      - On Windows (`sys.platform.startswith('win')`): builds `InstantServer-Windows.exe`
+        with embedded `PyQt6` + `PyQt6-WebEngine` (no Microsoft Edge or external browser).
+      - On Linux (`sys.platform.startswith('linux')`): builds `InstantServer-Linux`
+        with embedded `PyQt6` + `PyQt6-WebEngine`.
     """
     datas_tuples = ",\n    ".join(f"('{f}', '.')" for f in manifest.bundled_data_files)
     return f"""# -*- mode: python ; coding: utf-8 -*-
@@ -107,22 +109,40 @@ bundled_datas = [
 win_icon = '{manifest.icon_ico}' if os.path.exists('{manifest.icon_ico}') else None
 mac_icon = '{manifest.icon_icns}' if os.path.exists('{manifest.icon_icns}') else None
 
+hidden_imports = [
+    'm1_host_probe',
+    'm2_iso_manager',
+    'm3_usb_engine',
+    'm4_config_builder',
+    'm5_payload_packager',
+    'p1_early_hardware_adapter',
+    'vm_test_harness',
+    'http.server',
+    'xmlrpc.client',
+]
+
+try:
+    import PyQt6  # noqa: F401
+    hidden_imports.extend([
+        'PyQt6.sip',
+        'PyQt6.QtCore',
+        'PyQt6.QtGui',
+        'PyQt6.QtWidgets',
+        'PyQt6.QtNetwork',
+        'PyQt6.QtPrintSupport',
+        'PyQt6.QtWebChannel',
+        'PyQt6.QtWebEngineCore',
+        'PyQt6.QtWebEngineWidgets',
+    ])
+except ImportError:
+    pass
+
 a = Analysis(
     ['{manifest.entrypoint_script}'],
     pathex=['.'],
     binaries=[],
     datas=bundled_datas,
-    hiddenimports=[
-        'm1_host_probe',
-        'm2_iso_manager',
-        'm3_usb_engine',
-        'm4_config_builder',
-        'm5_payload_packager',
-        'p1_early_hardware_adapter',
-        'vm_test_harness',
-        'http.server',
-        'xmlrpc.client',
-    ],
+    hiddenimports=hidden_imports,
     hookspath=[],
     hooksconfig={{}},
     runtime_hooks=[],
@@ -187,6 +207,7 @@ if sys.platform == 'darwin':
         }},
     )
 else:
+    target_bin_name = '{manifest.app_name}-Windows' if sys.platform.startswith('win') else '{manifest.app_name}-Linux'
     exe = EXE(
         pyz,
         a.scripts,
@@ -194,7 +215,7 @@ else:
         a.zipfiles,
         a.datas,
         [],
-        name='{manifest.app_name}',
+        name=target_bin_name,
         debug=False,
         bootloader_ignore_signals=False,
         strip=False,
@@ -264,12 +285,12 @@ codesign --force --deep --sign - "$APP_PATH"
 codesign --verify --verbose=2 "$APP_PATH"
 
 echo "[macOS Packager] Creating compressed InstantServer-macOS.dmg..."
-hdiutil create -volname "{manifest.display_name}" \\
-    -srcfolder "$APP_PATH" \\
-    -ov -format UDZO \\
+hdiutil create -volname "{manifest.display_name}" \
+    -srcfolder "$APP_PATH" \
+    -ov -format UDZO \
     "dist/{manifest.app_name}-macOS.dmg"
 
-cp "dist/{manifest.app_name}-macOS.dmg" "./{manifest.app_name}-macOS.dmg" || true
+rm -rf "dist/{manifest.app_name}.app" "dist/{manifest.app_name}" || true
 echo "[macOS Packager] Done: dist/{manifest.app_name}-macOS.dmg"
 """
 
@@ -286,9 +307,9 @@ export APPIMAGE_EXTRACT_AND_RUN=1
 export PATH="${{HERE}}/usr/bin:${{PATH}}"
 
 if [[ $# -eq 0 ]]; then
-    exec "${{HERE}}/usr/bin/{manifest.app_name}" --gui
+    exec "${{HERE}}/usr/bin/{manifest.app_name}-Linux" --gui
 else
-    exec "${{HERE}}/usr/bin/{manifest.app_name}" "$@"
+    exec "${{HERE}}/usr/bin/{manifest.app_name}-Linux" "$@"
 fi
 """
 
@@ -297,7 +318,7 @@ Type=Application
 Name={manifest.display_name}
 GenericName=Headless Ubuntu Server USB Creator
 Comment=Turn any old laptop into a headless Ubuntu Server with Cockpit & CasaOS
-Exec=env APPIMAGE_EXTRACT_AND_RUN=1 {manifest.app_name} --gui
+Exec=env APPIMAGE_EXTRACT_AND_RUN=1 {manifest.app_name}-Linux --gui
 Icon=instant-server
 Terminal=false
 Categories=System;Utility;
@@ -318,8 +339,11 @@ def generate_github_actions_workflow(manifest: PackagingManifest) -> str:
       - Node.js 24 native actions (`actions/checkout@v6`, `actions/setup-python@v6`,
         `actions/upload-artifact@v6` + `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`).
       - Explicit runner labels (`ubuntu-24.04`, `windows-2022`, `macos-15-intel`).
-      - Native `.icns` icon on macOS + `pillow` installed so macOS BUNDLE builds cleanly.
-      - The `Upload Executable Package` artifact step.
+      - Standalone `PyQt6` + `PyQt6-WebEngine` desktop window (never opens Microsoft Edge or any browser).
+      - Exact output filenames:
+          * Windows: `InstantServer-Windows.exe`
+          * macOS:   `InstantServer-macOS.dmg`
+          * Linux:   `InstantServer-Linux`
     """
     return f"""name: Build Instant Server Executables (Windows, macOS, Linux)
 
@@ -377,8 +401,10 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install PyInstaller 6.x & Pillow
-        run: pip install pyinstaller pillow
+      - name: Install PyInstaller 6.x, Pillow & Native Qt6 WebEngine GUI
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller pillow PyQt6 PyQt6-WebEngine
 
       - name: Generate Packaging Spec, Taskbar Icons (.ico/.icns/.png) & Manifests
         run: python build_executables.py --emit-configs ./build_dist
@@ -397,14 +423,27 @@ jobs:
         shell: bash
         run: bash ./build_dist/macos_codesign_and_dmg.sh
 
-      # === NEW STEP TO UPLOAD THE ARTIFACTS ===
+      - name: Verify Exact Output Filename (InstantServer-Windows.exe / InstantServer-macOS.dmg / InstantServer-Linux)
+        shell: bash
+        run: |
+          ls -la dist/
+          if [[ "${{{{ matrix.os }}}}" == windows* ]]; then
+            test -f "dist/{manifest.app_name}-Windows.exe"
+          elif [[ "${{{{ matrix.os }}}}" == macos* ]]; then
+            test -f "dist/{manifest.app_name}-macOS.dmg"
+          else
+            chmod +x "dist/{manifest.app_name}-Linux"
+            test -f "dist/{manifest.app_name}-Linux"
+          fi
+
       - name: Upload Executable Package
         uses: actions/upload-artifact@v6
         with:
           name: instant-server-${{{{ matrix.os }}}}
           path: |
-            dist/
-            *.dmg
+            dist/{manifest.app_name}-Windows.exe
+            dist/{manifest.app_name}-macOS.dmg
+            dist/{manifest.app_name}-Linux
           if-no-files-found: error
 """
 
@@ -486,7 +525,10 @@ def _run_self_test() -> int:
         assert "COLLECT(" in spec_content
 
         ci_yml = open(emitted["release-executables.yml"], "r", encoding="utf-8").read()
-        assert "pip install pyinstaller pillow" in ci_yml
+        assert "pip install pyinstaller pillow PyQt6 PyQt6-WebEngine" in ci_yml
+        assert "InstantServer-Windows.exe" in ci_yml
+        assert "InstantServer-macOS.dmg" in ci_yml
+        assert "InstantServer-Linux" in ci_yml
         assert "instant_server_icon.icns" in ci_yml
         assert "Upload Executable Package" in ci_yml
     print("  -> PASS: macOS .icns icon, COLLECT+BUNDLE spec, and CI workflow verified!")

@@ -41,7 +41,6 @@ import tempfile
 import threading
 import time
 from typing import Any, Dict, List, Optional, Tuple
-import webbrowser
 import zlib
 
 # ---------------------------------------------------------------------------
@@ -781,7 +780,10 @@ class InstantServerJsApi:
             time.sleep(0.12)
             try:
                 if self._webview_window is not None:
-                    self._webview_window.destroy()
+                    if hasattr(self._webview_window, 'close'):
+                        self._webview_window.close()
+                    elif hasattr(self._webview_window, 'destroy'):
+                        self._webview_window.destroy()
             except Exception:
                 pass
             os._exit(0)
@@ -860,65 +862,6 @@ def _set_windows_taskbar_app_id() -> None:
             pass
 
 
-def _open_standalone_desktop_window(url: str, profile_dir: str) -> Optional[subprocess.Popen]:
-    candidates: List[str] = []
-    if sys.platform.startswith("win"):
-        prog_files = [
-            os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)"),
-            os.environ.get("ProgramFiles", "C:\\Program Files"),
-            os.environ.get("LOCALAPPDATA", ""),
-        ]
-        rel_bins = [
-            "Microsoft\\Edge\\Application\\msedge.exe",
-            "Google\\Chrome\\Application\\chrome.exe",
-            "BraveSoftware\\Brave-Browser\\Application\\brave.exe",
-        ]
-        for root in prog_files:
-            if not root:
-                continue
-            for rel in rel_bins:
-                full = os.path.join(root, rel)
-                if os.path.isfile(full):
-                    candidates.append(full)
-    elif sys.platform == "darwin":
-        mac_apps = [
-            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
-            "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
-        ]
-        for app_bin in mac_apps:
-            if os.path.isfile(app_bin):
-                candidates.append(app_bin)
-    else:
-        for bin_name in ("google-chrome", "microsoft-edge", "chromium", "chromium-browser", "brave-browser"):
-            found = shutil.which(bin_name)
-            if found:
-                candidates.append(found)
-
-    os.makedirs(profile_dir, exist_ok=True)
-    for exe in candidates:
-        try:
-            proc = subprocess.Popen(
-                [
-                    exe,
-                    f"--app={url}",
-                    "--window-size=1220,820",
-                    f"--user-data-dir={profile_dir}",
-                    "--no-first-run",
-                    "--no-default-browser-check",
-                ],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                **_win_no_window_kwargs(),
-            )
-            return proc
-        except Exception:
-            continue
-
-    webbrowser.open(url)
-    return None
-
-
 def _render_gui_html_with_boot_config(gui_html_path: str, base_dir: Optional[str] = None) -> bytes:
     with open(gui_html_path, "r", encoding="utf-8") as fh:
         html = fh.read()
@@ -932,6 +875,76 @@ def _render_gui_html_with_boot_config(gui_html_path: str, base_dir: Optional[str
 class ReusableThreadingHTTPServer(http.server.ThreadingHTTPServer):
     allow_reuse_address = True
     daemon_threads = True
+
+
+def _launch_native_pyqt6_window(
+    url: str,
+    api: InstantServerJsApi,
+    icon_path: str,
+    root_dir: str,
+    server: ReusableThreadingHTTPServer,
+) -> bool:
+    """
+    Launch a 100% standalone native Qt6 desktop window (`QMainWindow` + `QWebEngineView`).
+    Never opens Microsoft Edge (`msedge.exe`), `msedgewebview2.exe`, Chrome, or any external browser.
+    """
+    try:
+        from PyQt6.QtCore import QUrl  # type: ignore
+        from PyQt6.QtGui import QCloseEvent, QColor, QIcon  # type: ignore
+        from PyQt6.QtWebEngineWidgets import QWebEngineView  # type: ignore
+        from PyQt6.QtWidgets import QApplication, QMainWindow  # type: ignore
+    except ImportError:
+        return False
+
+    qt_app = QApplication.instance() or QApplication(sys.argv)
+    qt_app.setApplicationName("Instant Server")
+    qt_app.setDesktopFileName("instant-server")
+    if os.path.isfile(icon_path):
+        qt_app.setWindowIcon(QIcon(icon_path))
+
+    class InstantServerMainWindow(QMainWindow):
+        def __init__(self) -> None:
+            super().__init__()
+            self.setWindowTitle("Instant Server")
+            self.resize(1220, 820)
+            self.setMinimumSize(940, 660)
+            if os.path.isfile(icon_path):
+                self.setWindowIcon(QIcon(icon_path))
+
+            self.webview = QWebEngineView(self)
+            self.webview.page().setBackgroundColor(QColor(24, 28, 36))
+            self.setCentralWidget(self.webview)
+            self.webview.setUrl(QUrl(url))
+
+        def closeEvent(self, event: QCloseEvent) -> None:
+            # If USB flashing / ISO download is currently active, block immediate close and show warning modal
+            if api.jobs.status == "RUNNING" and not api.force_close_confirmed:
+                event.ignore()
+                try:
+                    self.webview.page().runJavaScript(
+                        "window.__showCloseWhileFlashingWarning && window.__showCloseWhileFlashingWarning();"
+                    )
+                except Exception:
+                    pass
+                return
+
+            api.jobs.cancel_job()
+            _remove_pid_file(root_dir)
+            try:
+                server.server_close()
+            except Exception:
+                pass
+            event.accept()
+            os._exit(0)
+
+    main_win = InstantServerMainWindow()
+    api._webview_window = main_win
+    main_win.show()
+    qt_app.exec()
+    api.jobs.cancel_job()
+    _remove_pid_file(root_dir)
+    os._exit(0)
+    return True
 
 
 def launch_desktop_or_browser_gui(port: int = 8765, open_browser: bool = True) -> None:
@@ -1033,12 +1046,19 @@ def launch_desktop_or_browser_gui(port: int = 8765, open_browser: bool = True) -
 
     server = ReusableThreadingHTTPServer(("127.0.0.1", port), GuiHandler)
     url = f"http://127.0.0.1:{port}/"
+    srv_thread = threading.Thread(target=server.serve_forever, daemon=True)
+    srv_thread.start()
 
+    icon_for_os = paths["icon_ico_path"] if sys.platform.startswith("win") else paths["icon_png_path"]
+
+    # 1. Primary Standalone Desktop Window: PyQt6 + QWebEngineView (Zero Microsoft Edge / Zero external browser)
+    if _launch_native_pyqt6_window(url, api, icon_for_os, paths["root_dir"], server):
+        return
+
+    # 2. Secondary Native Window Fallback: pywebview (using qt/cocoa/gtk, never launching external browser)
     try:
         import webview  # type: ignore
 
-        srv_thread = threading.Thread(target=server.serve_forever, daemon=True)
-        srv_thread.start()
         win = webview.create_window(
             "Instant Server",
             url,
@@ -1073,48 +1093,22 @@ def launch_desktop_or_browser_gui(port: int = 8765, open_browser: bool = True) -
         except Exception:
             pass
 
+        preferred_gui = "qt" if sys.platform.startswith("win") else None
         try:
-            webview.start(icon=paths["icon_ico_path"])
-        except TypeError:
+            webview.start(gui=preferred_gui, icon=icon_for_os)
+        except Exception:
             webview.start()
         _on_closed()
         return
     except ImportError:
         pass
 
+    # 3. Developer CLI Mode (Never opens Microsoft Edge or any external browser)
+    print(f"[Instant Server] Native GUI requires PyQt6 & PyQt6-WebEngine: pip install PyQt6 PyQt6-WebEngine")
     print(f"[Instant Server] Workspace folder: {paths['workspace_dir']}")
-    print(f"[Instant Server] Desktop UI running at {url}")
-    browser_proc: Optional[subprocess.Popen] = None
-    if open_browser:
-        profile_dir = os.path.join(paths["workspace_dir"], "window_profile")
-        browser_proc = _open_standalone_desktop_window(url, profile_dir=profile_dir)
-
-    def _window_lifecycle_watchdog() -> None:
-        """Automatically exit InstantServer.exe when the desktop window is closed."""
-        launch_t = time.time()
+    try:
         while True:
             time.sleep(1.0)
-            # If the dedicated browser process exited and the UI isn't actively sending heartbeats, exit cleanly
-            if browser_proc is not None and browser_proc.poll() is not None:
-                if time.time() - api.last_heartbeat > 3.0:
-                    api.jobs.cancel_job()
-                    _remove_pid_file(paths["root_dir"])
-                    os._exit(0)
-            # If the client connected and then closed the window (no heartbeat for 6.5s), exit cleanly
-            if api.client_connected and (time.time() - api.last_heartbeat > 6.5):
-                api.jobs.cancel_job()
-                _remove_pid_file(paths["root_dir"])
-                os._exit(0)
-            # Safety fallback if no window ever connected within 60s
-            if not api.client_connected and (time.time() - launch_t > 60.0):
-                _remove_pid_file(paths["root_dir"])
-                os._exit(0)
-
-    if open_browser:
-        threading.Thread(target=_window_lifecycle_watchdog, daemon=True).start()
-
-    try:
-        server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
