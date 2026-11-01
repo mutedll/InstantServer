@@ -13,7 +13,7 @@ Responsibilities:
      `Instant_Server_Data/` containing `instant-server-config.json`, `cidata/`, `iso_cache/`,
      `logs/`, and the taskbar icons (`instant_server_icon.ico`, `.png`, `.icns`).
 2. True Bootable ISO Pulling + USB Flashing Pipeline (`AsyncPipelineManager`):
-   - Automatically pulls the official Ubuntu Server LTS ISO (`ubuntu-24.04.1-live-server-amd64.iso`
+   - Automatically pulls the official Ubuntu Server LTS ISO (`ubuntu-26.04.1-live-server-amd64.iso`
      or `22.04.5`) into `Instant_Server_Data/iso_cache/` (or uses a user-selected local `.iso` file),
      stages `cidata` + all pre-unpacked Self-Hosted App Store bundles (`apps/<app_id>/`),
      formats the USB drive (`GPT` for UEFI, `MBR` for Legacy BIOS, or `Auto` Universal),
@@ -985,7 +985,7 @@ def _run_self_test() -> int:
         assert snap["status"] == "COMPLETED", f"Async build failed: {snap}"
         assert snap["result"]["hostname"] == "instant-box"
         assert snap["result"]["staged_apps"] == ["jellyfin", "pihole"]
-    print("  -> PASS: Automatic workspace folder, 18-app catalog, and async build verified!")
+    print("  -> PASS: Automatic workspace folder, 26-app catalog, and async build verified!")
     return 0
 
 

@@ -1324,32 +1324,46 @@
 
   <script>
     // =========================================================================
-    // Curated 18-App Self-Hosted App Store Catalog (Bundled onto USB from Host PC)
+    // Curated 26-App Self-Hosted App Store Catalog (Bundled onto USB from Host PC)
+    // Supports both Old Laptops (2GB-4GB RAM) & Higher-End Laptops (8GB-16GB+ / GPU)
     // =========================================================================
     const APP_STORE_CATALOG = [
-      { id: "jellyfin", title: "Jellyfin", category: "Media & Photos", recommended: true, tag: "Movies & TV", ram: "512 MB", desc: "Stream your movies, TV shows, and music to any phone, smart TV, or browser with zero subscriptions." },
-      { id: "nextcloud", title: "Nextcloud", category: "Cloud & Files", recommended: true, tag: "Personal Cloud", ram: "512 MB", desc: "Private Google Drive & Google Workspace replacement for files, calendars, contacts, and phone backups." },
-      { id: "pihole", title: "Pi-hole", category: "Network & Ad-Block", recommended: true, tag: "Ad Blocker", ram: "128 MB", desc: "Network-wide DNS ad-blocker that blocks ads and trackers on every device connected to your Wi-Fi." },
-      { id: "immich", title: "Immich", category: "Media & Photos", recommended: true, tag: "Photo Backup", ram: "1 GB", desc: "Fast self-hosted Google Photos alternative with automatic mobile camera backup and album sharing." },
-      { id: "homeassistant", title: "Home Assistant", category: "Smart Home", recommended: true, tag: "Smart Home", ram: "512 MB", desc: "Control and automate smart lights, plugs, sensors, and Zigbee/Matter devices locally in your home." },
-      { id: "vaultwarden", title: "Vaultwarden", category: "Security & Tools", recommended: true, tag: "Passwords", ram: "64 MB", desc: "Lightweight Bitwarden-compatible password manager server for browser extensions and mobile apps." },
-      { id: "adguardhome", title: "AdGuard Home", category: "Network & Ad-Block", recommended: false, tag: "Family DNS", ram: "128 MB", desc: "DNS ad-blocker, family parental control filter, and encrypted DNS-over-HTTPS dashboard." },
-      { id: "plex", title: "Plex Media Server", category: "Media & Photos", recommended: false, tag: "Movies & TV", ram: "512 MB", desc: "Organize and stream personal movies, TV shows, and music to Plex apps on any smart TV or console." },
-      { id: "syncthing", title: "Syncthing", category: "Cloud & Files", recommended: false, tag: "File Sync", ram: "128 MB", desc: "Continuous peer-to-peer folder synchronization across your computers and phones." },
-      { id: "filebrowser", title: "FileBrowser", category: "Cloud & Files", recommended: false, tag: "Web Files", ram: "64 MB", desc: "Simple web file manager to browse, upload, download, and share files stored on your server." },
-      { id: "qbittorrent", title: "qBittorrent", category: "Media & Photos", recommended: false, tag: "Downloads", ram: "256 MB", desc: "Web-based torrent download client with magnet link and RSS feed automation." },
-      { id: "uptimekuma", title: "Uptime Kuma", category: "Security & Tools", recommended: false, tag: "Monitoring", ram: "128 MB", desc: "Self-hosted status monitor that alerts you if your websites, home services, or internet go down." },
-      { id: "portainer", title: "Portainer CE", category: "Security & Tools", recommended: false, tag: "Containers", ram: "128 MB", desc: "Visual management UI for Docker containers, images, volumes, and Compose stacks." },
-      { id: "nginxproxymanager", title: "Nginx Proxy Manager", category: "Network & Ad-Block", recommended: false, tag: "Reverse Proxy", ram: "128 MB", desc: "Route custom domain names to your home apps with free Let's Encrypt HTTPS certificates." },
-      { id: "paperless", title: "Paperless-ngx", category: "Cloud & Files", recommended: false, tag: "Document OCR", ram: "512 MB", desc: "Document scanner and archive that turns PDFs, receipts, and bills into searchable text." },
-      { id: "stirlingpdf", title: "Stirling-PDF", category: "Security & Tools", recommended: false, tag: "PDF Toolkit", ram: "256 MB", desc: "All-in-one local web toolkit to merge, split, compress, convert, and sign PDF files privately." },
-      { id: "navidrome", title: "Navidrome", category: "Media & Photos", recommended: false, tag: "Music Server", ram: "64 MB", desc: "Fast, lightweight personal music streaming server compatible with Subsonic mobile apps." },
-      { id: "gitea", title: "Gitea", category: "Security & Tools", recommended: false, tag: "Git Server", ram: "128 MB", desc: "Lightweight self-hosted GitHub alternative for private code repositories and issues." }
+      { id: "jellyfin", title: "Jellyfin", category: "Media & Photos", recommended: true, tag: "Movies & TV", ram: "512 MB", hardware_tier: "old_friendly", desc: "Stream your movies, TV shows, and music to any phone, smart TV, or browser with zero subscriptions." },
+      { id: "nextcloud", title: "Nextcloud", category: "Cloud & Files", recommended: true, tag: "Personal Cloud", ram: "512 MB", hardware_tier: "old_friendly", desc: "Private Google Drive & Google Workspace replacement for files, calendars, contacts, and phone backups." },
+      { id: "pihole", title: "Pi-hole", category: "Network & Ad-Block", recommended: true, tag: "Ad Blocker", ram: "128 MB", hardware_tier: "old_friendly", desc: "Network-wide DNS ad-blocker that blocks ads and trackers on every device connected to your Wi-Fi." },
+      { id: "kiwix", title: "Offline Wikipedia (Kiwix)", category: "Knowledge & Wiki", recommended: true, tag: "Offline Wiki", ram: "128 MB", hardware_tier: "old_friendly", desc: "Host the entire Wikipedia, Wiktionary, medical guides, and Project Gutenberg (.zim files) completely offline on your home Wi-Fi." },
+      { id: "immich", title: "Immich", category: "Media & Photos", recommended: true, tag: "Photo Backup", ram: "1 GB", hardware_tier: "old_friendly", desc: "Fast self-hosted Google Photos alternative with automatic mobile camera backup and album sharing." },
+      { id: "homeassistant", title: "Home Assistant", category: "Smart Home", recommended: true, tag: "Smart Home", ram: "512 MB", hardware_tier: "old_friendly", desc: "Control and automate smart lights, plugs, sensors, and Zigbee/Matter devices locally in your home." },
+      { id: "vaultwarden", title: "Vaultwarden", category: "Security & Tools", recommended: true, tag: "Passwords", ram: "64 MB", hardware_tier: "old_friendly", desc: "Lightweight Bitwarden-compatible password manager server for browser extensions and mobile apps." },
+      { id: "minecraft", title: "Minecraft Dedicated Server (Java)", category: "Gaming Servers", recommended: false, tag: "Port 25565", ram: "2 GB+", hardware_tier: "high_end", hardware_note: "4GB+ RAM Laptop Recommended", desc: "24/7 multiplayer Minecraft Java server (Paper / Vanilla / Forge / Fabric) on port 25565 with automatic EULA acceptance." },
+      { id: "minecraft_bedrock", title: "Minecraft Bedrock Server", category: "Gaming Servers", recommended: false, tag: "Cross-Play", ram: "512 MB", hardware_tier: "old_friendly", desc: "Official C++ Minecraft Bedrock server (UDP 19132) for phones, tablets, Xbox, PlayStation, Switch, and Windows PCs — runs smoothly even on older laptops." },
+      { id: "ollama_webui", title: "Local AI Server (Ollama + Open WebUI)", category: "AI & Machine Learning", recommended: false, tag: "Local ChatGPT", ram: "8 GB+", hardware_tier: "high_end", hardware_note: "Higher-End Only • Not for old laptops", desc: "Private offline ChatGPT interface powered by Ollama for running Llama 3, DeepSeek, Mistral, and coding models locally. Requires 8GB–16GB+ RAM or GPU." },
+      { id: "localai", title: "LocalAI Multi-Modal Engine", category: "AI & Machine Learning", recommended: false, tag: "OpenAI API", ram: "8 GB+", hardware_tier: "high_end", hardware_note: "Higher-End Only • Not for old laptops", desc: "Drop-in OpenAI-compatible local AI server for LLMs, Whisper voice transcription, and image generation on higher-end laptops." },
+      { id: "bookstack", title: "BookStack Wiki", category: "Knowledge & Wiki", recommended: false, tag: "Home Wiki", ram: "256 MB", hardware_tier: "old_friendly", desc: "Easy-to-use personal and family wiki that organizes notes, manuals, and recipes like chapters in a book." },
+      { id: "calibreweb", title: "Calibre-Web eBooks", category: "Knowledge & Wiki", recommended: false, tag: "eBook Library", ram: "128 MB", hardware_tier: "old_friendly", desc: "Clean web interface for browsing, reading, and wireless sending of eBooks and audiobooks to Kindle and Kobo readers." },
+      { id: "wg_easy", title: "WireGuard VPN (wg-easy)", category: "Network & Ad-Block", recommended: false, tag: "VPN Server", ram: "64 MB", hardware_tier: "old_friendly", desc: "One-click WireGuard VPN server with a web dashboard and instant QR codes for connecting your phone and laptop from anywhere." },
+      { id: "adguardhome", title: "AdGuard Home", category: "Network & Ad-Block", recommended: false, tag: "Family DNS", ram: "128 MB", hardware_tier: "old_friendly", desc: "DNS ad-blocker, family parental control filter, and encrypted DNS-over-HTTPS dashboard." },
+      { id: "plex", title: "Plex Media Server", category: "Media & Photos", recommended: false, tag: "Movies & TV", ram: "512 MB", hardware_tier: "old_friendly", desc: "Organize and stream personal movies, TV shows, and music to Plex apps on any smart TV or console." },
+      { id: "syncthing", title: "Syncthing", category: "Cloud & Files", recommended: false, tag: "File Sync", ram: "128 MB", hardware_tier: "old_friendly", desc: "Continuous peer-to-peer folder synchronization across your computers and phones." },
+      { id: "filebrowser", title: "FileBrowser", category: "Cloud & Files", recommended: false, tag: "Web Files", ram: "64 MB", hardware_tier: "old_friendly", desc: "Simple web file manager to browse, upload, download, and share files stored on your server." },
+      { id: "qbittorrent", title: "qBittorrent", category: "Media & Photos", recommended: false, tag: "Downloads", ram: "256 MB", hardware_tier: "old_friendly", desc: "Web-based torrent download client with magnet link and RSS feed automation." },
+      { id: "uptimekuma", title: "Uptime Kuma", category: "Security & Tools", recommended: false, tag: "Monitoring", ram: "128 MB", hardware_tier: "old_friendly", desc: "Self-hosted status monitor that alerts you if your websites, home services, or internet go down." },
+      { id: "portainer", title: "Portainer CE", category: "Security & Tools", recommended: false, tag: "Containers", ram: "128 MB", hardware_tier: "old_friendly", desc: "Visual management UI for Docker containers, images, volumes, and Compose stacks." },
+      { id: "nginxproxymanager", title: "Nginx Proxy Manager", category: "Network & Ad-Block", recommended: false, tag: "Reverse Proxy", ram: "128 MB", hardware_tier: "old_friendly", desc: "Route custom domain names to your home apps with free Let's Encrypt HTTPS certificates." },
+      { id: "paperless", title: "Paperless-ngx", category: "Cloud & Files", recommended: false, tag: "Document OCR", ram: "512 MB", hardware_tier: "old_friendly", desc: "Document scanner and archive that turns PDFs, receipts, and bills into searchable text." },
+      { id: "stirlingpdf", title: "Stirling-PDF", category: "Security & Tools", recommended: false, tag: "PDF Toolkit", ram: "256 MB", hardware_tier: "old_friendly", desc: "All-in-one local web toolkit to merge, split, compress, convert, and sign PDF files privately." },
+      { id: "navidrome", title: "Navidrome", category: "Media & Photos", recommended: false, tag: "Music Server", ram: "64 MB", hardware_tier: "old_friendly", desc: "Fast, lightweight personal music streaming server compatible with Subsonic mobile apps." },
+      { id: "gitea", title: "Gitea", category: "Security & Tools", recommended: false, tag: "Git Server", ram: "128 MB", hardware_tier: "old_friendly", desc: "Lightweight self-hosted GitHub alternative for private code repositories and issues." }
     ];
 
     const APP_CATEGORIES = [
       "All",
       "Recommended",
+      "Old Laptop Friendly",
+      "Higher-End / Gaming & AI",
+      "Knowledge & Wiki",
+      "Gaming Servers",
+      "AI & Machine Learning",
       "Media & Photos",
       "Cloud & Files",
       "Network & Ad-Block",
@@ -1406,7 +1420,7 @@
 
       // Q2: Dashboards & Pre-Selected Self-Hosted Apps
       dashboard_choice: "both",
-      selected_apps: ["jellyfin", "nextcloud", "pihole", "immich", "homeassistant", "vaultwarden"],
+      selected_apps: ["jellyfin", "nextcloud", "pihole", "kiwix", "immich", "homeassistant", "vaultwarden"],
       appSearchQuery: "",
       appCategoryFilter: "All",
       prebundle_offline_images: false,
@@ -1427,7 +1441,7 @@
       install_mode: "dual_boot",
       dual_boot_Allocation_gb: 45,
       confirm_erase_main_drive: false,
-      ubuntu_release: "24.04",
+      ubuntu_release: "26.04",
       storage_layout: "direct",
       boot_mode: "auto",
 
@@ -1573,7 +1587,7 @@
         state.iso_source_mode = "local_file";
       }
       state.screen_blank_seconds = String(state.screen_blank_seconds || "60");
-      state.ubuntu_release = String(state.ubuntu_release || "24.04");
+      state.ubuntu_release = String(state.ubuntu_release || "26.04");
       if (Array.isArray(cfg.static_dns)) {
         state.static_dns = cfg.static_dns.join(", ");
       }
@@ -2052,8 +2066,10 @@ ${storageSnippet}
       const cat = state.appCategoryFilter;
       const filtered = APP_STORE_CATALOG.filter(app => {
         if (cat === "Recommended" && !app.recommended) return false;
-        if (cat !== "All" && cat !== "Recommended" && app.category !== cat) return false;
-        if (q && !(app.title + " " + app.desc + " " + app.tag + " " + app.category).toLowerCase().includes(q)) return false;
+        if (cat === "Old Laptop Friendly" && app.hardware_tier !== "old_friendly") return false;
+        if (cat === "Higher-End / Gaming & AI" && app.hardware_tier !== "high_end") return false;
+        if (!["All", "Recommended", "Old Laptop Friendly", "Higher-End / Gaming & AI"].includes(cat) && app.category !== cat) return false;
+        if (q && !(app.title + " " + app.desc + " " + app.tag + " " + app.category + " " + (app.hardware_note || "")).toLowerCase().includes(q)) return false;
         return true;
       });
 
@@ -2063,6 +2079,7 @@ ${storageSnippet}
 
       return filtered.map(app => {
         const isChecked = state.selected_apps.includes(app.id);
+        const isHighEnd = app.hardware_tier === "high_end";
         return `
           <div class="app-card ${isChecked ? "checked" : ""}" data-action="toggle-app-card" data-app="${esc(app.id)}">
             <div style="display:flex;align-items:flex-start;gap:12px;min-width:0;flex:1;">
@@ -2071,7 +2088,8 @@ ${storageSnippet}
                 <div class="card-title">
                   <span>${esc(app.title)}</span>
                   ${app.recommended ? `<span class="badge badge-accent">Recommended</span>` : ""}
-                  <span class="badge badge-success">${esc(app.tag)}</span>
+                  <span class="badge badge-success">${esc(app.tag)} • ${esc(app.ram)}</span>
+                  ${isHighEnd ? `<span class="badge badge-warning">${esc(app.hardware_note || "Higher-End Only • Not for old laptops")}</span>` : ""}
                 </div>
                 <div class="card-desc">${esc(app.desc)}</div>
               </div>
@@ -2119,8 +2137,10 @@ ${storageSnippet}
             <div class="section-label" style="margin:0;">2. Pre-select self-hosted apps to bundle onto USB (<span id="lblSelectedAppsCount">${state.selected_apps.length}</span> selected)</div>
             <div style="font-size:12px;color:var(--text-secondary);">Selected apps are pre-unpacked onto your USB drive and automatically registered into CasaOS & Docker. You can also install more apps later inside CasaOS.</div>
           </div>
-          <div style="display:flex;align-items:center;gap:6px;">
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
             <button type="button" class="win-btn win-btn-sm" data-action="apps-select-recommended">Recommended</button>
+            <button type="button" class="win-btn win-btn-sm" data-action="apps-select-old-laptop">Old Laptop Pack (Low RAM)</button>
+            <button type="button" class="win-btn win-btn-sm" data-action="apps-select-high-end">Higher-End + AI &amp; Minecraft</button>
             <button type="button" class="win-btn win-btn-sm" data-action="apps-select-all">Select all</button>
             <button type="button" class="win-btn win-btn-sm" data-action="apps-unselect-all">Unselect all</button>
           </div>
@@ -2135,7 +2155,7 @@ ${storageSnippet}
               id="appStoreSearchInput"
               data-field="appSearchQuery"
               value="${esc(state.appSearchQuery)}"
-              placeholder="Search self-hosted apps (e.g. Jellyfin, Nextcloud, Pi-hole, photos, adblock)..."
+              placeholder="Search 26 self-hosted apps (e.g. Wikipedia, Minecraft, Ollama AI, Jellyfin, Nextcloud, Pi-hole)..."
             />
           </div>
           <div class="appstore-filter-pills" id="appCategoryPills">
@@ -2322,7 +2342,7 @@ ${storageSnippet}
               style="min-width:240px; ${state.iso_source_mode === "local_file" ? "" : "display:none;"}"
               data-field="custom_iso_path"
               value="${esc(state.custom_iso_path)}"
-              placeholder="C:\\Downloads\\ubuntu-24.04.1-live-server-amd64.iso"
+              placeholder="C:\\Downloads\\ubuntu-26.04.1-live-server-amd64.iso"
             />
           </div>
         </div>
@@ -2337,8 +2357,9 @@ ${storageSnippet}
           </div>
           <div class="card-right">
             ${renderComboBox("ubuntu_release", [
-              { value: "24.04", label: "Ubuntu Server 24.04 LTS (Recommended)" },
-              { value: "22.04", label: "Ubuntu Server 22.04 LTS" }
+              { value: "26.04", label: "Ubuntu Server 26.04.1 LTS (Default — Latest LTS)" },
+              { value: "24.04", label: "Ubuntu Server 24.04.5 LTS" },
+              { value: "22.04", label: "Ubuntu Server 22.04.5 LTS" }
             ])}
           </div>
         </div>
@@ -2393,8 +2414,9 @@ ${storageSnippet}
               <div class="card-right">
                 ${renderComboBox("laptop_ram_hint", [
                   { value: "unknown", label: "I don't know (Auto-tune memory)" },
-                  { value: "low_2_4gb", label: "2 GB – 4 GB RAM (Low-RAM boost)" },
-                  { value: "standard_8gb_plus", label: "8 GB or more (Standard)" }
+                  { value: "low_2_4gb", label: "2 GB – 4 GB RAM (Old Laptop — Low-RAM zram boost)" },
+                  { value: "standard_8gb_plus", label: "8 GB RAM (Standard Homelab & Minecraft)" },
+                  { value: "high_end_16gb_gpu", label: "16 GB+ RAM / GPU (Higher-End — Local AI & Gaming)" }
                 ])}
               </div>
             </div>
@@ -3111,6 +3133,16 @@ ${storageSnippet}
       } else if (action === "apps-select-recommended") {
         state.selected_apps = APP_STORE_CATALOG.filter(a => a.recommended).map(a => a.id);
         refreshAppGridInPlace();
+        return;
+      } else if (action === "apps-select-old-laptop") {
+        state.selected_apps = ["jellyfin", "pihole", "kiwix", "vaultwarden", "filebrowser", "syncthing", "navidrome"];
+        refreshAppGridInPlace();
+        showToast("Selected lightweight pack for 2 GB – 4 GB old laptops");
+        return;
+      } else if (action === "apps-select-high-end") {
+        state.selected_apps = ["jellyfin", "nextcloud", "pihole", "kiwix", "immich", "homeassistant", "vaultwarden", "minecraft", "ollama_webui"];
+        refreshAppGridInPlace();
+        showToast("Selected Higher-End Homelab + Minecraft + Local AI pack");
         return;
       } else if (action === "apps-unselect-all") {
         state.selected_apps = [];

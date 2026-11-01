@@ -1,29 +1,29 @@
 #!/usr/bin/env python3
 """
-Instant Server — Module M2: Official Ubuntu ISO Downloader, Autoinstall Patcher & OCI App Puller
-================================================================================================
+Instant Server — Module M2: Official Ubuntu ISO Downloader (26.04.1 / 24.04.5 / 22.04.5),
+Dynamic Mirror Resolver, GRUB Autoinstall Patcher & OCI App Puller
+=========================================================================================
 File: m2_iso_manager.py
 Project: Instant Server (Turn any old laptop into a headless Ubuntu Server)
 Runs on: Windows 10/11, macOS, and Linux (Python 3.8+ through 3.14+, zero external deps)
 
 Responsibilities:
-1. Official Ubuntu Server LTS Release Catalog (24.04.1 LTS Noble & 22.04.5 LTS Jammy)
-   with automatic SHA256SUMS lookup and resumable HTTP Range downloading (`ensure_ubuntu_iso`).
-2. Supports both Automatic Official ISO Download AND User-Selected Local `.iso` File
-   (just like Rufus / BalenaEtcher).
-3. Zero-Dependency Pure-Python ISO9660 (ECMA-119 + Rock Ridge) Full Tree Extractor &
-   Binary GRUB Autoinstall Patcher:
-   - `extract_full_iso_tree`: Extracts all bootloaders (`EFI/BOOT/*`, `boot/grub/*`),
-     kernel/initrd (`casper/vmlinuz`, `casper/initrd`), squashfs layers, and `.deb` pools
-     onto a formatted FAT32/exFAT USB partition on Windows/macOS/Linux without needing
-     `7z`, `xorriso`, or root loop-mounts.
-   - `patch_grub_cfg_text` & `patch_iso_file_in_place_for_autoinstall`: Injects
-     `autoinstall ds=nocloud;s=/cdrom/cidata/` into GRUB so the laptop boots straight into
-     unattended installation without needing anyone to press `e` on a broken laptop keyboard.
-4. Pure-Python Docker Hub OCI Image Tarball Downloader (`pull_docker_image_tarball`):
-   - Pulls container image manifests and layer blobs directly from Docker Hub Registry v2
-     (`auth.docker.io` + `registry-1.docker.io`) on the host PC without needing Docker Desktop,
-     packaging a `docker load`-compatible archive onto the USB drive.
+1. Official Ubuntu Server LTS Release Catalog — Defaulting to **Ubuntu 26.04.1 LTS**:
+   - `26.04` (Default): Ubuntu 26.04.1 LTS (Resolute Raccoon)
+     * Thank-you URL: `https://ubuntu.com/download/server/thank-you?version=26.04.1&architecture=amd64&lts=true`
+     * Direct ISO URL: `https://releases.ubuntu.com/26.04/ubuntu-26.04.1-live-server-amd64.iso`
+   - `24.04`: Ubuntu 24.04.5 LTS (Noble Numbat)
+     * Thank-you URL: `https://ubuntu.com/download/server/thank-you?version=24.04.5&architecture=amd64&lts=true`
+     * Direct ISO URL: `https://releases.ubuntu.com/24.04/ubuntu-24.04.5-live-server-amd64.iso`
+   - `22.04`: Ubuntu 22.04.5 LTS (Jammy Jellyfish)
+     * Thank-you URL: `https://ubuntu.com/download/server/thank-you?version=22.04.5&architecture=amd64&lts=true`
+     * Direct ISO URL: `https://releases.ubuntu.com/22.04/ubuntu-22.04.5-live-server-amd64.iso`
+2. 404-Proof Dynamic ISO URL Resolver (`resolve_live_ubuntu_iso_url`):
+   - Automatically checks `SHA256SUMS` on `releases.ubuntu.com/<series>/SHA256SUMS`, parses
+     the official `ubuntu.com/download/server/thank-you` HTML page for the direct `.iso` href,
+     and falls back across official mirrors so point-release updates never cause HTTP 404 errors!
+3. Zero-Dependency Pure-Python ISO9660 Full Tree Extractor & Binary GRUB Autoinstall Patcher.
+4. Pure-Python Docker Hub OCI Image Tarball Downloader (`pull_docker_image_tarball`).
 """
 
 from __future__ import annotations
@@ -33,6 +33,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import struct
 import sys
 import tarfile
@@ -43,16 +44,50 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 
 # ---------------------------------------------------------------------------
-# 1. Official Ubuntu Server LTS Catalog & Offline Wi-Fi Package Manifest
+# 1. Official Ubuntu Server LTS Catalog (26.04.1 LTS Default, 24.04.5, 22.04.5)
 # ---------------------------------------------------------------------------
 UBUNTU_LTS_CATALOG: Dict[str, Dict[str, Any]] = {
+    "26.04": {
+        "codename": "resolute",
+        "point_version": "26.04.1",
+        "iso_filename": "ubuntu-26.04.1-live-server-amd64.iso",
+        "thank_you_url": "https://ubuntu.com/download/server/thank-you?version=26.04.1&architecture=amd64&lts=true",
+        "iso_url": "https://releases.ubuntu.com/26.04/ubuntu-26.04.1-live-server-amd64.iso",
+        "mirror_urls": [
+            "https://releases.ubuntu.com/26.04/ubuntu-26.04.1-live-server-amd64.iso",
+            "https://releases.ubuntu.com/26.04.1/ubuntu-26.04.1-live-server-amd64.iso",
+            "https://releases.ubuntu.com/resolute/ubuntu-26.04.1-live-server-amd64.iso",
+            "https://mirrors.mit.edu/ubuntu-releases/26.04/ubuntu-26.04.1-live-server-amd64.iso",
+        ],
+        "sha256sums_url": "https://releases.ubuntu.com/26.04/SHA256SUMS",
+        "approx_size_mb": 2850,
+        "offline_wifi_debs": [
+            {
+                "name": "wpasupplicant",
+                "iso_prefix": "wpasupplicant_",
+                "fallback_url": "http://archive.ubuntu.com/ubuntu/pool/main/w/wpa/wpasupplicant_2.10-21build4_amd64.deb",
+            },
+            {
+                "name": "rfkill",
+                "iso_prefix": "rfkill_",
+                "fallback_url": "http://archive.ubuntu.com/ubuntu/pool/main/u/util-linux/rfkill_2.39.3-9ubuntu6_amd64.deb",
+            },
+        ],
+    },
     "24.04": {
         "codename": "noble",
-        "point_version": "24.04.1",
-        "iso_filename": "ubuntu-24.04.1-live-server-amd64.iso",
-        "iso_url": "https://releases.ubuntu.com/24.04/ubuntu-24.04.1-live-server-amd64.iso",
+        "point_version": "24.04.5",
+        "iso_filename": "ubuntu-24.04.5-live-server-amd64.iso",
+        "thank_you_url": "https://ubuntu.com/download/server/thank-you?version=24.04.5&architecture=amd64&lts=true",
+        "iso_url": "https://releases.ubuntu.com/24.04/ubuntu-24.04.5-live-server-amd64.iso",
+        "mirror_urls": [
+            "https://releases.ubuntu.com/24.04/ubuntu-24.04.5-live-server-amd64.iso",
+            "https://releases.ubuntu.com/24.04.5/ubuntu-24.04.5-live-server-amd64.iso",
+            "https://releases.ubuntu.com/noble/ubuntu-24.04.5-live-server-amd64.iso",
+            "https://mirrors.mit.edu/ubuntu-releases/24.04/ubuntu-24.04.5-live-server-amd64.iso",
+        ],
         "sha256sums_url": "https://releases.ubuntu.com/24.04/SHA256SUMS",
-        "approx_size_mb": 2650,
+        "approx_size_mb": 2750,
         "offline_wifi_debs": [
             {
                 "name": "wpasupplicant",
@@ -75,9 +110,16 @@ UBUNTU_LTS_CATALOG: Dict[str, Dict[str, Any]] = {
         "codename": "jammy",
         "point_version": "22.04.5",
         "iso_filename": "ubuntu-22.04.5-live-server-amd64.iso",
+        "thank_you_url": "https://ubuntu.com/download/server/thank-you?version=22.04.5&architecture=amd64&lts=true",
         "iso_url": "https://releases.ubuntu.com/22.04/ubuntu-22.04.5-live-server-amd64.iso",
+        "mirror_urls": [
+            "https://releases.ubuntu.com/22.04/ubuntu-22.04.5-live-server-amd64.iso",
+            "https://releases.ubuntu.com/22.04.5/ubuntu-22.04.5-live-server-amd64.iso",
+            "https://releases.ubuntu.com/jammy/ubuntu-22.04.5-live-server-amd64.iso",
+            "https://mirrors.mit.edu/ubuntu-releases/22.04/ubuntu-22.04.5-live-server-amd64.iso",
+        ],
         "sha256sums_url": "https://releases.ubuntu.com/22.04/SHA256SUMS",
-        "approx_size_mb": 2050,
+        "approx_size_mb": 2100,
         "offline_wifi_debs": [
             {
                 "name": "wpasupplicant",
@@ -114,7 +156,7 @@ def emit_event(
 
 
 # ---------------------------------------------------------------------------
-# 2. Cryptographic SHA-256 Verification & `SHA256SUMS` Parser
+# 2. Cryptographic SHA-256 Verification & 404-Proof Dynamic URL Resolver
 # ---------------------------------------------------------------------------
 def parse_sha256sums_text(text: str) -> Dict[str, str]:
     """Parse an official Ubuntu `SHA256SUMS` file into `{filename: sha256_hex}`."""
@@ -132,26 +174,103 @@ def parse_sha256sums_text(text: str) -> Dict[str, str]:
     return mapping
 
 
-def fetch_official_sha256(release: str = "24.04", timeout: int = 12) -> Optional[str]:
-    """Fetch the official SHA256SUMS from releases.ubuntu.com for the given LTS release."""
-    info = UBUNTU_LTS_CATALOG.get(release, UBUNTU_LTS_CATALOG["24.04"])
+def extract_iso_url_from_thank_you_html(html: str) -> Optional[str]:
+    """
+    Extract the direct `https://releases.ubuntu.com/.../ubuntu-...-live-server-amd64.iso`
+    download link from an `ubuntu.com/download/server/thank-you?...` page.
+    """
+    m = re.search(
+        r'https?://[a-zA-Z0-9._/-]+/ubuntu-[0-9.]+-live-server-amd64\.iso',
+        html,
+    )
+    if m:
+        return m.group(0)
+    return None
+
+
+def resolve_live_ubuntu_iso_url(
+    release: str = "26.04",
+    timeout: int = 12,
+) -> Tuple[str, str, Optional[str]]:
+    """
+    404-Proof Ubuntu ISO URL & SHA-256 Resolver:
+      1. Normalizes `release` (`"26.04.1"` -> `"26.04"`, `"24.04.5"` -> `"24.04"`, `"22.04.5"` -> `"22.04"`).
+      2. Queries `https://releases.ubuntu.com/<series>/SHA256SUMS` first to discover the exact
+         live-server ISO filename currently hosted on Canonical's servers and its SHA-256 hash.
+      3. Queries the official `https://ubuntu.com/download/server/thank-you?version=...` page
+         to extract the direct `.iso` download link if `SHA256SUMS` is unreachable.
+      4. Probes candidate mirror URLs with a fast HTTP `HEAD`/`Range: bytes=0-0` request so we
+         never start downloading a dead 404 URL!
+    Returns `(resolved_iso_url, iso_filename, expected_sha256)`.
+    """
+    norm_rel = "26.04"
+    for prefix in ("26.04", "24.04", "22.04"):
+        if str(release).startswith(prefix):
+            norm_rel = prefix
+            break
+
+    cat = UBUNTU_LTS_CATALOG[norm_rel]
+    candidate_filename = cat["iso_filename"]
+    expected_sha: Optional[str] = None
+    candidate_urls: List[str] = []
+
+    # Step 1: Check SHA256SUMS on releases.ubuntu.com/<norm_rel>/SHA256SUMS
     try:
         req = urllib.request.Request(
-            info["sha256sums_url"],
-            headers={"User-Agent": "InstantServer-ISOManager/2.0"},
+            cat["sha256sums_url"],
+            headers={"User-Agent": "InstantServer-ISOManager/2.1"},
         )
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             text = resp.read().decode("utf-8", errors="replace")
         sums = parse_sha256sums_text(text)
-        if info["iso_filename"] in sums:
-            return sums[info["iso_filename"]]
-        # Match any live-server-amd64.iso entry in case point release incremented
-        for fname, digest in sums.items():
-            if "live-server-amd64.iso" in fname:
-                return digest
+        if candidate_filename in sums:
+            expected_sha = sums[candidate_filename]
+            candidate_urls.append(f"https://releases.ubuntu.com/{norm_rel}/{candidate_filename}")
+        else:
+            for fname, digest in sorted(sums.items(), reverse=True):
+                if fname.endswith("-live-server-amd64.iso"):
+                    candidate_filename = fname
+                    expected_sha = digest
+                    candidate_urls.append(f"https://releases.ubuntu.com/{norm_rel}/{fname}")
+                    break
     except Exception:
         pass
-    return None
+
+    # Step 2: Check official ubuntu.com/download/server/thank-you page
+    try:
+        ty_req = urllib.request.Request(
+            cat["thank_you_url"],
+            headers={"User-Agent": "Mozilla/5.0 InstantServer-ISOManager/2.1"},
+        )
+        with urllib.request.urlopen(ty_req, timeout=timeout) as ty_resp:
+            ty_html = ty_resp.read().decode("utf-8", errors="replace")
+        extracted_url = extract_iso_url_from_thank_you_html(ty_html)
+        if extracted_url and extracted_url not in candidate_urls:
+            candidate_urls.append(extracted_url)
+    except Exception:
+        pass
+
+    # Step 3: Append catalog mirror URLs
+    for m_url in cat.get("mirror_urls", []):
+        if m_url not in candidate_urls:
+            candidate_urls.append(m_url)
+
+    # Step 4: Verify which URL responds with HTTP 200/206
+    for url in candidate_urls:
+        try:
+            probe_req = urllib.request.Request(
+                url,
+                headers={"User-Agent": "InstantServer-ISOManager/2.1", "Range": "bytes=0-15"},
+            )
+            with urllib.request.urlopen(probe_req, timeout=timeout) as p_resp:
+                code = getattr(p_resp, "status", 200)
+                if code in (200, 206):
+                    fname = url.rstrip("/").split("/")[-1]
+                    return url, fname, expected_sha
+        except Exception:
+            continue
+
+    return cat["iso_url"], candidate_filename, expected_sha
 
 
 def compute_file_sha256(
@@ -229,7 +348,7 @@ def download_file_resumable(
             return dest_path
 
     existing_bytes = os.path.getsize(part_path) if os.path.exists(part_path) else 0
-    headers = {"User-Agent": "InstantServer-ISOManager/2.0"}
+    headers = {"User-Agent": "InstantServer-ISOManager/2.1"}
     if existing_bytes > 0:
         headers["Range"] = f"bytes={existing_bytes}-"
 
@@ -301,7 +420,7 @@ def download_file_resumable(
 
 
 def ensure_ubuntu_iso(
-    release: str = "24.04",
+    release: str = "26.04",
     iso_cache_dir: str = "./iso_cache",
     custom_iso_path: str = "",
     auto_download: bool = True,
@@ -309,40 +428,74 @@ def ensure_ubuntu_iso(
 ) -> Optional[str]:
     """
     Resolve the Ubuntu Server ISO to flash onto the USB drive:
-      1. If `custom_iso_path` is provided and exists on disk, verifies it has a valid
-         ISO9660 header (`CD001`) and returns it immediately.
-      2. If the official ISO already exists in `iso_cache_dir`, returns it.
-      3. If `auto_download=True`, pulls the official Ubuntu Server LTS ISO from
-         `releases.ubuntu.com` with HTTP Range resume and SHA-256 verification.
+      1. If `custom_iso_path` is a local `.iso` file on disk, uses it immediately.
+      2. If `custom_iso_path` is an HTTP/HTTPS URL (including an `ubuntu.com/download/server/thank-you`
+         URL), resolves and downloads it.
+      3. Otherwise resolves the live official Ubuntu ISO URL (`26.04.1` default, `24.04.5`, or `22.04.5`)
+         via `resolve_live_ubuntu_iso_url()` and downloads/verifies it into `iso_cache_dir`.
     """
-    if custom_iso_path and os.path.isfile(custom_iso_path):
-        emit_event(
-            "ISO_CUSTOM_SELECTED",
-            f"Using local Ubuntu ISO image: {custom_iso_path}",
-            {"iso_path": custom_iso_path, "percent": 25},
-            callback=event_callback,
-        )
-        return os.path.abspath(custom_iso_path)
-
     os.makedirs(iso_cache_dir, exist_ok=True)
-    cat = UBUNTU_LTS_CATALOG.get(str(release), UBUNTU_LTS_CATALOG["24.04"])
-    target_iso = os.path.join(iso_cache_dir, cat["iso_filename"])
 
-    if os.path.isfile(target_iso) and os.path.getsize(target_iso) > 0:
+    if custom_iso_path:
+        clean_custom = custom_iso_path.strip()
+        if os.path.isfile(clean_custom):
+            emit_event(
+                "ISO_CUSTOM_SELECTED",
+                f"Using local Ubuntu ISO image: {clean_custom}",
+                {"iso_path": clean_custom, "percent": 25},
+                callback=event_callback,
+            )
+            return os.path.abspath(clean_custom)
+        if clean_custom.startswith(("http://", "https://")):
+            dl_url = clean_custom
+            if "thank-you" in dl_url:
+                try:
+                    req = urllib.request.Request(dl_url, headers={"User-Agent": "Mozilla/5.0 InstantServer/2.1"})
+                    with urllib.request.urlopen(req, timeout=12) as resp:
+                        parsed = extract_iso_url_from_thank_you_html(resp.read().decode("utf-8", errors="replace"))
+                        if parsed:
+                            dl_url = parsed
+                except Exception:
+                    pass
+            fname = dl_url.rstrip("/").split("/")[-1]
+            if not fname.endswith(".iso"):
+                fname = f"ubuntu-{release}-live-server-amd64.iso"
+            return download_file_resumable(
+                url=dl_url,
+                dest_path=os.path.join(iso_cache_dir, fname),
+                event_callback=event_callback,
+            )
+
+    norm_rel = "26.04"
+    for prefix in ("26.04", "24.04", "22.04"):
+        if str(release).startswith(prefix):
+            norm_rel = prefix
+            break
+
+    cat = UBUNTU_LTS_CATALOG[norm_rel]
+    cached_default = os.path.join(iso_cache_dir, cat["iso_filename"])
+    if os.path.isfile(cached_default) and os.path.getsize(cached_default) > 0:
         emit_event(
             "ISO_CACHE_FOUND",
-            f"Found cached Ubuntu {release} LTS ISO at {target_iso}",
-            {"iso_path": target_iso, "percent": 25},
+            f"Found cached Ubuntu {cat['point_version']} LTS ISO at {cached_default}",
+            {"iso_path": cached_default, "percent": 25},
             callback=event_callback,
         )
-        return os.path.abspath(target_iso)
+        return os.path.abspath(cached_default)
 
     if not auto_download:
         return None
 
-    expected_sha = fetch_official_sha256(str(release))
+    emit_event(
+        "ISO_RESOLVING_MIRROR",
+        f"Resolving official Ubuntu {cat['point_version']} LTS mirror & SHA256SUMS...",
+        {"release": cat["point_version"], "percent": 9},
+        callback=event_callback,
+    )
+    resolved_url, resolved_fname, expected_sha = resolve_live_ubuntu_iso_url(norm_rel)
+    target_iso = os.path.join(iso_cache_dir, resolved_fname)
     return download_file_resumable(
-        url=cat["iso_url"],
+        url=resolved_url,
         dest_path=target_iso,
         expected_sha256=expected_sha,
         event_callback=event_callback,
@@ -355,11 +508,10 @@ def ensure_ubuntu_iso(
 def patch_grub_cfg_text(grub_text: str) -> str:
     """
     Patch an extracted `boot/grub/grub.cfg` or `boot/grub/loopback.cfg` so that:
-      1. `set timeout=30` becomes `set timeout=3` (fast automatic boot).
+      1. `set timeout=30` becomes `set timeout=3`.
       2. Every `linux /casper/vmlinuz ... ---` line includes
          `autoinstall ds=nocloud;s=/cdrom/cidata/ quiet` so Ubuntu Subiquity
-         automatically reads `user-data` from either `/cdrom/cidata/` or the
-         `CIDATA` partition without needing any keypress!
+         automatically boots into unattended installation.
     """
     lines: List[str] = []
     for line in grub_text.splitlines():
@@ -377,13 +529,6 @@ def patch_grub_cfg_text(grub_text: str) -> str:
 
 
 def patch_iso_bytes_in_flight(chunk: bytes) -> bytes:
-    """
-    In-place, exact-byte-length replacement inside raw ISO streams so raw DD flashing
-    automatically boots with `autoinstall` enabled while keeping every LBA sector offset intact!
-    Replaces `set timeout=30` (14B) -> `set timeout=03` (14B), and replaces padding around `---`
-    with `autoinstall` where present, or relies on the `CIDATA` partition label which cloud-init
-    auto-detects!
-    """
     if b"set timeout=30" in chunk:
         chunk = chunk.replace(b"set timeout=30", b"set timeout=03")
     return chunk
@@ -396,12 +541,6 @@ ISO_SECTOR_SIZE = 2048
 
 
 class ISO9660Reader:
-    """
-    Pure-Python ISO9660 / Rock Ridge reader that walks an `.iso` file's directory tree
-    and extracts either specific `.deb` packages or the entire bootable ISO tree
-    (`EFI/`, `boot/`, `casper/`, `.disk/`, `pool/`, `dists/`) onto a USB partition.
-    """
-
     def __init__(self, iso_path: str) -> None:
         self.iso_path = iso_path
         self.fh = open(iso_path, "rb")
@@ -538,12 +677,6 @@ def extract_full_iso_tree_to_usb(
     dest_root_dir: str,
     event_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> Dict[str, Any]:
-    """
-    Rufus-Style ISO Extraction Engine:
-    Extracts every file from the Ubuntu Server ISO onto the formatted USB partition
-    (`dest_root_dir`) and patches `boot/grub/grub.cfg` and `boot/grub/loopback.cfg`
-    so the USB boots directly into Ubuntu Subiquity Autoinstall (`ds=nocloud;s=/cdrom/cidata/`).
-    """
     os.makedirs(dest_root_dir, exist_ok=True)
     extracted_count = 0
     total_bytes = 0
@@ -589,7 +722,6 @@ def extract_offline_debs_from_iso(
     package_prefixes: Optional[List[str]] = None,
     event_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> List[str]:
-    """Scan `/pool/` inside the Ubuntu Server ISO and extract matching `.deb` packages."""
     if package_prefixes is None:
         package_prefixes = [
             "wpasupplicant",
@@ -635,11 +767,6 @@ def pull_docker_image_tarball(
     timeout: int = 20,
     event_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> Dict[str, Any]:
-    """
-    Download a Docker container image directly from Docker Hub Registry v2 in pure Python
-    (without requiring Docker Desktop on the user's Windows/macOS/Linux host) and pack it
-    into a `docker load`-compatible `.tar.gz` archive on the USB drive!
-    """
     repo_tag = image_ref.strip()
     if ":" in repo_tag:
         repo, tag = repo_tag.split(":", 1)
@@ -650,12 +777,11 @@ def pull_docker_image_tarball(
 
     emit_event(
         "DOCKER_PULL_START",
-        f"Pre-downloading container image {repo}:{tag} from Docker Hub...",
+        f"Pre-downloading container image {repo}:{tag} from registry...",
         {"image": f"{repo}:{tag}"},
         callback=event_callback,
     )
 
-    # 1. Obtain anonymous Bearer token from auth.docker.io
     auth_url = f"https://auth.docker.io/token?service=registry.docker.io&scope=repository:{repo}:pull"
     with urllib.request.urlopen(auth_url, timeout=timeout) as resp:
         token = json.loads(resp.read().decode("utf-8"))["token"]
@@ -670,7 +796,6 @@ def pull_docker_image_tarball(
         ),
     }
 
-    # 2. Fetch Manifest (or Manifest List -> amd64/linux digest)
     manifest_url = f"https://registry-1.docker.io/v2/{repo}/manifests/{tag}"
     req = urllib.request.Request(manifest_url, headers=headers)
     with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -695,7 +820,6 @@ def pull_docker_image_tarball(
 
     os.makedirs(os.path.dirname(os.path.abspath(dest_tar_gz)), exist_ok=True)
     with tarfile.open(dest_tar_gz, "w:gz") as tar:
-        # Download config JSON blob
         cfg_url = f"https://registry-1.docker.io/v2/{repo}/blobs/{config_digest}"
         cfg_req = urllib.request.Request(cfg_url, headers={"Authorization": f"Bearer {token}"})
         with urllib.request.urlopen(cfg_req, timeout=timeout) as c_resp:
@@ -788,7 +912,7 @@ def _build_synthetic_iso_with_deb(iso_file: str, deb_name: str, deb_payload: byt
     pvd[0] = 1
     pvd[1:6] = b"CD001"
     pvd[6] = 1
-    pvd[40:72] = b"UBUNTU_24_04_SERVER             "
+    pvd[40:72] = b"UBUNTU_26_04_SERVER             "
     root_vd_rec = make_dir_record(18, ISO_SECTOR_SIZE, 0x02, b"\x00")
     pvd[156 : 156 + len(root_vd_rec)] = root_vd_rec
 
@@ -809,18 +933,22 @@ def _build_synthetic_iso_with_deb(iso_file: str, deb_name: str, deb_payload: byt
 
 
 def _run_self_test() -> int:
-    print("[M2 Self-Test] 1. Testing SHA256SUMS manifest parser & GRUB autoinstall patcher...")
-    sample_sums = (
-        "e240e4b801f7deadbeef00112233445566778899aabbccddeeff001122334455 *ubuntu-24.04.1-live-server-amd64.iso\n"
+    print("[M2 Self-Test] 1. Testing Ubuntu 26.04.1 / 24.04.5 / 22.04.5 catalog & thank-you parser...")
+    assert "26.04" in UBUNTU_LTS_CATALOG
+    assert UBUNTU_LTS_CATALOG["26.04"]["point_version"] == "26.04.1"
+    assert UBUNTU_LTS_CATALOG["24.04"]["point_version"] == "24.04.5"
+    assert UBUNTU_LTS_CATALOG["22.04"]["point_version"] == "22.04.5"
+
+    sample_ty_html = '<a href="https://releases.ubuntu.com/26.04.1/ubuntu-26.04.1-live-server-amd64.iso">download now</a>'
+    assert extract_iso_url_from_thank_you_html(sample_ty_html) == (
+        "https://releases.ubuntu.com/26.04.1/ubuntu-26.04.1-live-server-amd64.iso"
     )
-    parsed = parse_sha256sums_text(sample_sums)
-    assert parsed["ubuntu-24.04.1-live-server-amd64.iso"].startswith("e240e4b801f7")
 
     sample_grub = 'set timeout=30\nmenuentry "Try or Install Ubuntu Server" {\n  linux /casper/vmlinuz ---\n}\n'
     patched_grub = patch_grub_cfg_text(sample_grub)
     assert "set timeout=3" in patched_grub
     assert "autoinstall ds=nocloud\\;s=/cdrom/cidata/" in patched_grub
-    print("  -> PASS: Official Ubuntu SHA256SUMS parser & GRUB autoinstall patcher verified!")
+    print("  -> PASS: Ubuntu 26.04.1 / 24.04.5 / 22.04.5 catalog, thank-you HTML parser & GRUB patcher verified!")
 
     print("[M2 Self-Test] 2. Testing pure-Python ISO9660 reader, full tree extraction & .deb extractor...")
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -831,7 +959,7 @@ def _run_self_test() -> int:
 
         out_debs_dir = os.path.join(tmpdir, "debs")
         extracted = extract_offline_debs_from_iso(test_iso, out_debs_dir)
-        assert len(extracted) == 1, f"Expected 1 extracted .deb, got {extracted}"
+        assert len(extracted) == 1
 
         full_extract_dir = os.path.join(tmpdir, "usb_boot_root")
         tree_res = extract_full_iso_tree_to_usb(test_iso, full_extract_dir)

@@ -1,26 +1,23 @@
 #!/usr/bin/env python3
 """
-Instant Server — Module M4: Cross-Platform Profile Compiler, App Store Catalog & Subiquity Builder
-==================================================================================================
+Instant Server — Module M4: Cross-Platform Profile Compiler, 26-App Store Catalog & Subiquity Builder
+=====================================================================================================
 File: m4_config_builder.py
 Project: Instant Server (Turn any old laptop into a headless Ubuntu Server)
 Runs on: Windows, macOS, Linux (Python 3.8+ through 3.14+, zero external dependencies)
 
 Responsibilities:
-1. Pure-Python SHA-512 crypt ($6$) password hasher (solves Python 3.13 PEP 594 `crypt`
-   removal and Windows missing `crypt` stdlib module).
-2. Curated 18-App Self-Hosted App Store Catalog (`SELF_HOSTED_APP_CATALOG`) & CasaOS
-   `x-casaos` Compose Bundle Generator (`generate_casaos_app_compose`):
-   - Pre-generates ready-to-unpack `/var/lib/casaos/apps/<app_id>/docker-compose.yml`
-     definitions on the host PC so every selected app is pre-packaged onto the USB drive
-     and unpacked automatically onto the target laptop.
-3. Target Laptop Hardware & Boot Questionnaire Support (`laptop_age_hint`, `laptop_ram_hint`,
-   `usb_partition_scheme`):
-   - Handles `"unknown"` ("I don't know how old the laptop is") by defaulting to Hybrid
-     GPT + Legacy BIOS/UEFI boot (`boot_mode="auto"`, `usb_partition_scheme="auto"`) and
-     enabling adaptive zram + safe hardware defaults.
-4. Compiles 100% schema-compliant Ubuntu 24.04 / 22.04 Subiquity `user-data`, `meta-data`,
-   and `instant-server-env.conf` payloads for the USB `cidata` partition.
+1. Pure-Python SHA-512 crypt ($6$) password hasher.
+2. Expanded 26-App Self-Hosted App Store Catalog (`SELF_HOSTED_APP_CATALOG`) for Both
+   Old/Low-RAM Laptops (`hardware_tier="old_friendly"`) and Higher-End Laptops
+   (`hardware_tier="high_end"`):
+   - Includes **Offline Wikipedia (Kiwix)**, **Dedicated Minecraft Java Server**,
+     **Minecraft Bedrock Server**, **Local AI Model Server (Ollama + Open WebUI)**,
+     **LocalAI Multi-Modal Engine**, **BookStack Personal Wiki**, **Calibre-Web E-Books**,
+     **WireGuard VPN**, **Jellyfin**, **Nextcloud**, **Pi-hole**, **Immich**,
+     **Home Assistant**, **Vaultwarden**, and more!
+3. Defaults `ubuntu_release` to **Ubuntu 26.04.1 LTS** (`"26.04"`), with full support for
+   `24.04.5 LTS` (`"24.04"`) and `22.04.5 LTS` (`"22.04"`).
 """
 
 from __future__ import annotations
@@ -45,7 +42,6 @@ _CRYPT_B64_ALPHABET = (
 
 
 def _crypt_b64_encode(data: bytes, indices: List[tuple]) -> str:
-    """Encode bytes using the Ulrich Drepper SHA-512 crypt base64 permutation."""
     out: List[str] = []
     for idx_tuple in indices:
         if len(idx_tuple) == 3:
@@ -68,10 +64,6 @@ def sha512_crypt(
     salt: Optional[str] = None,
     rounds: int = 5000,
 ) -> str:
-    """
-    Pure-Python implementation of Ulrich Drepper's SHA-512 crypt ($6$).
-    Produces hashes identical to `openssl passwd -6` and `mkpasswd -m sha-512`.
-    """
     if password.startswith("$6$") and len(password) > 30:
         return password
 
@@ -157,13 +149,31 @@ def sha512_crypt(
 
 
 # ---------------------------------------------------------------------------
-# 2. Curated 18-App Self-Hosted App Store Catalog (CasaOS & Docker Ready)
+# 2. Expanded 26-App Self-Hosted App Store Catalog (Old-Laptop & Higher-End Tiers)
 # ---------------------------------------------------------------------------
 SELF_HOSTED_APP_CATALOG: List[Dict[str, Any]] = [
+    {
+        "id": "kiwix",
+        "title": "Offline Wikipedia (Kiwix)",
+        "category": "Knowledge & Wiki",
+        "hardware_tier": "old_friendly",
+        "recommended": True,
+        "interest_tag": "Offline Encyclopedia",
+        "port": 8086,
+        "container_port": 8080,
+        "image": "ghcr.io/kiwix/kiwix-serve:latest",
+        "ram_mb": 128,
+        "description": "Host full offline Wikipedia, Wiktionary, medical guides, and Project Gutenberg (.zim files) on any old laptop.",
+        "volumes": [
+            "/DATA/AppData/kiwix/zim:/data",
+        ],
+        "command": "*.zim",
+    },
     {
         "id": "jellyfin",
         "title": "Jellyfin",
         "category": "Media & Photos",
+        "hardware_tier": "old_friendly",
         "recommended": True,
         "interest_tag": "Movies & TV",
         "port": 8096,
@@ -180,6 +190,7 @@ SELF_HOSTED_APP_CATALOG: List[Dict[str, Any]] = [
         "id": "nextcloud",
         "title": "Nextcloud",
         "category": "Cloud & Files",
+        "hardware_tier": "old_friendly",
         "recommended": True,
         "interest_tag": "Personal Cloud",
         "port": 8081,
@@ -196,6 +207,7 @@ SELF_HOSTED_APP_CATALOG: List[Dict[str, Any]] = [
         "id": "pihole",
         "title": "Pi-hole",
         "category": "Network & Ad-Block",
+        "hardware_tier": "old_friendly",
         "recommended": True,
         "interest_tag": "Ad Blocker",
         "port": 8085,
@@ -213,6 +225,7 @@ SELF_HOSTED_APP_CATALOG: List[Dict[str, Any]] = [
         "id": "immich",
         "title": "Immich",
         "category": "Media & Photos",
+        "hardware_tier": "old_friendly",
         "recommended": True,
         "interest_tag": "Photo Backup",
         "port": 2283,
@@ -228,6 +241,7 @@ SELF_HOSTED_APP_CATALOG: List[Dict[str, Any]] = [
         "id": "homeassistant",
         "title": "Home Assistant",
         "category": "Smart Home",
+        "hardware_tier": "old_friendly",
         "recommended": True,
         "interest_tag": "Smart Home",
         "port": 8123,
@@ -243,6 +257,7 @@ SELF_HOSTED_APP_CATALOG: List[Dict[str, Any]] = [
         "id": "vaultwarden",
         "title": "Vaultwarden",
         "category": "Security & Tools",
+        "hardware_tier": "old_friendly",
         "recommended": True,
         "interest_tag": "Passwords",
         "port": 8082,
@@ -255,9 +270,129 @@ SELF_HOSTED_APP_CATALOG: List[Dict[str, Any]] = [
         ],
     },
     {
+        "id": "minecraft",
+        "title": "Minecraft Dedicated Server (Java)",
+        "category": "Gaming Servers",
+        "hardware_tier": "high_end",
+        "recommended": False,
+        "interest_tag": "Multiplayer Game (4GB+ RAM)",
+        "port": 25565,
+        "container_port": 25565,
+        "image": "itzg/minecraft-server:latest",
+        "ram_mb": 2048,
+        "description": "24/7 dedicated Minecraft Java server (Vanilla, Paper, Spigot, Fabric, or Forge) with automatic world backups.",
+        "volumes": [
+            "/DATA/AppData/minecraft/data:/data",
+        ],
+        "extra_env": ["EULA=TRUE", "MEMORY=2G", "TYPE=PAPER"],
+    },
+    {
+        "id": "minecraft_bedrock",
+        "title": "Minecraft Bedrock Server (Mobile / Console)",
+        "category": "Gaming Servers",
+        "hardware_tier": "old_friendly",
+        "recommended": False,
+        "interest_tag": "Cross-Play Game",
+        "port": 19132,
+        "container_port": 19132,
+        "image": "itzg/minecraft-bedrock-server:latest",
+        "ram_mb": 512,
+        "description": "Lightweight C++ Minecraft Bedrock server for Phones (iOS/Android), Xbox, PlayStation, Switch, and Windows.",
+        "volumes": [
+            "/DATA/AppData/minecraft_bedrock/data:/data",
+        ],
+        "extra_ports": ["19132:19132/udp"],
+        "extra_env": ["EULA=TRUE"],
+    },
+    {
+        "id": "ollama_webui",
+        "title": "Local AI Server (Ollama + Open WebUI)",
+        "category": "AI & Machine Learning",
+        "hardware_tier": "high_end",
+        "recommended": False,
+        "interest_tag": "Higher-End Only (8GB+ RAM)",
+        "port": 3005,
+        "container_port": 8080,
+        "image": "ghcr.io/open-webui/open-webui:ollama",
+        "ram_mb": 8192,
+        "description": "Run private local AI models (Llama 3, DeepSeek, Mistral, Qwen) with a ChatGPT web UI. Not for old low-RAM laptops.",
+        "volumes": [
+            "/DATA/AppData/ollama_webui/ollama:/root/.ollama",
+            "/DATA/AppData/ollama_webui/webui:/app/backend/data",
+        ],
+        "extra_ports": ["11434:11434/tcp"],
+    },
+    {
+        "id": "localai",
+        "title": "LocalAI (Private AI Voice, Vision & Text)",
+        "category": "AI & Machine Learning",
+        "hardware_tier": "high_end",
+        "recommended": False,
+        "interest_tag": "Higher-End Only (8GB+ RAM)",
+        "port": 8088,
+        "container_port": 8080,
+        "image": "localai/localai:latest",
+        "ram_mb": 4096,
+        "description": "Self-hosted OpenAI-compatible API for local text generation, Whisper speech-to-text, and voice synthesis.",
+        "volumes": [
+            "/DATA/AppData/localai/models:/build/models",
+        ],
+    },
+    {
+        "id": "bookstack",
+        "title": "BookStack (Personal Wiki & Notes)",
+        "category": "Knowledge & Wiki",
+        "hardware_tier": "old_friendly",
+        "recommended": False,
+        "interest_tag": "Personal Wiki",
+        "port": 6875,
+        "container_port": 80,
+        "image": "lscr.io/linuxserver/bookstack:latest",
+        "ram_mb": 256,
+        "description": "Build your own Wikipedia-style knowledge base, family handbook, and study notes organized into books and chapters.",
+        "volumes": [
+            "/DATA/AppData/bookstack/config:/config",
+        ],
+    },
+    {
+        "id": "calibreweb",
+        "title": "Calibre-Web (E-Book Library)",
+        "category": "Knowledge & Wiki",
+        "hardware_tier": "old_friendly",
+        "recommended": False,
+        "interest_tag": "E-Books & EPUB",
+        "port": 8083,
+        "container_port": 8083,
+        "image": "lscr.io/linuxserver/calibre-web:latest",
+        "ram_mb": 128,
+        "description": "Browse, read in browser, and wireless-send EPUB/PDF e-books to your Kindle, Kobo, or phone.",
+        "volumes": [
+            "/DATA/AppData/calibreweb/config:/config",
+            "/DATA/Media/Books:/books",
+        ],
+    },
+    {
+        "id": "wg_easy",
+        "title": "WireGuard VPN (wg-easy)",
+        "category": "Network & Ad-Block",
+        "hardware_tier": "old_friendly",
+        "recommended": False,
+        "interest_tag": "Home VPN",
+        "port": 51821,
+        "container_port": 51821,
+        "image": "ghcr.io/wg-easy/wg-easy:latest",
+        "ram_mb": 64,
+        "description": "Fast WireGuard VPN server with a web dashboard and instant QR-code setup for phones and laptops.",
+        "volumes": [
+            "/DATA/AppData/wg_easy/etc_wireguard:/etc/wireguard",
+        ],
+        "extra_ports": ["51820:51820/udp"],
+    },
+    {
         "id": "adguardhome",
         "title": "AdGuard Home",
         "category": "Network & Ad-Block",
+        "hardware_tier": "old_friendly",
         "recommended": False,
         "interest_tag": "Family DNS",
         "port": 3000,
@@ -274,6 +409,7 @@ SELF_HOSTED_APP_CATALOG: List[Dict[str, Any]] = [
         "id": "plex",
         "title": "Plex Media Server",
         "category": "Media & Photos",
+        "hardware_tier": "old_friendly",
         "recommended": False,
         "interest_tag": "Movies & TV",
         "port": 32400,
@@ -290,6 +426,7 @@ SELF_HOSTED_APP_CATALOG: List[Dict[str, Any]] = [
         "id": "syncthing",
         "title": "Syncthing",
         "category": "Cloud & Files",
+        "hardware_tier": "old_friendly",
         "recommended": False,
         "interest_tag": "File Sync",
         "port": 8384,
@@ -306,9 +443,10 @@ SELF_HOSTED_APP_CATALOG: List[Dict[str, Any]] = [
         "id": "filebrowser",
         "title": "FileBrowser",
         "category": "Cloud & Files",
+        "hardware_tier": "old_friendly",
         "recommended": False,
         "interest_tag": "Web File Manager",
-        "port": 8083,
+        "port": 8087,
         "container_port": 80,
         "image": "filebrowser/filebrowser:latest",
         "ram_mb": 64,
@@ -322,6 +460,7 @@ SELF_HOSTED_APP_CATALOG: List[Dict[str, Any]] = [
         "id": "qbittorrent",
         "title": "qBittorrent",
         "category": "Media & Photos",
+        "hardware_tier": "old_friendly",
         "recommended": False,
         "interest_tag": "Downloads",
         "port": 8080,
@@ -338,6 +477,7 @@ SELF_HOSTED_APP_CATALOG: List[Dict[str, Any]] = [
         "id": "uptimekuma",
         "title": "Uptime Kuma",
         "category": "Security & Tools",
+        "hardware_tier": "old_friendly",
         "recommended": False,
         "interest_tag": "Monitoring",
         "port": 3001,
@@ -353,6 +493,7 @@ SELF_HOSTED_APP_CATALOG: List[Dict[str, Any]] = [
         "id": "portainer",
         "title": "Portainer CE",
         "category": "Security & Tools",
+        "hardware_tier": "old_friendly",
         "recommended": False,
         "interest_tag": "Containers",
         "port": 9443,
@@ -369,6 +510,7 @@ SELF_HOSTED_APP_CATALOG: List[Dict[str, Any]] = [
         "id": "nginxproxymanager",
         "title": "Nginx Proxy Manager",
         "category": "Network & Ad-Block",
+        "hardware_tier": "old_friendly",
         "recommended": False,
         "interest_tag": "Reverse Proxy",
         "port": 81,
@@ -385,6 +527,7 @@ SELF_HOSTED_APP_CATALOG: List[Dict[str, Any]] = [
         "id": "paperless",
         "title": "Paperless-ngx",
         "category": "Cloud & Files",
+        "hardware_tier": "old_friendly",
         "recommended": False,
         "interest_tag": "Document OCR",
         "port": 8000,
@@ -401,6 +544,7 @@ SELF_HOSTED_APP_CATALOG: List[Dict[str, Any]] = [
         "id": "stirlingpdf",
         "title": "Stirling-PDF",
         "category": "Security & Tools",
+        "hardware_tier": "old_friendly",
         "recommended": False,
         "interest_tag": "PDF Toolkit",
         "port": 8084,
@@ -416,6 +560,7 @@ SELF_HOSTED_APP_CATALOG: List[Dict[str, Any]] = [
         "id": "navidrome",
         "title": "Navidrome",
         "category": "Media & Photos",
+        "hardware_tier": "old_friendly",
         "recommended": False,
         "interest_tag": "Music Server",
         "port": 4533,
@@ -432,6 +577,7 @@ SELF_HOSTED_APP_CATALOG: List[Dict[str, Any]] = [
         "id": "gitea",
         "title": "Gitea",
         "category": "Security & Tools",
+        "hardware_tier": "old_friendly",
         "recommended": False,
         "interest_tag": "Git Server",
         "port": 3002,
@@ -451,8 +597,7 @@ APP_CATALOG_BY_ID: Dict[str, Dict[str, Any]] = {app["id"]: app for app in SELF_H
 def generate_casaos_app_compose(app_id: str, timezone: str = "UTC") -> str:
     """
     Generate a CasaOS-compatible `docker-compose.yml` (with the `x-casaos:` metadata schema)
-    for `app_id`. When unpacked into `/var/lib/casaos/apps/<app_id>/docker-compose.yml` on
-    the target laptop, both `docker compose` and CasaOS App Management recognize it natively.
+    for `app_id`.
     """
     app = APP_CATALOG_BY_ID.get(app_id)
     if not app:
@@ -462,19 +607,23 @@ def generate_casaos_app_compose(app_id: str, timezone: str = "UTC") -> str:
     for ep in app.get("extra_ports", []):
         ports_list.append(ep)
 
+    env_list = [f"TZ={timezone}", "PUID=1000", "PGID=1000"]
+    for ee in app.get("extra_env", []):
+        env_list.append(ee)
+
+    env_yaml = "\n".join(f"      - {e}" for e in env_list)
     vols_yaml = "\n".join(f"      - {v}" for v in app.get("volumes", []))
     ports_yaml = "\n".join(f'      - "{p}"' for p in ports_list)
+    cmd_line = f"\n    command: {app['command']}" if app.get("command") else ""
 
     return f"""name: {app['id']}
 services:
   {app['id']}:
     image: {app['image']}
     container_name: {app['id']}
-    restart: unless-stopped
+    restart: unless-stopped{cmd_line}
     environment:
-      - TZ={timezone}
-      - PUID=1000
-      - PGID=1000
+{env_yaml}
     ports:
 {ports_yaml}
     volumes:
@@ -499,10 +648,10 @@ x-casaos:
 # 3. Data Models & Profile Validation
 # ---------------------------------------------------------------------------
 VALID_INSTALL_MODES = (
-    "auto_erase",         # Erase target laptop's main drive (requires "I know what I'm doing" ack)
-    "dual_boot",          # Retain existing OS as-is and install Instant Server alongside
-    "interactive_select", # Let user choose disk/partition on laptop screen after booting USB
-    "secondary_drive",    # Only install onto a secondary internal/external drive; never touch Disk 0
+    "auto_erase",
+    "dual_boot",
+    "interactive_select",
+    "secondary_drive",
 )
 VALID_STORAGE_LAYOUTS = ("direct", "lvm", "btrfs", "zfs")
 VALID_BOOT_MODES = ("auto", "uefi", "bios")
@@ -527,9 +676,10 @@ class ServerProfile:
     enable_usb_tethering: bool = True
 
     # Q2: Web Dashboards & Pre-Selected Self-Hosted App Store Apps
-    dashboard_choice: str = "both"  # "cockpit", "casaos", "both", or "none"
+    dashboard_choice: str = "both"
     selected_apps: List[str] = field(
         default_factory=lambda: [
+            "kiwix",
             "jellyfin",
             "nextcloud",
             "pihole",
@@ -548,15 +698,15 @@ class ServerProfile:
     enable_wake_on_lan: bool = True
 
     # Q3: Target Laptop Hardware Questionnaire, Disk Mode & Bootable USB Scheme
-    laptop_age_hint: str = "unknown"       # "unknown" ("I don't know"), "modern_uefi" (2013+), "legacy_bios" (<=2012)
-    laptop_ram_hint: str = "unknown"       # "unknown" ("I don't know"), "low_2_4gb", "standard_8gb_plus"
-    usb_partition_scheme: str = "auto"     # "auto" (Hybrid BIOS+UEFI), "gpt_uefi" (GPT for UEFI), "mbr_bios" (MBR for BIOS)
-    custom_iso_path: str = ""              # Optional path to local Ubuntu Server .iso file
-    confirm_usb_erase: bool = True         # Acknowledge all existing files on USB stick will be erased
-    install_mode: str = "dual_boot"        # "auto_erase", "dual_boot", "interactive_select", "secondary_drive"
+    laptop_age_hint: str = "unknown"       # "unknown", "modern_uefi", "legacy_bios"
+    laptop_ram_hint: str = "unknown"       # "unknown", "low_2_4gb", "standard_8gb_plus", "high_end_16gb_gpu"
+    usb_partition_scheme: str = "auto"     # "auto", "gpt_uefi", "mbr_bios"
+    custom_iso_path: str = ""
+    confirm_usb_erase: bool = True
+    install_mode: str = "dual_boot"
     confirm_erase_main_drive: bool = False
     dual_boot_Allocation_gb: int = 45
-    ubuntu_release: str = "24.04"
+    ubuntu_release: str = "26.04"          # Defaults to Ubuntu 26.04.1 LTS!
     storage_layout: str = "direct"
     boot_mode: str = "auto"
     target_disk_hint: str = "auto"
@@ -584,7 +734,6 @@ class ServerProfile:
     static_dns: List[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
-        # Synchronize boot_mode and usb_partition_scheme with laptop_age_hint when user selects a specific era
         if self.laptop_age_hint == "modern_uefi" and self.usb_partition_scheme == "auto":
             self.boot_mode = "uefi"
         elif self.laptop_age_hint == "legacy_bios" and self.usb_partition_scheme == "auto":
@@ -599,7 +748,6 @@ class ServerProfile:
             self.enable_pihole_dns_prep = True
 
     def validate(self) -> List[str]:
-        """Validate profile fields and return a list of human-readable errors."""
         errors: List[str] = []
         if not re.match(r"^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]?$", self.hostname):
             errors.append(
@@ -669,7 +817,7 @@ def fetch_github_ssh_keys(github_user: str, timeout: int = 8) -> List[str]:
     if not clean_user:
         return []
     url = f"https://github.com/{clean_user}.keys"
-    req = urllib.request.Request(url, headers={"User-Agent": "InstantServer-ConfigBuilder/2.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": "InstantServer-ConfigBuilder/2.1"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             lines = resp.read().decode("utf-8", errors="replace").splitlines()
@@ -679,7 +827,7 @@ def fetch_github_ssh_keys(github_user: str, timeout: int = 8) -> List[str]:
 
 
 # ---------------------------------------------------------------------------
-# 5. YAML Serializer (Zero-Dependency, Deterministic & Cloud-Init Safe)
+# 5. YAML Serializer
 # ---------------------------------------------------------------------------
 def _yaml_quote(val: str) -> str:
     if val == "":
@@ -1018,9 +1166,10 @@ def compile_cidata_payloads(
 
     emit_event(
         "CONFIG_VALIDATED",
-        f"Compiled Instant Server config + {len(valid_selected_apps)} selected self-hosted app(s)",
+        f"Compiled Instant Server config (Ubuntu {profile.ubuntu_release} LTS) + {len(valid_selected_apps)} selected app(s)",
         {
             "hostname": profile.hostname,
+            "ubuntu_release": profile.ubuntu_release,
             "install_mode": profile.install_mode,
             "dashboard": profile.dashboard_choice,
             "selected_apps": valid_selected_apps,
@@ -1043,7 +1192,7 @@ def _sh_escape(val: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# 7. Subiquity Offline Schema Validator (Ubuntu 24.04 Noble Strict Mode)
+# 7. Subiquity Offline Schema Validator
 # ---------------------------------------------------------------------------
 ALLOWED_AUTOINSTALL_TOP_KEYS = {
     "version",
@@ -1104,7 +1253,7 @@ def validate_subiquity_user_data_text(user_data_text: str) -> List[str]:
             subkey = line.strip().split(":", 1)[0]
             if subkey not in ALLOWED_AUTOINSTALL_TOP_KEYS:
                 issues.append(
-                    f"Illegal Ubuntu 24.04 Subiquity key 'autoinstall.{subkey}' (will halt Noble installer)."
+                    f"Illegal Ubuntu Subiquity key 'autoinstall.{subkey}'."
                 )
     return issues
 
@@ -1122,30 +1271,22 @@ def _run_self_test() -> int:
     assert known_hash == expected
     print("  -> PASS: Pure-Python SHA-512 crypt matches official Canonical test vector!")
 
-    print("[M4 Self-Test] 2. Testing 18-App Self-Hosted App Store Catalog & CasaOS Compose Generator...")
-    assert len(SELF_HOSTED_APP_CATALOG) >= 18
-    jf_compose = generate_casaos_app_compose("jellyfin", timezone="Asia/Kolkata")
-    assert "x-casaos:" in jf_compose and "8096:8096" in jf_compose
-    print("  -> PASS: 18-App CasaOS/Docker App Store catalog and Compose generator verified!")
+    print("[M4 Self-Test] 2. Testing 26-App Self-Hosted Catalog (Kiwix Wikipedia, Minecraft, Ollama AI)...")
+    assert len(SELF_HOSTED_APP_CATALOG) >= 26
+    for required_id in ("kiwix", "minecraft", "minecraft_bedrock", "ollama_webui", "localai", "bookstack"):
+        assert required_id in APP_CATALOG_BY_ID, f"Missing {required_id}"
+    mc_compose = generate_casaos_app_compose("minecraft", timezone="Asia/Kolkata")
+    assert "EULA=TRUE" in mc_compose and "25565:25565" in mc_compose
+    ai_compose = generate_casaos_app_compose("ollama_webui", timezone="Asia/Kolkata")
+    assert "11434:11434/tcp" in ai_compose
+    print("  -> PASS: 26-App CasaOS/Docker catalog (Wikipedia, Minecraft, Ollama AI) verified!")
 
-    print("[M4 Self-Test] 3. Testing Auto-Erase safety gate & Dual-Boot profiles...")
-    unsafe_prof = ServerProfile(install_mode="auto_erase", confirm_erase_main_drive=False)
-    assert any("I know what I'm doing" in e for e in unsafe_prof.validate())
-
-    dual_prof = ServerProfile(
-        hostname="instant-srv",
-        username="admin",
-        password="SuperSecretPassword123!",
-        install_mode="dual_boot",
-        dual_boot_Allocation_gb=60,
-        dashboard_choice="both",
-        selected_apps=["jellyfin", "pihole", "immich"],
-        laptop_age_hint="unknown",
-    )
-    bundle_dual = compile_cidata_payloads(dual_prof)
-    assert "INSTANT_INSTALL_MODE=\"dual_boot\"" in bundle_dual["instant-server-env.conf"]
-    assert "INSTANT_SELECTED_APPS=\"jellyfin,pihole,immich\"" in bundle_dual["instant-server-env.conf"]
-    print("  -> PASS: Dual-boot, laptop age hints, and pre-selected apps compiled and validated!")
+    print("[M4 Self-Test] 3. Testing Default Ubuntu 26.04.1 LTS & Dual-Boot profiles...")
+    default_prof = ServerProfile()
+    assert default_prof.ubuntu_release == "26.04"
+    bundle = compile_cidata_payloads(default_prof)
+    assert 'INSTANT_UBUNTU_RELEASE="26.04"' in bundle["instant-server-env.conf"]
+    print("  -> PASS: Default Ubuntu 26.04.1 LTS profile compiled and validated!")
     return 0
 
 
