@@ -67,6 +67,9 @@ class PackagingManifest:
         if self.bundled_data_files is None:
             self.bundled_data_files = [
                 "lazarus_gui.html",
+                "instant_server_icon.ico",
+                "instant_server_icon.png",
+                "instant_server_icon.icns",
                 "p1_early_hardware_adapter.py",
                 "p2_late_laptop_hardening.sh",
                 "m1_host_probe.py",
@@ -122,12 +125,17 @@ hidden_imports = [
 ]
 
 try:
-    import PyQt6  # noqa: F401
+    import webview  # noqa: F401
     hidden_imports.extend([
-        'PyQt6.sip',
-        'PyQt6.QtCore',
-        'PyQt6.QtGui',
-        'PyQt6.QtWidgets',
+        'webview',
+        'webview.platforms.winforms',
+        'webview.platforms.edgechromium',
+        'webview.platforms.cocoa',
+        'webview.platforms.gtk',
+        'clr_loader',
+        'pythonnet',
+        'bottle',
+        'proxy_tools',
     ])
 except ImportError:
     pass
@@ -142,7 +150,7 @@ a = Analysis(
     hooksconfig={{}},
     runtime_hooks=[],
     excludes=[
-        'tkinter', 'matplotlib', 'numpy', 'pandas', 'scipy', 'PIL',
+        'tkinter', 'matplotlib', 'numpy', 'pandas', 'scipy', 'PIL', 'PyQt6', 'PySide6',
         'PyQt6.QtWebEngineWidgets', 'PyQt6.QtWebEngineCore', 'PyQt6.QtWebChannel',
         'PyQt6.QtQuick', 'PyQt6.QtQuickWidgets', 'PyQt6.QtQml',
         'PyQt6.QtSql', 'PyQt6.QtTest', 'PyQt6.QtXml', 'PyQt6.QtMultimedia',
@@ -249,7 +257,7 @@ else:
         codesign_identity=None,
         entitlements_file=None,
         icon=win_icon,
-        uac_admin=True,
+        uac_admin=False,
     )
 """
 
@@ -421,10 +429,10 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install PyInstaller 6.x, Pillow & Lightweight Native PyQt6 GUI
+      - name: Install PyInstaller 6.x, Pillow & Native pywebview HTML Window Engine
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller pillow PyQt6
+          pip install pyinstaller pillow pywebview
 
       - name: Generate Packaging Spec, Taskbar Icons (.ico/.icns/.png) & Manifests
         run: python build_executables.py --emit-configs ./build_dist
@@ -540,12 +548,12 @@ def _run_self_test() -> int:
         assert open(emitted["instant_server_icon.icns"], "rb").read(4) == b"icns"
 
         spec_content = open(emitted["InstantServer.spec"], "r", encoding="utf-8").read()
-        assert "uac_admin=True" in spec_content
+        assert "uac_admin=False" in spec_content
         assert "instant_server_icon.icns" in spec_content
         assert "COLLECT(" in spec_content
 
         ci_yml = open(emitted["release-executables.yml"], "r", encoding="utf-8").read()
-        assert "pip install pyinstaller pillow PyQt6" in ci_yml
+        assert "pip install pyinstaller pillow pywebview" in ci_yml
         assert "InstantServer-Windows.exe" in ci_yml
         assert "InstantServer-macOS.dmg" in ci_yml
         assert "InstantServer-Linux" in ci_yml

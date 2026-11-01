@@ -640,14 +640,35 @@ def _format_usb_windows_diskpart(
         dp_script_path = tf.name
 
     try:
-        subprocess.run(
-            ["diskpart", "/s", dp_script_path],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            check=False,
-            **_win_no_window_kwargs(),
-        )
+        is_admin = False
+        try:
+            import ctypes
+            is_admin = bool(ctypes.windll.shell32.IsUserAnAdmin())
+        except Exception:
+            pass
+        if is_admin:
+            subprocess.run(
+                ["diskpart", "/s", dp_script_path],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+                **_win_no_window_kwargs(),
+            )
+        else:
+            ps_cmd = (
+                f"Start-Process -FilePath 'diskpart.exe' "
+                f"-ArgumentList '/s', '{dp_script_path}' "
+                f"-Verb RunAs -WindowStyle Hidden -Wait"
+            )
+            subprocess.run(
+                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+                **_win_no_window_kwargs(),
+            )
     finally:
         try:
             os.remove(dp_script_path)
