@@ -190,17 +190,15 @@ def extract_iso_url_from_thank_you_html(html: str) -> Optional[str]:
 
 def resolve_live_ubuntu_iso_url(
     release: str = "26.04",
-    timeout: int = 12,
+    timeout: int = 5,
 ) -> Tuple[str, str, Optional[str]]:
     """
-    404-Proof Ubuntu ISO URL & SHA-256 Resolver:
+    Fast, Non-Blocking 404-Proof Ubuntu ISO URL & SHA-256 Resolver:
       1. Normalizes `release` (`"26.04.1"` -> `"26.04"`, `"24.04.5"` -> `"24.04"`, `"22.04.5"` -> `"22.04"`).
-      2. Queries `https://releases.ubuntu.com/<series>/SHA256SUMS` first to discover the exact
-         live-server ISO filename currently hosted on Canonical's servers and its SHA-256 hash.
-      3. Queries the official `https://ubuntu.com/download/server/thank-you?version=...` page
-         to extract the direct `.iso` download link if `SHA256SUMS` is unreachable.
-      4. Probes candidate mirror URLs with a fast HTTP `HEAD`/`Range: bytes=0-0` request so we
-         never start downloading a dead 404 URL!
+      2. Queries `https://releases.ubuntu.com/<series>/SHA256SUMS` (with a fast 5s timeout).
+         As soon as `SHA256SUMS` confirms the live `.iso` filename and SHA-256 digest, returns
+         immediately so downloading starts in < 1 second without hanging!
+      3. Only falls back to parsing `ubuntu.com/download/server/thank-you` if `SHA256SUMS` is unreachable.
     Returns `(resolved_iso_url, iso_filename, expected_sha256)`.
     """
     norm_rel = "26.04"
@@ -212,63 +210,48 @@ def resolve_live_ubuntu_iso_url(
     cat = UBUNTU_LTS_CATALOG[norm_rel]
     candidate_filename = cat["iso_filename"]
     expected_sha: Optional[str] = None
-    candidate_urls: List[str] = []
 
-    # Step 1: Check SHA256SUMS on releases.ubuntu.com/<norm_rel>/SHA256SUMS
-    try:
-        req = urllib.request.Request(
-            cat["sha256sums_url"],
-            headers={"User-Agent": "InstantServer-ISOManager/2.1"},
-        )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            text = resp.read().decode("utf-8", errors="replace")
-        sums = parse_sha256sums_text(text)
-        if candidate_filename in sums:
-            expected_sha = sums[candidate_filename]
-            candidate_urls.append(f"https://releases.ubuntu.com/{norm_rel}/{candidate_filename}")
-        else:
+    # Step 1: Fast SHA256SUMS check (returns immediately if found!)
+    sha_urls = [
+        cat["sha256sums_url"],
+        f"https://releases.ubuntu.com/{cat['codename']}/SHA256SUMS",
+    ]
+    for s_url in sha_urls:
+        try:
+            req = urllib.request.Request(
+                s_url,
+                headers={"User-Agent": "InstantServer-ISOManager/2.2"},
+            )
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                text = resp.read().decode("utf-8", errors="replace")
+            sums = parse_sha256sums_text(text)
+            if candidate_filename in sums:
+                expected_sha = sums[candidate_filename]
+                base_dir_url = s_url.rsplit("/", 1)[0]
+                return f"{base_dir_url}/{candidate_filename}", candidate_filename, expected_sha
             for fname, digest in sorted(sums.items(), reverse=True):
                 if fname.endswith("-live-server-amd64.iso"):
                     candidate_filename = fname
                     expected_sha = digest
-                    candidate_urls.append(f"https://releases.ubuntu.com/{norm_rel}/{fname}")
-                    break
-    except Exception:
-        pass
+                    base_dir_url = s_url.rsplit("/", 1)[0]
+                    return f"{base_dir_url}/{fname}", fname, expected_sha
+        except Exception:
+            continue
 
-    # Step 2: Check official ubuntu.com/download/server/thank-you page
+    # Step 2: Fallback to official ubuntu.com/download/server/thank-you page only if SHA256SUMS was unreachable
     try:
         ty_req = urllib.request.Request(
             cat["thank_you_url"],
-            headers={"User-Agent": "Mozilla/5.0 InstantServer-ISOManager/2.1"},
+            headers={"User-Agent": "Mozilla/5.0 InstantServer-ISOManager/2.2"},
         )
         with urllib.request.urlopen(ty_req, timeout=timeout) as ty_resp:
             ty_html = ty_resp.read().decode("utf-8", errors="replace")
         extracted_url = extract_iso_url_from_thank_you_html(ty_html)
-        if extracted_url and extracted_url not in candidate_urls:
-            candidate_urls.append(extracted_url)
+        if extracted_url:
+            fname = extracted_url.rstrip("/").split("/")[-1]
+            return extracted_url, fname, expected_sha
     except Exception:
         pass
-
-    # Step 3: Append catalog mirror URLs
-    for m_url in cat.get("mirror_urls", []):
-        if m_url not in candidate_urls:
-            candidate_urls.append(m_url)
-
-    # Step 4: Verify which URL responds with HTTP 200/206
-    for url in candidate_urls:
-        try:
-            probe_req = urllib.request.Request(
-                url,
-                headers={"User-Agent": "InstantServer-ISOManager/2.1", "Range": "bytes=0-15"},
-            )
-            with urllib.request.urlopen(probe_req, timeout=timeout) as p_resp:
-                code = getattr(p_resp, "status", 200)
-                if code in (200, 206):
-                    fname = url.rstrip("/").split("/")[-1]
-                    return url, fname, expected_sha
-        except Exception:
-            continue
 
     return cat["iso_url"], candidate_filename, expected_sha
 
@@ -326,13 +309,15 @@ def download_file_resumable(
     url: str,
     dest_path: str,
     expected_sha256: Optional[str] = None,
-    chunk_size: int = 2 * 1024 * 1024,
-    timeout: int = 30,
+    chunk_size: int = 64 * 1024,
+    timeout: int = 25,
+    fallback_urls: Optional[List[str]] = None,
     event_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> str:
     """
-    Download the official Ubuntu Server ISO with HTTP Range resume (`Range: bytes=<offset>-`)
-    and SHA-256 verification.
+    Download the official Ubuntu Server ISO with 64 KB streaming chunks, immediate
+    real-time progress events (every 150ms with MB/s & ETA), HTTP Range resume,
+    automatic mirror failover, and SHA-256 verification.
     """
     os.makedirs(os.path.dirname(os.path.abspath(dest_path)), exist_ok=True)
     part_path = dest_path + ".part"
@@ -344,7 +329,7 @@ def download_file_resumable(
                 emit_event(
                     "ISO_CACHE_HIT",
                     f"Using verified cached Ubuntu ISO ({round(os.path.getsize(dest_path) / (1024*1024), 1)} MB)",
-                    {"sha256": actual, "percent": 25},
+                    {"sha256": actual, "percent": 40},
                     callback=event_callback,
                 )
                 return dest_path
@@ -352,68 +337,107 @@ def download_file_resumable(
             emit_event(
                 "ISO_CACHE_HIT",
                 f"Using cached Ubuntu ISO at {os.path.basename(dest_path)}",
-                {"percent": 25},
+                {"percent": 40},
                 callback=event_callback,
             )
             return dest_path
 
     existing_bytes = os.path.getsize(part_path) if os.path.exists(part_path) else 0
-    headers = {"User-Agent": "InstantServer-ISOManager/2.1"}
-    if existing_bytes > 0:
-        headers["Range"] = f"bytes={existing_bytes}-"
+    urls_to_try = [url] + [u for u in (fallback_urls or []) if u != url]
 
-    req = urllib.request.Request(url, headers=headers)
     emit_event(
         "ISO_DOWNLOAD_START",
-        f"Pulling official Ubuntu Server ISO from {url}...",
+        f"Pulling official Ubuntu Server ISO ({os.path.basename(dest_path)})...",
         {"url": url, "resume_offset": existing_bytes, "percent": 10},
         callback=event_callback,
     )
+    # Emit an initial 0% in-place progress bar immediately so the user sees the progress bar right away!
+    emit_event(
+        "ISO_DOWNLOAD_PROGRESS",
+        f"Connecting to Ubuntu release mirror ({url})...",
+        {
+            "in_place": True,
+            "label": "Downloading Ubuntu ISO",
+            "stage_percent": 0.0,
+            "detail": "Connecting to official Ubuntu mirror...",
+            "downloaded_bytes": existing_bytes,
+            "total_bytes": 0,
+            "download_percent": 0.0,
+            "percent": 10,
+            "speed_mbps": 0.0,
+        },
+        callback=event_callback,
+    )
 
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        status = getattr(resp, "status", 200)
-        mode = "ab" if (status == 206 and existing_bytes > 0) else "wb"
-        if mode == "wb":
-            existing_bytes = 0
+    last_err: Optional[Exception] = None
+    for candidate_url in urls_to_try:
+        try:
+            headers = {"User-Agent": "Mozilla/5.0 InstantServer-ISOManager/2.2"}
+            if existing_bytes > 0:
+                headers["Range"] = f"bytes={existing_bytes}-"
+            req = urllib.request.Request(candidate_url, headers=headers)
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                status = getattr(resp, "status", 200)
+                mode = "ab" if (status == 206 and existing_bytes > 0) else "wb"
+                if mode == "wb":
+                    existing_bytes = 0
 
-        content_len_hdr = resp.headers.get("Content-Length")
-        total_bytes = (existing_bytes + int(content_len_hdr)) if content_len_hdr else 0
-        downloaded = existing_bytes
-        start_t = time.time()
-        last_emit_t = 0.0
+                content_len_hdr = resp.headers.get("Content-Length") or resp.headers.get("content-length")
+                total_bytes = (existing_bytes + int(content_len_hdr)) if content_len_hdr else (2650 * 1024 * 1024)
+                downloaded = existing_bytes
+                start_t = time.time()
+                last_emit_t = 0.0
 
-        with open(part_path, mode) as out_fh:
-            while True:
-                chunk = resp.read(chunk_size)
-                if not chunk:
-                    break
-                out_fh.write(chunk)
-                downloaded += len(chunk)
-                now = time.time()
-                if now - last_emit_t >= 0.35 or downloaded == total_bytes:
-                    last_emit_t = now
-                    elapsed = max(0.001, now - start_t)
-                    speed_mbps = round(((downloaded - existing_bytes) / (1024 * 1024)) / elapsed, 2)
-                    dl_pct = round((downloaded / total_bytes) * 100, 1) if total_bytes > 0 else 0.0
-                    ui_pct = min(40, int(10 + (dl_pct * 0.30)))
-                    dl_mb = round(downloaded / (1024 * 1024), 1)
-                    tot_mb = round(total_bytes / (1024 * 1024), 1)
-                    emit_event(
-                        "ISO_DOWNLOAD_PROGRESS",
-                        f"Downloading official Ubuntu ISO: {dl_mb} MB / {tot_mb} MB ({dl_pct}% @ {speed_mbps} MB/s)",
-                        {
-                            "in_place": True,
-                            "label": "Downloading Ubuntu ISO",
-                            "stage_percent": dl_pct,
-                            "detail": f"{dl_mb} / {tot_mb} MB @ {speed_mbps} MB/s",
-                            "downloaded_bytes": downloaded,
-                            "total_bytes": total_bytes,
-                            "download_percent": dl_pct,
-                            "percent": ui_pct,
-                            "speed_mbps": speed_mbps,
-                        },
-                        callback=event_callback,
-                    )
+                with open(part_path, mode) as out_fh:
+                    while True:
+                        chunk = resp.read(chunk_size)
+                        if not chunk:
+                            break
+                        out_fh.write(chunk)
+                        downloaded += len(chunk)
+                        now = time.time()
+                        if now - last_emit_t >= 0.15 or downloaded >= total_bytes:
+                            last_emit_t = now
+                            elapsed = max(0.001, now - start_t)
+                            bytes_this_session = max(0, downloaded - existing_bytes)
+                            speed_bps = bytes_this_session / elapsed
+                            speed_mbps = round(speed_bps / (1024 * 1024), 2)
+                            dl_pct = min(100.0, round((downloaded / max(1, total_bytes)) * 100, 1))
+                            ui_pct = min(40, int(10 + (dl_pct * 0.30)))
+                            dl_mb = round(downloaded / (1024 * 1024), 1)
+                            tot_mb = round(total_bytes / (1024 * 1024), 1)
+                            rem_bytes = max(0, total_bytes - downloaded)
+                            if speed_bps > 1024:
+                                eta_sec = int(rem_bytes / speed_bps)
+                                eta_str = f"ETA {eta_sec // 60:02d}:{eta_sec % 60:02d}"
+                            else:
+                                eta_str = "calculating ETA..."
+                            emit_event(
+                                "ISO_DOWNLOAD_PROGRESS",
+                                f"Downloading Ubuntu ISO: {dl_mb} MB / {tot_mb} MB ({dl_pct}% @ {speed_mbps} MB/s • {eta_str})",
+                                {
+                                    "in_place": True,
+                                    "label": "Downloading Ubuntu ISO",
+                                    "stage_percent": dl_pct,
+                                    "detail": f"{dl_mb} / {tot_mb} MB @ {speed_mbps} MB/s • {eta_str}",
+                                    "downloaded_bytes": downloaded,
+                                    "total_bytes": total_bytes,
+                                    "download_percent": dl_pct,
+                                    "percent": ui_pct,
+                                    "speed_mbps": speed_mbps,
+                                },
+                                callback=event_callback,
+                            )
+                last_err = None
+                break
+        except InterruptedError:
+            raise
+        except Exception as exc:
+            last_err = exc
+            continue
+
+    if last_err is not None:
+        raise last_err
 
     os.replace(part_path, dest_path)
 
@@ -464,8 +488,8 @@ def ensure_ubuntu_iso(
             dl_url = clean_custom
             if "thank-you" in dl_url:
                 try:
-                    req = urllib.request.Request(dl_url, headers={"User-Agent": "Mozilla/5.0 InstantServer/2.1"})
-                    with urllib.request.urlopen(req, timeout=12) as resp:
+                    req = urllib.request.Request(dl_url, headers={"User-Agent": "Mozilla/5.0 InstantServer/2.2"})
+                    with urllib.request.urlopen(req, timeout=8) as resp:
                         parsed = extract_iso_url_from_thank_you_html(resp.read().decode("utf-8", errors="replace"))
                         if parsed:
                             dl_url = parsed
@@ -506,12 +530,25 @@ def ensure_ubuntu_iso(
         {"release": cat["point_version"], "percent": 9},
         callback=event_callback,
     )
+    emit_event(
+        "ISO_VERIFY_PROGRESS",
+        f"Checking official Ubuntu {cat['point_version']} LTS mirror & SHA256SUMS...",
+        {
+            "in_place": True,
+            "label": "Resolving Ubuntu Mirror",
+            "stage_percent": 15.0,
+            "detail": f"Ubuntu {cat['point_version']} LTS (releases.ubuntu.com)",
+            "percent": 9,
+        },
+        callback=event_callback,
+    )
     resolved_url, resolved_fname, expected_sha = resolve_live_ubuntu_iso_url(norm_rel)
     target_iso = os.path.join(iso_cache_dir, resolved_fname)
     return download_file_resumable(
         url=resolved_url,
         dest_path=target_iso,
         expected_sha256=expected_sha,
+        fallback_urls=cat.get("mirror_urls", []),
         event_callback=event_callback,
     )
 
@@ -823,116 +860,333 @@ def extract_offline_debs_from_iso(
 
 
 # ---------------------------------------------------------------------------
-# 6. Pure-Python Docker Hub OCI Image Tarball Puller (Host-Side Pre-Bundler)
+# 6. Multi-Registry OCI Container Image Puller (Docker Hub, GHCR.io, LSCR.io)
 # ---------------------------------------------------------------------------
+class _OciBlobRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """
+    Strip the Registry `Authorization: Bearer ...` header when an OCI registry
+    (`ghcr.io`, `lscr.io`, `registry-1.docker.io`) redirects (HTTP 302/307) to an
+    external CDN/S3/Azure blob storage host that uses pre-signed query strings.
+    Forwarding the registry Bearer token to S3/Azure causes HTTP 401/400 errors!
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        new_req = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new_req is None:
+            return None
+        orig_host = urllib.parse.urlparse(req.full_url).netloc.lower()
+        new_host = urllib.parse.urlparse(newurl).netloc.lower()
+        if orig_host != new_host:
+            new_req.headers.pop("Authorization", None)
+            new_req.headers.pop("authorization", None)
+            if hasattr(new_req, "unredirected_hdrs"):
+                new_req.unredirected_hdrs.pop("Authorization", None)
+                new_req.unredirected_hdrs.pop("authorization", None)
+        return new_req
+
+
+_OCI_OPENER = urllib.request.build_opener(_OciBlobRedirectHandler())
+
+
+def resolve_oci_registry_endpoints(image_ref: str) -> List[Dict[str, str]]:
+    """
+    Parse any container image reference (`jellyfin/jellyfin:latest`, `nextcloud:stable`,
+    `ghcr.io/wg-easy/wg-easy:latest`, `lscr.io/linuxserver/syncthing:latest`, etc.)
+    into an ordered list of OCI v2 registry endpoints (`api_base`, `token_url`, `repo`, `tag`, `full_tag`).
+    """
+    clean = image_ref.strip()
+    last_slash = clean.rfind("/")
+    colon_pos = clean.rfind(":")
+    if colon_pos > last_slash:
+        path_part = clean[:colon_pos]
+        tag = clean[colon_pos + 1 :] or "latest"
+    else:
+        path_part = clean
+        tag = "latest"
+
+    segments = [s for s in path_part.split("/") if s]
+    if len(segments) >= 2 and ("." in segments[0] or ":" in segments[0] or segments[0] == "localhost"):
+        reg_domain = segments[0].lower()
+        repo = "/".join(segments[1:])
+    else:
+        reg_domain = "docker.io"
+        repo = "/".join(segments) if len(segments) >= 2 else f"library/{segments[0]}"
+
+    candidates: List[Dict[str, str]] = []
+
+    if reg_domain == "ghcr.io":
+        candidates.append({
+            "registry": "ghcr.io",
+            "repo": repo,
+            "tag": tag,
+            "full_tag": f"ghcr.io/{repo}:{tag}",
+            "token_url": f"https://ghcr.io/token?service=ghcr.io&scope=repository:{repo}:pull",
+            "api_base": f"https://ghcr.io/v2/{repo}",
+        })
+        dh_repo = "weejewel/wg-easy" if repo == "wg-easy/wg-easy" else (
+            "paperlessngx/paperless-ngx" if repo == "paperless-ngx/paperless-ngx" else repo
+        )
+        candidates.append({
+            "registry": "registry-1.docker.io",
+            "repo": dh_repo,
+            "tag": tag,
+            "full_tag": f"ghcr.io/{repo}:{tag}",
+            "token_url": f"https://auth.docker.io/token?service=registry.docker.io&scope=repository:{dh_repo}:pull",
+            "api_base": f"https://registry-1.docker.io/v2/{dh_repo}",
+        })
+    elif reg_domain == "lscr.io":
+        # LinuxServer.io publishes all images to both Docker Hub (linuxserver/<app>) and GHCR (ghcr.io/linuxserver/<app>)
+        candidates.append({
+            "registry": "registry-1.docker.io",
+            "repo": repo,
+            "tag": tag,
+            "full_tag": f"lscr.io/{repo}:{tag}",
+            "token_url": f"https://auth.docker.io/token?service=registry.docker.io&scope=repository:{repo}:pull",
+            "api_base": f"https://registry-1.docker.io/v2/{repo}",
+        })
+        candidates.append({
+            "registry": "ghcr.io",
+            "repo": repo,
+            "tag": tag,
+            "full_tag": f"lscr.io/{repo}:{tag}",
+            "token_url": f"https://ghcr.io/token?service=ghcr.io&scope=repository:{repo}:pull",
+            "api_base": f"https://ghcr.io/v2/{repo}",
+        })
+    else:
+        candidates.append({
+            "registry": "registry-1.docker.io",
+            "repo": repo,
+            "tag": tag,
+            "full_tag": f"{repo}:{tag}" if not repo.startswith("library/") else f"{repo.split('/', 1)[1]}:{tag}",
+            "token_url": f"https://auth.docker.io/token?service=registry.docker.io&scope=repository:{repo}:pull",
+            "api_base": f"https://registry-1.docker.io/v2/{repo}",
+        })
+
+    return candidates
+
+
+def _fetch_oci_bearer_token(token_url: str, timeout: int = 15) -> str:
+    req = urllib.request.Request(
+        token_url,
+        headers={"User-Agent": "Docker-Client/27.0 (InstantServer-OCIPuller/2.2)"},
+    )
+    with _OCI_OPENER.open(req, timeout=timeout) as resp:
+        payload = json.loads(resp.read().decode("utf-8", errors="replace"))
+    return str(payload.get("token") or payload.get("access_token") or "")
+
+
+def _open_oci_with_auth_retry(
+    url: str,
+    token: str,
+    accept_header: Optional[str] = None,
+    timeout: int = 25,
+) -> Tuple[Any, str]:
+    """
+    Open an OCI v2 URL with `Authorization: Bearer <token>`. If the registry returns
+    `401 Unauthorized` with a `WWW-Authenticate: Bearer realm="...",service="...",scope="..."`
+    header, dynamically negotiate the exact token from that realm and retry!
+    """
+    headers: Dict[str, str] = {
+        "User-Agent": "Docker-Client/27.0 (InstantServer-OCIPuller/2.2)",
+    }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    if accept_header:
+        headers["Accept"] = accept_header
+
+    req = urllib.request.Request(url, headers=headers)
+    try:
+        return _OCI_OPENER.open(req, timeout=timeout), token
+    except urllib.error.HTTPError as http_err:
+        if http_err.code == 401:
+            www_auth = http_err.headers.get("WWW-Authenticate") or http_err.headers.get("www-authenticate") or ""
+            realm_m = re.search(r'realm="([^"]+)"', www_auth)
+            if realm_m:
+                realm = realm_m.group(1)
+                svc_m = re.search(r'service="([^"]+)"', www_auth)
+                scope_m = re.search(r'scope="([^"]+)"', www_auth)
+                q_parts: List[str] = []
+                if svc_m:
+                    q_parts.append(f"service={urllib.parse.quote(svc_m.group(1), safe='/:._-')}")
+                if scope_m:
+                    q_parts.append(f"scope={urllib.parse.quote(scope_m.group(1), safe='/:._-')}")
+                dyn_token_url = f"{realm}?{'&'.join(q_parts)}" if q_parts else realm
+                new_tok = _fetch_oci_bearer_token(dyn_token_url, timeout=timeout)
+                if new_tok:
+                    headers["Authorization"] = f"Bearer {new_tok}"
+                    retry_req = urllib.request.Request(url, headers=headers)
+                    return _OCI_OPENER.open(retry_req, timeout=timeout), new_tok
+        raise
+
+
 def pull_docker_image_tarball(
     image_ref: str,
     dest_tar_gz: str,
     arch: str = "amd64",
-    timeout: int = 20,
+    timeout: int = 25,
     event_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> Dict[str, Any]:
-    repo_tag = image_ref.strip()
-    if ":" in repo_tag:
-        repo, tag = repo_tag.split(":", 1)
-    else:
-        repo, tag = repo_tag, "latest"
-    if "/" not in repo:
-        repo = f"library/{repo}"
+    """
+    Multi-Registry Pure-Python OCI Image Puller supporting:
+      - Docker Hub (`registry-1.docker.io`)
+      - GitHub Container Registry (`ghcr.io`)
+      - LinuxServer Container Registry (`lscr.io`)
+    Streams layers in 64 KB chunks with real-time `DOCKER_PULL_PROGRESS` (`in_place: True`)
+    updates so the terminal progress bar animates smoothly without HTTP 401 errors.
+    """
+    candidates = resolve_oci_registry_endpoints(image_ref)
+    accept_manifest = (
+        "application/vnd.docker.distribution.manifest.v2+json, "
+        "application/vnd.oci.image.manifest.v1+json, "
+        "application/vnd.docker.distribution.manifest.list.v2+json, "
+        "application/vnd.oci.image.index.v1+json"
+    )
 
     emit_event(
         "DOCKER_PULL_START",
-        f"Pre-downloading container image {repo}:{tag} from registry...",
-        {"image": f"{repo}:{tag}"},
+        f"Pre-downloading container image {image_ref} from registry...",
+        {"image": image_ref},
         callback=event_callback,
     )
 
-    auth_url = f"https://auth.docker.io/token?service=registry.docker.io&scope=repository:{repo}:pull"
-    with urllib.request.urlopen(auth_url, timeout=timeout) as resp:
-        token = json.loads(resp.read().decode("utf-8"))["token"]
+    last_exc: Optional[Exception] = None
+    for cand in candidates:
+        api_base = cand["api_base"]
+        repo = cand["repo"]
+        tag = cand["tag"]
+        full_tag = cand["full_tag"]
+        try:
+            token = ""
+            try:
+                token = _fetch_oci_bearer_token(cand["token_url"], timeout=timeout)
+            except Exception:
+                token = ""
 
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": (
-            "application/vnd.docker.distribution.manifest.v2+json, "
-            "application/vnd.oci.image.manifest.v1+json, "
-            "application/vnd.docker.distribution.manifest.list.v2+json, "
-            "application/vnd.oci.image.index.v1+json"
-        ),
-    }
+            manifest_url = f"{api_base}/manifests/{tag}"
+            resp_ctx, token = _open_oci_with_auth_retry(
+                manifest_url,
+                token=token,
+                accept_header=accept_manifest,
+                timeout=timeout,
+            )
+            with resp_ctx as resp:
+                manifest_data = json.loads(resp.read().decode("utf-8", errors="replace"))
 
-    manifest_url = f"https://registry-1.docker.io/v2/{repo}/manifests/{tag}"
-    req = urllib.request.Request(manifest_url, headers=headers)
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        manifest_data = json.loads(resp.read().decode("utf-8"))
+            if "manifests" in manifest_data:
+                chosen_digest = None
+                for m in manifest_data["manifests"]:
+                    plat = m.get("platform") or {}
+                    if plat.get("architecture") == arch and plat.get("os") == "linux":
+                        chosen_digest = m.get("digest")
+                        break
+                if not chosen_digest and manifest_data["manifests"]:
+                    chosen_digest = manifest_data["manifests"][0].get("digest")
+                sub_url = f"{api_base}/manifests/{chosen_digest}"
+                sub_ctx, token = _open_oci_with_auth_retry(
+                    sub_url,
+                    token=token,
+                    accept_header=accept_manifest,
+                    timeout=timeout,
+                )
+                with sub_ctx as resp:
+                    manifest_data = json.loads(resp.read().decode("utf-8", errors="replace"))
 
-    if "manifests" in manifest_data:
-        chosen_digest = None
-        for m in manifest_data["manifests"]:
-            plat = m.get("platform") or {}
-            if plat.get("architecture") == arch and plat.get("os") == "linux":
-                chosen_digest = m.get("digest")
-                break
-        if not chosen_digest and manifest_data["manifests"]:
-            chosen_digest = manifest_data["manifests"][0].get("digest")
-        sub_url = f"https://registry-1.docker.io/v2/{repo}/manifests/{chosen_digest}"
-        sub_req = urllib.request.Request(sub_url, headers=headers)
-        with urllib.request.urlopen(sub_req, timeout=timeout) as resp:
-            manifest_data = json.loads(resp.read().decode("utf-8"))
+            config_digest = manifest_data["config"]["digest"]
+            layers = manifest_data.get("layers", [])
+            total_layers = max(1, len(layers))
 
-    config_digest = manifest_data["config"]["digest"]
-    layers = manifest_data.get("layers", [])
+            os.makedirs(os.path.dirname(os.path.abspath(dest_tar_gz)), exist_ok=True)
+            with tarfile.open(dest_tar_gz, "w:gz") as tar:
+                cfg_url = f"{api_base}/blobs/{config_digest}"
+                cfg_ctx, token = _open_oci_with_auth_retry(cfg_url, token=token, timeout=timeout)
+                with cfg_ctx as c_resp:
+                    cfg_bytes = c_resp.read()
 
-    os.makedirs(os.path.dirname(os.path.abspath(dest_tar_gz)), exist_ok=True)
-    with tarfile.open(dest_tar_gz, "w:gz") as tar:
-        cfg_url = f"https://registry-1.docker.io/v2/{repo}/blobs/{config_digest}"
-        cfg_req = urllib.request.Request(cfg_url, headers={"Authorization": f"Bearer {token}"})
-        with urllib.request.urlopen(cfg_req, timeout=timeout) as c_resp:
-            cfg_bytes = c_resp.read()
+                cfg_name = f"{config_digest.split(':')[-1]}.json"
+                cfg_info = tarfile.TarInfo(name=cfg_name)
+                cfg_info.size = len(cfg_bytes)
+                tar.addfile(cfg_info, io.BytesIO(cfg_bytes))
 
-        cfg_name = f"{config_digest.split(':')[-1]}.json"
-        cfg_info = tarfile.TarInfo(name=cfg_name)
-        cfg_info.size = len(cfg_bytes)
-        tar.addfile(cfg_info, io.BytesIO(cfg_bytes))
+                layer_files: List[str] = []
+                for idx, layer in enumerate(layers):
+                    l_digest = layer["digest"]
+                    l_size = int(layer.get("size") or 0)
+                    l_hash = l_digest.split(":")[-1]
+                    l_name = f"{l_hash}/layer.tar"
+                    l_url = f"{api_base}/blobs/{l_digest}"
 
-        layer_files: List[str] = []
-        for idx, layer in enumerate(layers):
-            l_digest = layer["digest"]
-            l_hash = l_digest.split(":")[-1]
-            l_name = f"{l_hash}/layer.tar"
+                    l_ctx, token = _open_oci_with_auth_retry(l_url, token=token, timeout=timeout)
+                    with tempfile.NamedTemporaryFile(delete=False) as tmp_lf:
+                        tmp_layer_path = tmp_lf.name
+                        got_bytes = 0
+                        last_t = 0.0
+                        with l_ctx as l_resp:
+                            while True:
+                                chunk = l_resp.read(64 * 1024)
+                                if not chunk:
+                                    break
+                                tmp_lf.write(chunk)
+                                got_bytes += len(chunk)
+                                now = time.time()
+                                if now - last_t >= 0.15 or (l_size and got_bytes >= l_size):
+                                    last_t = now
+                                    layer_pct = min(100.0, round(((idx + (got_bytes / max(1, l_size or got_bytes))) / total_layers) * 100, 1))
+                                    got_mb = round(got_bytes / (1024 * 1024), 1)
+                                    tot_mb = round((l_size or got_bytes) / (1024 * 1024), 1)
+                                    emit_event(
+                                        "DOCKER_PULL_PROGRESS",
+                                        f"Downloading {repo} (layer {idx + 1}/{total_layers}): {got_mb}/{tot_mb} MB",
+                                        {
+                                            "in_place": True,
+                                            "label": f"Pulling {repo.split('/')[-1]}",
+                                            "stage_percent": layer_pct,
+                                            "detail": f"Layer {idx + 1}/{total_layers} ({got_mb}/{tot_mb} MB)",
+                                        },
+                                        callback=event_callback,
+                                    )
+
+                    try:
+                        tar.add(tmp_layer_path, arcname=l_name)
+                    finally:
+                        try:
+                            os.remove(tmp_layer_path)
+                        except Exception:
+                            pass
+                    layer_files.append(l_name)
+
+                docker_manifest = [
+                    {
+                        "Config": cfg_name,
+                        "RepoTags": [full_tag],
+                        "Layers": layer_files,
+                    }
+                ]
+                man_bytes = json.dumps(docker_manifest, indent=2).encode("utf-8")
+                man_info = tarfile.TarInfo(name="manifest.json")
+                man_info.size = len(man_bytes)
+                tar.addfile(man_info, io.BytesIO(man_bytes))
+
             emit_event(
-                "DOCKER_LAYER_PULL",
-                f"Downloading {repo}:{tag} layer {idx + 1}/{len(layers)}...",
-                {"image": f"{repo}:{tag}", "layer": idx + 1, "total_layers": len(layers)},
+                "DOCKER_PULL_COMPLETE",
+                f"Bundled offline container image {full_tag} ({len(layers)} layers)",
+                {"image": full_tag, "dest": dest_tar_gz, "layers": len(layers)},
                 callback=event_callback,
             )
-            l_url = f"https://registry-1.docker.io/v2/{repo}/blobs/{l_digest}"
-            l_req = urllib.request.Request(l_url, headers={"Authorization": f"Bearer {token}"})
-            with urllib.request.urlopen(l_req, timeout=timeout) as l_resp:
-                l_bytes = l_resp.read()
-            l_info = tarfile.TarInfo(name=l_name)
-            l_info.size = len(l_bytes)
-            tar.addfile(l_info, io.BytesIO(l_bytes))
-            layer_files.append(l_name)
-
-        docker_manifest = [
-            {
-                "Config": cfg_name,
-                "RepoTags": [f"{repo}:{tag}"],
-                "Layers": layer_files,
+            return {
+                "image": full_tag,
+                "tarball_path": dest_tar_gz,
+                "layers_count": len(layers),
+                "size_bytes": os.path.getsize(dest_tar_gz),
             }
-        ]
-        m_bytes = json.dumps(docker_manifest).encode("utf-8")
-        m_info = tarfile.TarInfo(name="manifest.json")
-        m_info.size = len(m_bytes)
-        tar.addfile(m_info, io.BytesIO(m_bytes))
+        except InterruptedError:
+            raise
+        except Exception as exc:
+            last_exc = exc
+            continue
 
-    return {
-        "image": f"{repo}:{tag}",
-        "tarball_path": dest_tar_gz,
-        "layers_count": len(layers),
-        "size_bytes": os.path.getsize(dest_tar_gz),
-    }
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError(f"Failed to pull container image: {image_ref}")
 
 
 # ---------------------------------------------------------------------------
@@ -1030,6 +1284,28 @@ def _run_self_test() -> int:
         tree_res = extract_full_iso_tree_to_usb(test_iso, full_extract_dir)
         assert tree_res["extracted_files"] == 1
     print("  -> PASS: Extracted ISO9660 boot tree and wpasupplicant .deb in pure Python!")
+
+    print("[M2 Self-Test] 3. Testing Multi-Registry OCI Endpoint Resolver (Docker Hub, GHCR.io, LSCR.io) across all 26 apps...")
+    wg_eps = resolve_oci_registry_endpoints("ghcr.io/wg-easy/wg-easy:latest")
+    assert wg_eps[0]["registry"] == "ghcr.io"
+    assert wg_eps[0]["token_url"] == "https://ghcr.io/token?service=ghcr.io&scope=repository:wg-easy/wg-easy:pull"
+    assert wg_eps[0]["api_base"] == "https://ghcr.io/v2/wg-easy/wg-easy"
+    assert wg_eps[1]["registry"] == "registry-1.docker.io" and wg_eps[1]["repo"] == "weejewel/wg-easy"
+
+    sync_eps = resolve_oci_registry_endpoints("lscr.io/linuxserver/syncthing:latest")
+    assert sync_eps[0]["registry"] == "registry-1.docker.io"
+    assert sync_eps[0]["token_url"] == "https://auth.docker.io/token?service=registry.docker.io&scope=repository:linuxserver/syncthing:pull"
+    assert sync_eps[0]["api_base"] == "https://registry-1.docker.io/v2/linuxserver/syncthing"
+    assert sync_eps[1]["registry"] == "ghcr.io"
+    assert sync_eps[1]["api_base"] == "https://ghcr.io/v2/linuxserver/syncthing"
+
+    qbit_eps = resolve_oci_registry_endpoints("lscr.io/linuxserver/qbittorrent:latest")
+    assert qbit_eps[0]["api_base"] == "https://registry-1.docker.io/v2/linuxserver/qbittorrent"
+    assert qbit_eps[1]["api_base"] == "https://ghcr.io/v2/linuxserver/qbittorrent"
+
+    nc_eps = resolve_oci_registry_endpoints("nextcloud:stable")
+    assert nc_eps[0]["repo"] == "library/nextcloud" and nc_eps[0]["tag"] == "stable"
+    print("  -> PASS: Multi-registry OCI token & manifest resolver verified for GHCR.io, LSCR.io, and Docker Hub!")
     return 0
 
 

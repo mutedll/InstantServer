@@ -613,6 +613,7 @@ def _format_usb_windows_diskpart(
 
     if usb_partition_scheme == "mbr_bios":
         dp_lines = [
+            "automount enable",
             f"select disk {disk_number}",
             "clean",
             "convert mbr",
@@ -625,6 +626,7 @@ def _format_usb_windows_diskpart(
         ]
     else:
         dp_lines = [
+            "automount enable",
             f"select disk {disk_number}",
             "clean",
             "convert gpt",
@@ -647,7 +649,7 @@ def _format_usb_windows_diskpart(
         except Exception:
             pass
         if is_admin:
-            subprocess.run(
+            dp_res = subprocess.run(
                 ["diskpart", "/s", dp_script_path],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -655,13 +657,19 @@ def _format_usb_windows_diskpart(
                 check=False,
                 **_win_no_window_kwargs(),
             )
+            if dp_res.returncode != 0:
+                raise RuntimeError(
+                    f"Windows diskpart failed on Disk {disk_number} (exit {dp_res.returncode}). "
+                    "Close any File Explorer windows open on the USB drive and try again."
+                )
         else:
             ps_cmd = (
-                f"Start-Process -FilePath 'diskpart.exe' "
+                f"$p = Start-Process -FilePath 'diskpart.exe' "
                 f"-ArgumentList '/s', '{dp_script_path}' "
-                f"-Verb RunAs -WindowStyle Hidden -Wait"
+                f"-Verb RunAs -WindowStyle Hidden -Wait -PassThru; "
+                f"if ($null -eq $p) {{ exit 99 }}; exit $p.ExitCode"
             )
-            subprocess.run(
+            dp_res = subprocess.run(
                 ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -669,17 +677,26 @@ def _format_usb_windows_diskpart(
                 check=False,
                 **_win_no_window_kwargs(),
             )
+            if dp_res.returncode != 0:
+                raise RuntimeError(
+                    "Administrator permission (UAC) was declined or diskpart could not format the USB drive. "
+                    "Please run Instant Server as Administrator and try again."
+                )
     finally:
         try:
             os.remove(dp_script_path)
         except Exception:
             pass
 
-    time.sleep(1.2)
-    refreshed = _scan_windows_powershell(allow_large_usb=True)
-    for dev in refreshed:
-        if dev.device_id == f"PhysicalDrive{disk_number}" and dev.mountpoints:
-            return dev.mountpoints[0]
+    # Poll up to 8 seconds for Windows VDS/Explorer to mount and assign the new FAT32 drive letter
+    for _attempt in range(8):
+        time.sleep(1.0)
+        refreshed = _scan_windows_powershell(allow_large_usb=True)
+        for dev in refreshed:
+            if dev.device_id == f"PhysicalDrive{disk_number}" and dev.mountpoints:
+                mount_candidate = dev.mountpoints[0]
+                if os.path.isdir(mount_candidate):
+                    return mount_candidate
     return None
 
 
@@ -813,6 +830,72 @@ def provision_usb_drive(
             target_mount=target_mount,
             event_callback=event_callback,
         )
+
+    # Strict Post-Flash Verification: Never report COMPLETED if a target USB device was selected
+    # but nothing was actually written or apps/cidata failed to copy to the USB drive!
+    if target_device and target_device not in ("staged_local", ""):
+        is_raw_block_target = bool(
+            os.path.exists(target_device) and not os.path.isdir(target_device)
+        )
+        if not is_raw_block_target and (not target_mount or not os.path.isdir(target_mount)):
+            raise RuntimeError(
+                f"USB drive '{target_device}' was not mounted or accessible for writing. "
+                "Please ensure the USB drive is plugged in, formatted, and not locked by another program."
+            )
+        if iso_path and os.path.isfile(iso_path) and not bootable_iso_written:
+            raise RuntimeError(
+                f"Ubuntu Server ISO was not written to USB drive '{target_device}'. "
+                "Please re-insert the USB drive and try flashing again."
+            )
+        if target_mount and os.path.isdir(target_mount):
+            if not copied_files:
+                raise RuntimeError(
+                    f"No cloud-init or app files were copied to '{target_mount}'. Flashing aborted."
+                )
+            required_usb_files = [
+                os.path.join(target_mount, "user-data"),
+                os.path.join(target_mount, "meta-data"),
+                os.path.join(target_mount, "cidata", "user-data"),
+                os.path.join(target_mount, "cidata", "meta-data"),
+            ]
+            if iso_path and os.path.isfile(iso_path):
+                required_usb_files.append(os.path.join(target_mount, "boot", "grub", "grub.cfg"))
+            staged_apps_dir = os.path.join(staged_cidata_dir, "apps")
+            verified_apps: List[str] = []
+            if os.path.isdir(staged_apps_dir):
+                for entry_name in sorted(os.listdir(staged_apps_dir)):
+                    entry_path = os.path.join(staged_apps_dir, entry_name)
+                    if os.path.isdir(entry_path) and os.path.isfile(os.path.join(entry_path, "docker-compose.yml")):
+                        required_usb_files.append(
+                            os.path.join(target_mount, "cidata", "apps", entry_name, "docker-compose.yml")
+                        )
+                        verified_apps.append(entry_name)
+                if verified_apps:
+                    required_usb_files.append(
+                        os.path.join(target_mount, "cidata", "apps", "unpack_and_install_apps.sh")
+                    )
+            missing_on_usb = [p for p in required_usb_files if not os.path.isfile(p) or os.path.getsize(p) == 0]
+            if missing_on_usb:
+                raise RuntimeError(
+                    f"USB write verification failed — {len(missing_on_usb)} critical file(s) missing on USB "
+                    f"(first missing: {os.path.basename(missing_on_usb[0])})."
+                )
+            if hasattr(os, "sync"):
+                try:
+                    os.sync()
+                except Exception:
+                    pass
+            emit_event(
+                "USB_VERIFY_COMPLETE",
+                f"Verified {len(copied_files)} file(s) and {len(verified_apps)} pre-unpacked app bundle(s) on USB ({target_mount}).",
+                {
+                    "mountpoint": target_mount,
+                    "copied_files_count": len(copied_files),
+                    "verified_apps": verified_apps,
+                    "percent": 96,
+                },
+                callback=event_callback,
+            )
 
     emit_event(
         "USB_PROVISION_COMPLETE",

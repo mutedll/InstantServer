@@ -566,6 +566,7 @@ class AsyncPipelineManager:
         self.base_dir = base_dir
         self._lock = threading.Lock()
         self._cancel_requested = threading.Event()
+        self._job_id: int = 0
         self.status: str = "IDLE"
         self.percent: int = 0
         self.job_start_time: float = 0.0
@@ -580,15 +581,25 @@ class AsyncPipelineManager:
         secs = elapsed % 60
         return f"[{mins:02d}:{secs:02d}]"
 
-    def _record_event(self, payload: Dict[str, Any]) -> None:
+    def _record_event(
+        self,
+        payload: Dict[str, Any],
+        job_id: Optional[int] = None,
+        cancel_event: Optional[threading.Event] = None,
+    ) -> None:
         ev = payload.get("event", "")
         data = payload.get("data") or {}
 
         # Honor user cancellation immediately between any chunk/file step
-        if self._cancel_requested.is_set() and ev not in ("JOB_CANCELLED", "JOB_FAILED"):
-            raise InterruptedError("Flashing cancelled by user.")
+        active_cancel = cancel_event if cancel_event is not None else self._cancel_requested
+        if ev not in ("JOB_CANCELLED", "JOB_FAILED"):
+            if active_cancel.is_set() or (job_id is not None and job_id != self._job_id):
+                raise InterruptedError("Flashing cancelled by user.")
 
         with self._lock:
+            if job_id is not None and job_id != self._job_id:
+                return
+
             if "percent" in data:
                 self.percent = max(self.percent, int(data["percent"]))
             elif ev == "M4_COMPILE_COMPLETE":
@@ -597,6 +608,8 @@ class AsyncPipelineManager:
                 self.percent = max(self.percent, 60)
             elif ev == "USB_COPY_CIDATA":
                 self.percent = max(self.percent, 88)
+            elif ev == "USB_VERIFY_COMPLETE":
+                self.percent = max(self.percent, 96)
             elif ev == "USB_PROVISION_COMPLETE":
                 self.percent = 100
 
@@ -620,30 +633,52 @@ class AsyncPipelineManager:
                 }
                 return
 
-            # Clear in-place bar when a transfer phase completes
-            if ev in (
-                "ISO_VERIFIED",
-                "ISO_CACHE_HIT",
-                "ISO_CACHE_FOUND",
-                "USB_COPY_CIDATA",
-                "USB_PROVISION_COMPLETE",
-                "JOB_FAILED",
-                "JOB_CANCELLED",
-            ):
-                self.active_progress = None
-
             entry = dict(payload)
             entry["seq"] = len(self.events) + 1
             entry["elapsed"] = self._elapsed_tag()
             entry["formatted_line"] = f"{entry['elapsed']} {entry.get('message', '')}"
             self.events.append(entry)
 
+            # Clear in-place bar only when the entire job finishes, fails, or is cancelled;
+            # during all active milestone steps, keep active_progress populated so the in-log bar is always visible!
+            if ev in ("USB_PROVISION_COMPLETE", "JOB_FAILED", "JOB_CANCELLED"):
+                self.active_progress = None
+            else:
+                msg_text = str(payload.get("message") or "Working...")
+                stage_label = "Resolving Mirror" if "mirror" in msg_text.lower() else (
+                    "Downloading Ubuntu ISO" if "pulling" in msg_text.lower() or "download" in msg_text.lower() else (
+                        "Formatting & Writing USB" if "usb" in msg_text.lower() or "iso" in msg_text.lower() else "Provisioning"
+                    )
+                )
+                self.active_progress = {
+                    "event": ev,
+                    "label": stage_label,
+                    "stage_percent": float(self.percent),
+                    "detail": msg_text,
+                    "message": msg_text,
+                    "terminal_line": format_terminal_progress_bar(float(self.percent), label=stage_label, detail=msg_text),
+                }
+
     def cancel_job(self) -> Dict[str, Any]:
         with self._lock:
             if self.status != "RUNNING":
                 return {"cancelled": False, "status": self.status}
             self._cancel_requested.set()
-        return {"cancelled": True, "status": "CANCELLING"}
+            self._job_id += 1
+            self.active_progress = None
+            self.error = "Flashing cancelled by user."
+            self.status = "CANCELLED"
+            entry = {
+                "event": "JOB_CANCELLED",
+                "module": "CLI_BRIDGE",
+                "message": "Cancelled: Flashing stopped by user.",
+                "data": {},
+                "seq": len(self.events) + 1,
+                "elapsed": self._elapsed_tag(),
+                "formatted_line": f"{self._elapsed_tag()} Cancelled: Flashing stopped by user.",
+            }
+            self.events.append(entry)
+        return {"cancelled": True, "status": "CANCELLED"}
 
     def start_stage_job(
         self,
@@ -656,9 +691,12 @@ class AsyncPipelineManager:
         paths = ensure_workspace_folder(self.base_dir)
         resolved_out_dir = output_dir or paths["cidata_dir"]
         with self._lock:
-            if self.status == "RUNNING":
-                return {"started": False, "reason": "Job already running"}
-            self._cancel_requested.clear()
+            # Always signal any previous job's cancel event and isolate the new job via a fresh job_id & Event
+            self._cancel_requested.set()
+            self._job_id += 1
+            my_job_id = self._job_id
+            my_cancel_event = threading.Event()
+            self._cancel_requested = my_cancel_event
             self.status = "RUNNING"
             self.percent = 5
             self.job_start_time = time.time()
@@ -667,9 +705,12 @@ class AsyncPipelineManager:
             self.last_result = None
             self.error = None
 
+        def job_cb(ev_payload: Dict[str, Any]) -> None:
+            self._record_event(ev_payload, job_id=my_job_id, cancel_event=my_cancel_event)
+
         def worker() -> None:
             try:
-                self._record_event(
+                job_cb(
                     {
                         "event": "JOB_STARTED",
                         "module": "CLI_BRIDGE",
@@ -689,7 +730,7 @@ class AsyncPipelineManager:
                         iso_cache_dir=paths["iso_dir"],
                         custom_iso_path=prof.custom_iso_path,
                         auto_download=should_pull_iso,
-                        event_callback=self._record_event,
+                        event_callback=job_cb,
                     )
 
                 # Step 2: Stage cidata + Pre-Unpack Selected Self-Hosted Apps
@@ -697,7 +738,7 @@ class AsyncPipelineManager:
                     profile=prof,
                     staging_dir=resolved_out_dir,
                     iso_path_for_debs=resolved_iso,
-                    event_callback=self._record_event,
+                    event_callback=job_cb,
                 )
 
                 # Step 3: Format USB (GPT/MBR) + Extract/Flash Bootable ISO + Write cidata & Apps
@@ -707,29 +748,25 @@ class AsyncPipelineManager:
                     iso_path=resolved_iso,
                     usb_partition_scheme=prof.usb_partition_scheme,
                     format_usb=bool(profile_dict.get("format_usb", True)),
-                    event_callback=self._record_event,
+                    event_callback=job_cb,
                 )
                 summary["usb_provision"] = usb_res
                 with self._lock:
+                    if my_job_id != self._job_id or my_cancel_event.is_set():
+                        return
                     self.active_progress = None
                     self.last_result = summary
                     self.percent = 100
                     self.status = "COMPLETED"
             except InterruptedError as cancel_exc:
-                self._record_event(
-                    {
-                        "event": "JOB_CANCELLED",
-                        "module": "CLI_BRIDGE",
-                        "message": f"Cancelled: {cancel_exc}",
-                        "data": {},
-                    }
-                )
                 with self._lock:
+                    if my_job_id != self._job_id:
+                        return
                     self.active_progress = None
                     self.error = str(cancel_exc)
                     self.status = "CANCELLED"
             except Exception as exc:
-                self._record_event(
+                job_cb(
                     {
                         "event": "JOB_FAILED",
                         "module": "CLI_BRIDGE",
@@ -738,13 +775,15 @@ class AsyncPipelineManager:
                     }
                 )
                 with self._lock:
+                    if my_job_id != self._job_id:
+                        return
                     self.active_progress = None
                     self.error = str(exc)
                     self.status = "FAILED"
 
         t = threading.Thread(target=worker, daemon=True)
         t.start()
-        return {"started": True, "status": "RUNNING"}
+        return {"started": True, "status": "RUNNING", "job_id": my_job_id}
 
     def get_snapshot(self) -> Dict[str, Any]:
         with self._lock:
@@ -765,6 +804,7 @@ class InstantServerJsApi:
         ensure_workspace_folder(self.base_dir)
         self.jobs = AsyncPipelineManager(base_dir=self.base_dir)
         self.force_close_confirmed: bool = False
+        self.close_warning_requested: bool = False
         self.last_heartbeat: float = time.time()
         self.client_connected: bool = False
         self._webview_window: Any = None
@@ -813,12 +853,25 @@ class InstantServerJsApi:
     def poll_build_status(self) -> Dict[str, Any]:
         self.last_heartbeat = time.time()
         self.client_connected = True
-        return self.jobs.get_snapshot()
+        snap = self.jobs.get_snapshot()
+        if self.close_warning_requested:
+            self.close_warning_requested = False
+            snap["close_warning_requested"] = True
+        else:
+            snap["close_warning_requested"] = False
+        return snap
 
     def heartbeat(self) -> Dict[str, Any]:
         self.last_heartbeat = time.time()
         self.client_connected = True
-        return {"ok": True, "status": self.jobs.status}
+        warn_req = self.close_warning_requested
+        if warn_req:
+            self.close_warning_requested = False
+        return {
+            "ok": True,
+            "status": self.jobs.status,
+            "close_warning_requested": warn_req,
+        }
 
     def shutdown_app(self, force: bool = True) -> Dict[str, Any]:
         self.force_close_confirmed = True
@@ -1127,11 +1180,14 @@ def launch_desktop_or_browser_gui(port: int = 8765, open_browser: bool = True) -
             ).start()
 
         def _on_closing() -> Optional[bool]:
+            # CRITICAL: Never call win.evaluate_js() synchronously inside _on_closing()!
+            # On Windows WinForms/WebView2, _on_closing runs on the main UI thread and
+            # calling win.evaluate_js() waits on a semaphore for the UI thread, causing
+            # an instant "Not Responding" deadlock. Setting api.close_warning_requested = True
+            # and returning False immediately (0ms) lets the 350ms status poll open the
+            # warning modal smoothly on the browser thread without blocking the UI thread!
             if api.jobs.status == "RUNNING" and not api.force_close_confirmed:
-                try:
-                    win.evaluate_js("window.__showCloseWhileFlashingWarning && window.__showCloseWhileFlashingWarning()")
-                except Exception:
-                    pass
+                api.close_warning_requested = True
                 return False
             return True
 

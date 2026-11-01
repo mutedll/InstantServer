@@ -1615,6 +1615,21 @@
     // =========================================================================
     async function callBackend(endpoint, method = "GET", payload = null) {
       try {
+        if (window.location.protocol.startsWith("http")) {
+          const targetUrl = window.location.origin + "/" + "api/" + endpoint;
+          const opts = {
+            method,
+            headers: { "Content-Type": "application/json" },
+            cache: "no-store"
+          };
+          if (payload && method === "POST") {
+            opts.body = JSON.stringify(payload);
+          }
+          const resp = await fetch(targetUrl, opts);
+          if (resp.ok) {
+            return await resp.json();
+          }
+        }
         if (window.pywebview && window.pywebview.api) {
           const api = window.pywebview.api;
           if (endpoint === "load-config" && api.load_config) return await api.load_config();
@@ -1626,20 +1641,6 @@
           if (endpoint === "shutdown" && api.shutdown_app) return await api.shutdown_app(true);
           if (endpoint === "status" && api.poll_build_status) return await api.poll_build_status();
           if (endpoint === "discover" && api.discover_servers) return await api.discover_servers(state.hostname);
-        }
-        if (window.location.protocol.startsWith("http")) {
-          const targetUrl = window.location.origin + "/" + "api/" + endpoint;
-          const opts = {
-            method,
-            headers: { "Content-Type": "application/json" }
-          };
-          if (payload && method === "POST") {
-            opts.body = JSON.stringify(payload);
-          }
-          const resp = await fetch(targetUrl, opts);
-          if (resp.ok) {
-            return await resp.json();
-          }
         }
       } catch (_err) {}
       return null;
@@ -1931,15 +1932,21 @@
 
       const linesContainer = document.getElementById("flashLogLines");
       if (linesContainer) {
-        if (state.renderedLogCount > state.flashLogs.length) {
-          linesContainer.innerHTML = "";
-          state.renderedLogCount = 0;
+        const existingNodes = linesContainer.children;
+        while (existingNodes.length > state.flashLogs.length) {
+          linesContainer.removeChild(linesContainer.lastChild);
         }
-        for (let i = state.renderedLogCount; i < state.flashLogs.length; i++) {
-          const row = document.createElement("div");
-          row.className = "term-log-line";
-          row.textContent = state.flashLogs[i];
-          linesContainer.appendChild(row);
+        for (let i = 0; i < state.flashLogs.length; i++) {
+          if (i < existingNodes.length) {
+            if (existingNodes[i].textContent !== state.flashLogs[i]) {
+              existingNodes[i].textContent = state.flashLogs[i];
+            }
+          } else {
+            const row = document.createElement("div");
+            row.className = "term-log-line";
+            row.textContent = state.flashLogs[i];
+            linesContainer.appendChild(row);
+          }
         }
         state.renderedLogCount = state.flashLogs.length;
       }
@@ -1996,13 +2003,14 @@
       state.flashProgress = 6;
       state.logAutoScroll = true;
       state.renderedLogCount = 0;
-      state.flashStatusText = `Preparing Ubuntu Server ${state.ubuntu_release}.1 LTS bootable USB...`;
+      const flashStartEpoch = Date.now();
+      const spinFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+      let spinIdx = 0;
+      state.flashStatusText = `Preparing Ubuntu Server ${state.ubuntu_release} LTS bootable USB...`;
       state.flashLogs = [
-        "[00:00] Saved config to Instant_Server_Data/instant-server-config.json",
-        `[00:01] Target server: ${payload.hostname}.local | Selected apps: ${state.selected_apps.length}`,
-        `[00:02] USB partition scheme: ${state.usb_partition_scheme.toUpperCase()} (Laptop age hint: ${state.laptop_age_hint})`
+        "[00:00] Saved config to Instant_Server_Data/instant-server-config.json"
       ];
-      state.activeProgressLine = buildAsciiTerminalBar(6.0, "Initializing Pipeline", "Checking local ISO cache & mirrors");
+      state.activeProgressLine = buildAsciiTerminalBar(6.0, "Initializing Pipeline", "Checking local ISO cache & Ubuntu mirrors...");
       renderApp();
       state.renderedLogCount = state.flashLogs.length;
       scrollTerminalToBottomIfSticky();
@@ -2021,26 +2029,57 @@
         pollTimer = setInterval(async () => {
           const snap = await callBackend("status", "GET");
           if (!snap) return;
-          state.flashProgress = snap.percent || state.flashProgress;
+          if (snap.close_warning_requested && window.__showCloseWhileFlashingWarning) {
+            window.__showCloseWhileFlashingWarning();
+          }
+          if (!state.flashing) return;
+
+          spinIdx = (spinIdx + 1) % spinFrames.length;
+          const elapsedSec = Math.max(0, Math.floor((Date.now() - flashStartEpoch) / 1000));
+          const elapsedStr = `${String(Math.floor(elapsedSec / 60)).padStart(2, "0")}:${String(elapsedSec % 60).padStart(2, "0")}`;
+
+          state.flashProgress = Math.max(state.flashProgress, Number(snap.percent) || 6);
 
           if (Array.isArray(snap.events) && snap.events.length > 0) {
-            const backendLines = snap.events.map((ev, idx) => {
-              if (ev.formatted_line) return ev.formatted_line;
-              const sec = String(idx + 1).padStart(2, "0");
-              return `[00:${sec}] ${ev.message}`;
+            const backendLines = [];
+            let latestInPlaceFromEvents = null;
+            snap.events.forEach((ev, idx) => {
+              const evName = String(ev.event || "");
+              const msg = String(ev.message || "");
+              if (evName.endsWith("_PROGRESS") || (ev.data && ev.data.in_place)) {
+                latestInPlaceFromEvents = ev;
+              } else {
+                const lineText = ev.formatted_line || `[00:${String(idx + 1).padStart(2, "0")}] ${msg}`;
+                backendLines.push(lineText);
+              }
             });
             state.flashLogs = [
               "[00:00] Saved config to Instant_Server_Data/instant-server-config.json",
               ...backendLines
             ];
-            state.flashStatusText = snap.events[snap.events.length - 1].message;
-          }
+            state.flashStatusText = snap.events[snap.events.length - 1].message || state.flashStatusText;
 
-          if (snap.active_progress && snap.active_progress.terminal_line) {
-            state.activeProgressLine = snap.active_progress.terminal_line;
-            state.flashStatusText = snap.active_progress.message || state.flashStatusText;
-          } else {
-            state.activeProgressLine = "";
+            if (snap.active_progress && snap.active_progress.terminal_line) {
+              state.activeProgressLine = `${spinFrames[spinIdx]} ${snap.active_progress.terminal_line.replace(/^⟳\s*/, "")}`;
+              state.flashStatusText = snap.active_progress.message || state.flashStatusText;
+            } else if (latestInPlaceFromEvents) {
+              const d = latestInPlaceFromEvents.data || {};
+              const stPct = Number(d.stage_percent ?? d.download_percent ?? d.percent ?? state.flashProgress);
+              state.activeProgressLine = buildAsciiTerminalBar(stPct, d.label || "Progress", latestInPlaceFromEvents.message).replace(/^⟳/, spinFrames[spinIdx]);
+              state.flashStatusText = latestInPlaceFromEvents.message;
+            } else if (snap.status === "RUNNING") {
+              state.activeProgressLine = buildAsciiTerminalBar(
+                state.flashProgress,
+                "Active Stage",
+                `${state.flashStatusText} (Elapsed ${elapsedStr})`
+              ).replace(/^⟳/, spinFrames[spinIdx]);
+            }
+          } else if (snap.status === "RUNNING") {
+            state.activeProgressLine = buildAsciiTerminalBar(
+              state.flashProgress,
+              "Active Stage",
+              `${state.flashStatusText} (Elapsed ${elapsedStr})`
+            ).replace(/^⟳/, spinFrames[spinIdx]);
           }
 
           if (snap.status === "COMPLETED") {
@@ -2049,8 +2088,11 @@
             state.flashing = false;
             state.flashProgress = 100;
             state.activeProgressLine = "";
+            const usbInfo = (snap.result && snap.result.usb_provision) || {};
+            const copiedCount = Array.isArray(usbInfo.copied_files) ? usbInfo.copied_files.length : 0;
+            const mountName = usbInfo.target_mount || usbInfo.target_device || "USB drive";
             state.flashStatusText = "Bootable USB drive is ready! Plug it into your old laptop and power it on.";
-            state.flashLogs.push("[DONE] Bootable Ubuntu Server ISO + GRUB autoinstall + pre-unpacked apps written to USB.");
+            state.flashLogs.push(`[DONE] Verified bootable Ubuntu Server ISO + ${copiedCount} cidata & app file(s) on ${mountName}.`);
             showToast("Bootable Instant Server USB is ready");
           } else if (snap.status === "CANCELLED") {
             clearInterval(pollTimer);
@@ -2058,7 +2100,7 @@
             state.flashing = false;
             state.flashCancelled = true;
             state.activeProgressLine = "";
-            state.flashStatusText = "Flashing cancelled by user.";
+            state.flashStatusText = "Flashing cancelled by user — safe to unplug or retry anytime.";
           } else if (snap.status === "FAILED") {
             clearInterval(pollTimer);
             pollTimer = null;
@@ -2068,7 +2110,19 @@
             state.flashLogs.push(`[ERROR] ${snap.error || "Provisioning failed"}`);
           }
           updateFlashPanelInPlace();
-        }, 380);
+        }, 350);
+        return;
+      }
+
+      // If running inside the desktop app (http://127.0.0.1 or pywebview), NEVER fall through
+      // to the browser demo simulation if the backend returned an error!
+      if (window.location.protocol.startsWith("http") || window.pywebview) {
+        state.flashing = false;
+        state.activeProgressLine = "";
+        const errReason = (startRes && startRes.reason) ? startRes.reason : "Could not start background USB flashing service.";
+        state.flashStatusText = `Failed: ${errReason}`;
+        state.flashLogs.push(`[ERROR] ${errReason}`);
+        updateFlashPanelInPlace();
         return;
       }
 
@@ -3726,9 +3780,12 @@ ${storageSnippet}
     window.addEventListener("load", () => {
       attachSleekScrollListeners();
       initAppStartup();
-      setInterval(() => {
-        callBackend("heartbeat", "POST", {});
-      }, 2000);
+      setInterval(async () => {
+        const hb = await callBackend("heartbeat", "POST", {});
+        if (hb && hb.close_warning_requested && window.__showCloseWhileFlashingWarning) {
+          window.__showCloseWhileFlashingWarning();
+        }
+      }, 1000);
     });
   </script>
 </body>
