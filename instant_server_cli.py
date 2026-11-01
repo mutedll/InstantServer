@@ -12,18 +12,13 @@ Responsibilities:
      frozen by PyInstaller, or script directory when run via Python) and automatically creates
      `Instant_Server_Data/` containing `instant-server-config.json`, `cidata/`, `iso_cache/`,
      `logs/`, and the taskbar icons (`instant_server_icon.ico`, `.png`, `.icns`).
-2. Guaranteed Automatic Config Read on Next Launch:
-   - Reads `Instant_Server_Data/instant-server-config.json` (or `./instant-server-config.json`)
-     on startup and injects it directly into the HTML payload (`window.__INSTANT_SERVER_BOOT_CONFIG__`)
-     as well as serving `/api/load-config` so the app always opens straight to the Home Settings
-     view whenever a saved configuration exists.
-3. Photoshop-Style Taskbar & Executable Icon (`IS` with Serif `I` Top & Bottom Bars):
-   - Pure-Python generator creates crisp `.ico` (Windows), `.icns` (macOS), and `.png` (Linux)
-     icons with a deep navy blue background (`#001E36`), sky-blue border (`#31A8FF`), and
-     light-blue `IS` monogram where `I` has top and bottom horizontal bars.
-4. Zero PowerShell / Console Flash on Windows:
-   - Uses `CREATE_NO_WINDOW` (`0x08000000`) on all Windows child subprocesses so no console
-     or PowerShell window ever flashes when launching `InstantServer.exe`.
+2. True Bootable ISO Pulling + USB Flashing Pipeline (`AsyncPipelineManager`):
+   - Automatically pulls the official Ubuntu Server LTS ISO (`ubuntu-24.04.1-live-server-amd64.iso`
+     or `22.04.5`) into `Instant_Server_Data/iso_cache/` (or uses a user-selected local `.iso` file),
+     stages `cidata` + all pre-unpacked Self-Hosted App Store bundles (`apps/<app_id>/`),
+     formats the USB drive (`GPT` for UEFI, `MBR` for Legacy BIOS, or `Auto` Universal),
+     and writes the full bootable Ubuntu Server ISO + patched GRUB `autoinstall` + `CIDATA`!
+3. Guaranteed Automatic Config Read on Next Launch & Zero PowerShell Popup on Windows.
 """
 
 from __future__ import annotations
@@ -67,8 +62,6 @@ def _win_no_window_kwargs() -> Dict[str, Any]:
 def get_launch_root_dir() -> str:
     """
     Return the directory where the user launched the `.exe` or Python script from.
-    When running as a PyInstaller frozen executable (`sys.frozen`), `sys.executable`
-    points to the `.exe` file on disk rather than the temporary `_MEIPASS` folder.
     """
     if getattr(sys, "frozen", False):
         exe_dir = os.path.dirname(os.path.abspath(sys.executable))
@@ -128,16 +121,11 @@ def ensure_workspace_folder(base_dir: Optional[str] = None) -> Dict[str, str]:
 
 
 def get_config_file_path(base_dir: Optional[str] = None) -> str:
-    """Return the canonical path to `Instant_Server_Data/instant-server-config.json`."""
     paths = ensure_workspace_folder(base_dir)
     return paths["config_path"]
 
 
 def load_saved_config(base_dir: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Load `instant-server-config.json` from `Instant_Server_Data/instant-server-config.json`
-    (or migrate from `./instant-server-config.json` if present).
-    """
     paths = ensure_workspace_folder(base_dir)
     candidates = [paths["config_path"], paths["legacy_config_path"]]
     for cfg_path in candidates:
@@ -175,7 +163,6 @@ def load_saved_config(base_dir: Optional[str] = None) -> Dict[str, Any]:
 
 
 def save_local_config(config_data: Dict[str, Any], base_dir: Optional[str] = None) -> Dict[str, Any]:
-    """Save the user's configuration to `Instant_Server_Data/instant-server-config.json`."""
     paths = ensure_workspace_folder(base_dir)
     cfg_path = paths["config_path"]
     with open(cfg_path, "w", encoding="utf-8") as fh:
@@ -189,7 +176,6 @@ def save_local_config(config_data: Dict[str, Any], base_dir: Optional[str] = Non
 
 
 def _filter_server_profile_kwargs(raw: Dict[str, Any]) -> Dict[str, Any]:
-    """Filter a dictionary to valid `m4_config_builder.ServerProfile` dataclass fields."""
     allowed = set(m4_config_builder.ServerProfile.__dataclass_fields__.keys())
     filtered: Dict[str, Any] = {}
     for k, v in raw.items():
@@ -204,14 +190,9 @@ def _filter_server_profile_kwargs(raw: Dict[str, Any]) -> Dict[str, Any]:
 # 0b. Pure-Python Photoshop-Style `IS` Icon Generator (.ico, .png, .icns)
 # ---------------------------------------------------------------------------
 def _render_photoshop_is_rgba(size: int = 128) -> bytes:
-    """
-    Render a Photoshop-inspired dark blue rounded-square icon (`#001E36`) with a
-    sky-blue border (`#31A8FF`) and light-blue `IS` letters (`#66C4FF`) where the
-    capital `I` has distinct top and bottom horizontal serif bars.
-    """
-    bg_rgb = (0, 30, 54)         # Deep Photoshop navy blue (#001E36)
-    border_rgb = (49, 168, 255)  # Photoshop sky blue (#31A8FF)
-    fg_rgb = (102, 196, 255)     # Bright light blue for 'IS' (#66C4FF)
+    bg_rgb = (0, 30, 54)
+    border_rgb = (49, 168, 255)
+    fg_rgb = (102, 196, 255)
 
     rows = bytearray()
     radius = size * 0.21
@@ -271,7 +252,6 @@ def _render_photoshop_is_rgba(size: int = 128) -> bytes:
 
 
 def build_png_bytes(size: int = 128) -> bytes:
-    """Encode the Photoshop-style `IS` icon as a spec-compliant PNG image."""
     raw_scanlines = _render_photoshop_is_rgba(size=size)
 
     def chunk(tag: bytes, data: bytes) -> bytes:
@@ -288,13 +268,6 @@ def generate_photoshop_style_is_icon(
     png_path: Optional[str] = None,
     icns_path: Optional[str] = None,
 ) -> None:
-    """
-    Write:
-      - `ico_path`: Windows `.ico` file (wrapping a 128x128 PNG)
-      - `png_path`: Standard `.png` file
-      - `icns_path`: Apple macOS `.icns` file (`icns` header + `ic07` 128x128 PNG chunk)
-        so macOS PyInstaller `BUNDLE(...)` natively accepts the icon without needing Pillow!
-    """
     png_data = build_png_bytes(size=128)
     if png_path:
         with open(png_path, "wb") as pfh:
@@ -306,7 +279,6 @@ def generate_photoshop_style_is_icon(
         ifh.write(ico_header + ico_entry + png_data)
 
     if icns_path:
-        # Apple ICNS container: 'icns' (4B) + total_len (4B) + 'ic07' (4B, 128x128 PNG) + chunk_len (4B) + png_data
         chunk_len = 8 + len(png_data)
         total_len = 8 + chunk_len
         icns_bytes = b"icns" + struct.pack(">I", total_len) + b"ic07" + struct.pack(">I", chunk_len) + png_data
@@ -517,7 +489,8 @@ def discover_instant_servers_on_lan(
 # 2. Asynchronous Job Runner & Local HTTP / `pywebview` GUI Bridge
 # ---------------------------------------------------------------------------
 class AsyncPipelineManager:
-    def __init__(self) -> None:
+    def __init__(self, base_dir: Optional[str] = None) -> None:
+        self.base_dir = base_dir
         self._lock = threading.Lock()
         self.status: str = "IDLE"
         self.percent: int = 0
@@ -531,11 +504,11 @@ class AsyncPipelineManager:
             ev = payload.get("event", "")
             data = payload.get("data") or {}
             if "percent" in data:
-                self.percent = int(data["percent"])
+                self.percent = max(self.percent, int(data["percent"]))
             elif ev == "M4_COMPILE_COMPLETE":
-                self.percent = max(self.percent, 35)
+                self.percent = max(self.percent, 45)
             elif ev == "M5_STAGING_COMPLETE":
-                self.percent = max(self.percent, 75)
+                self.percent = max(self.percent, 60)
             elif ev == "USB_COPY_CIDATA":
                 self.percent = max(self.percent, 88)
             elif ev == "USB_PROVISION_COMPLETE":
@@ -547,14 +520,15 @@ class AsyncPipelineManager:
         output_dir: Optional[str] = None,
         target_device: Optional[str] = None,
         iso_path: Optional[str] = None,
+        auto_download_iso: Optional[bool] = None,
     ) -> Dict[str, Any]:
-        paths = ensure_workspace_folder()
+        paths = ensure_workspace_folder(self.base_dir)
         resolved_out_dir = output_dir or paths["cidata_dir"]
         with self._lock:
             if self.status == "RUNNING":
                 return {"started": False, "reason": "Job already running"}
             self.status = "RUNNING"
-            self.percent = 10
+            self.percent = 5
             self.events = []
             self.last_result = None
             self.error = None
@@ -565,22 +539,40 @@ class AsyncPipelineManager:
                     {
                         "event": "JOB_STARTED",
                         "module": "CLI_BRIDGE",
-                        "message": f"Validating configuration for '{profile_dict.get('hostname', 'instant-server')}'...",
-                        "data": {"percent": 15},
+                        "message": f"Preparing bootable Instant Server USB for '{profile_dict.get('hostname', 'instant-server')}'...",
+                        "data": {"percent": 8},
                     }
                 )
                 kwargs = _filter_server_profile_kwargs(profile_dict)
                 prof = m4_config_builder.ServerProfile(**kwargs)
+
+                # Step 1: Resolve or Download Official Ubuntu Server ISO (unless disabled in unit test)
+                should_pull_iso = auto_download_iso if auto_download_iso is not None else bool(target_device)
+                resolved_iso = iso_path or prof.custom_iso_path
+                if not resolved_iso or not os.path.isfile(str(resolved_iso)):
+                    resolved_iso = m2_iso_manager.ensure_ubuntu_iso(
+                        release=prof.ubuntu_release,
+                        iso_cache_dir=paths["iso_dir"],
+                        custom_iso_path=prof.custom_iso_path,
+                        auto_download=should_pull_iso,
+                        event_callback=self._record_event,
+                    )
+
+                # Step 2: Stage cidata + Pre-Unpack Selected Self-Hosted Apps
                 summary = m5_payload_packager.stage_cidata_directory(
                     profile=prof,
                     staging_dir=resolved_out_dir,
-                    iso_path_for_debs=iso_path,
+                    iso_path_for_debs=resolved_iso,
                     event_callback=self._record_event,
                 )
+
+                # Step 3: Format USB (GPT/MBR) + Extract/Flash Bootable ISO + Write cidata & Apps
                 usb_res = m3_usb_engine.provision_usb_drive(
                     staged_cidata_dir=resolved_out_dir,
                     target_device=target_device,
-                    iso_path=iso_path,
+                    iso_path=resolved_iso,
+                    usb_partition_scheme=prof.usb_partition_scheme,
+                    format_usb=bool(profile_dict.get("format_usb", True)),
                     event_callback=self._record_event,
                 )
                 summary["usb_provision"] = usb_res
@@ -611,7 +603,7 @@ class AsyncPipelineManager:
                 "status": self.status,
                 "percent": self.percent,
                 "event_count": len(self.events),
-                "events": list(self.events[-40:]),
+                "events": list(self.events[-50:]),
                 "result": self.last_result,
                 "error": self.error,
             }
@@ -621,13 +613,16 @@ class InstantServerJsApi:
     def __init__(self, base_dir: Optional[str] = None) -> None:
         self.base_dir = base_dir or get_launch_root_dir()
         ensure_workspace_folder(self.base_dir)
-        self.jobs = AsyncPipelineManager()
+        self.jobs = AsyncPipelineManager(base_dir=self.base_dir)
 
     def probe_host(self) -> Dict[str, Any]:
         return asdict(m1_host_probe.probe_host_environment())
 
     def scan_usb_devices(self) -> List[Dict[str, Any]]:
         return [asdict(d) for d in m3_usb_engine.scan_host_usb_devices()]
+
+    def get_app_catalog(self) -> List[Dict[str, Any]]:
+        return list(m4_config_builder.SELF_HOSTED_APP_CATALOG)
 
     def load_config(self) -> Dict[str, Any]:
         return load_saved_config(self.base_dir)
@@ -645,12 +640,18 @@ class InstantServerJsApi:
         profile_dict: Dict[str, Any],
         output_dir: Optional[str] = None,
         target_device: Optional[str] = None,
+        auto_download_iso: Optional[bool] = None,
     ) -> Dict[str, Any]:
         paths = ensure_workspace_folder(self.base_dir)
         out_dir = output_dir or paths["cidata_dir"]
         target = target_device or profile_dict.get("selected_usb_device")
         save_local_config(profile_dict, self.base_dir)
-        return self.jobs.start_stage_job(profile_dict, out_dir, target_device=target)
+        return self.jobs.start_stage_job(
+            profile_dict,
+            out_dir,
+            target_device=target,
+            auto_download_iso=auto_download_iso,
+        )
 
     def poll_build_status(self) -> Dict[str, Any]:
         return self.jobs.get_snapshot()
@@ -762,6 +763,9 @@ def launch_desktop_or_browser_gui(port: int = 8765, open_browser: bool = True) -
                 return
             if path == "/api/usb":
                 self._send_json(api.scan_usb_devices())
+                return
+            if path == "/api/apps":
+                self._send_json(api.get_app_catalog())
                 return
             if path == "/api/load-config":
                 self._send_json(api.load_config())
@@ -945,13 +949,14 @@ def _run_self_test() -> int:
         srv.close()
     print("  -> PASS: Multi-threaded LAN TCP service discovery scanner verified!")
 
-    print("[CLI Self-Test] 3. Testing Automatic `Instant_Server_Data/` Folder, Icons (.ico/.icns/.png) & Config...")
+    print("[CLI Self-Test] 3. Testing Automatic `Instant_Server_Data/` Folder, Icons, App Catalog & Build...")
     with tempfile.TemporaryDirectory() as tmpdir:
         api = InstantServerJsApi(base_dir=tmpdir)
         ws_dir = os.path.join(tmpdir, WORKSPACE_FOLDER_NAME)
         assert os.path.isdir(ws_dir)
         assert os.path.isfile(os.path.join(ws_dir, "instant_server_icon.ico"))
         assert os.path.isfile(os.path.join(ws_dir, "instant_server_icon.icns"))
+        assert len(api.get_app_catalog()) >= 18
         assert api.load_config()["exists"] is False
 
         save_res = api.save_config({"hostname": "instant-box", "username": "admin"})
@@ -966,8 +971,10 @@ def _run_self_test() -> int:
                 "password": "InstantPassword99!",
                 "install_mode": "dual_boot",
                 "dual_boot_Allocation_gb": 40,
+                "selected_apps": ["jellyfin", "pihole"],
             },
             output_dir=os.path.join(ws_dir, "cidata"),
+            auto_download_iso=False,
         )
         assert job_start["started"] is True
         for _ in range(40):
@@ -977,7 +984,8 @@ def _run_self_test() -> int:
             time.sleep(0.05)
         assert snap["status"] == "COMPLETED", f"Async build failed: {snap}"
         assert snap["result"]["hostname"] == "instant-box"
-    print("  -> PASS: Automatic workspace folder, .ico/.icns/.png icons & config auto-load verified!")
+        assert snap["result"]["staged_apps"] == ["jellyfin", "pihole"]
+    print("  -> PASS: Automatic workspace folder, 18-app catalog, and async build verified!")
     return 0
 
 

@@ -324,7 +324,6 @@
       }
     }
 
-    /* Applied ONLY when switching tabs — never on toggles, sliders, or expanders */
     .animate-tab-switch {
       animation: fadeSlideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     }
@@ -351,7 +350,7 @@
 
     .setup-window-card {
       width: 100%;
-      max-width: 820px;
+      max-width: 860px;
       max-height: 100%;
       flex: 1;
       min-height: 0;
@@ -366,7 +365,6 @@
       overflow: hidden;
     }
 
-    /* Top Setup Navigation Tabs — Never Squishes Vertically */
     .setup-top-tabs {
       flex-shrink: 0;
       min-height: 48px;
@@ -440,7 +438,6 @@
       border-color: var(--accent);
     }
 
-    /* Scrollable Middle Area Inside Setup Window */
     .setup-body {
       flex: 1;
       min-height: 0;
@@ -464,7 +461,6 @@
       color: var(--text-secondary);
     }
 
-    /* Pinned Bottom Bar Inside Setup Window */
     .setup-footer {
       flex-shrink: 0;
       display: flex;
@@ -483,7 +479,7 @@
       flex-wrap: wrap;
     }
 
-    /* Animated Advanced Options Expander (WinUI SettingsExpander Pattern) */
+    /* Animated Advanced Options Expander */
     .expander-wrap {
       border-radius: var(--radius);
       border: 1px solid var(--border-card);
@@ -547,7 +543,7 @@
     }
 
     /* ==========================================================================
-       MODE 2: Windows 11 Settings Two-Column Layout (Left Acrylic Sidebar + Main)
+       MODE 2: Windows 11 Settings Two-Column Layout
        ========================================================================== */
     .settings-shell {
       display: flex;
@@ -624,7 +620,6 @@
       flex-shrink: 0;
     }
 
-    /* Spacious Scrollable Right Content Area */
     .content-area {
       flex: 1;
       min-height: 0;
@@ -672,7 +667,6 @@
       font-weight: 400;
     }
 
-    /* Clean Normal System Summary Banner (Text Only, No IS Logo Box) */
     .system-summary-banner {
       display: flex;
       align-items: center;
@@ -800,7 +794,91 @@
       flex-shrink: 0;
     }
 
-    /* Controls (Strict 8px Radius, Hover/Active Scale, Slight Bottom Shadow) */
+    /* Self-Hosted App Store Toolbar & Grid */
+    .appstore-toolbar {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 14px 16px;
+      border-radius: var(--radius);
+      background: var(--card-bg-secondary);
+      border: 1px solid var(--border-card);
+    }
+    .appstore-top-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .appstore-filter-pills {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .filter-pill {
+      height: 28px;
+      padding: 0 11px;
+      border-radius: 999px;
+      border: 1px solid var(--border-control);
+      background: var(--control-bg);
+      color: var(--text-secondary);
+      font-family: var(--font-sans);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+    }
+    .filter-pill:hover {
+      background: var(--control-bg-hover);
+      color: var(--text-primary);
+    }
+    .filter-pill.active {
+      background: var(--accent);
+      color: var(--accent-text);
+      border-color: var(--accent);
+      font-weight: 600;
+    }
+
+    .appstore-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 8px;
+    }
+    .app-card {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 13px 15px;
+      border-radius: var(--radius);
+      background: var(--card-bg);
+      border: 1px solid var(--border-card);
+      box-shadow: var(--shadow-card);
+      cursor: pointer;
+      transition: background 0.14s ease, border-color 0.14s ease, transform 0.1s ease;
+    }
+    .app-card:hover {
+      background: var(--card-bg-hover);
+    }
+    .app-card:active {
+      transform: scale(0.994);
+    }
+    .app-card.checked {
+      border-color: var(--accent);
+      background: var(--accent-subtle);
+    }
+    .app-checkbox {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--accent);
+      margin-top: 2px;
+      flex-shrink: 0;
+      pointer-events: none;
+    }
+
+    /* Controls */
     .win-btn {
       height: 34px;
       padding: 0 15px;
@@ -830,6 +908,12 @@
     .win-btn:disabled {
       opacity: 0.45;
       cursor: not-allowed;
+    }
+
+    .win-btn-sm {
+      height: 29px;
+      padding: 0 11px;
+      font-size: 12px;
     }
 
     .win-btn-accent {
@@ -874,12 +958,10 @@
       background: var(--control-bg);
     }
 
-    /* ==========================================================================
-       Windows 11 Settings Custom ComboBox Dropdown (Replaces Ugly Browser Select)
-       ========================================================================== */
+    /* Windows 11 Settings Custom ComboBox Dropdown */
     .win-combobox {
       position: relative;
-      min-width: 220px;
+      min-width: 240px;
       user-select: none;
     }
     .win-combobox-trigger {
@@ -1098,7 +1180,6 @@
       user-select: text;
     }
 
-    /* Bottom Navigation & Centered Flash Bar */
     .bottom-nav-row {
       display: flex;
       align-items: center;
@@ -1132,7 +1213,6 @@
       user-select: text;
     }
 
-    /* Toast Notification */
     .toast-msg {
       position: fixed;
       bottom: 20px;
@@ -1184,12 +1264,15 @@
       .titlebar-left, .titlebar-right {
         min-width: auto;
       }
+      .appstore-grid {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
 <body>
   <div class="app-window">
-    <!-- Unified Window Titlebar (Text Title Only, Merged Search Bar, No Extra OS Caption Buttons) -->
+    <!-- Unified Window Titlebar -->
     <header class="window-titlebar">
       <div class="titlebar-left">
         <button class="titlebar-back" id="btnTitleBack" title="Back">←</button>
@@ -1217,7 +1300,7 @@
       </div>
     </header>
 
-    <!-- MODE 1: First-Run Windows Setup Window (Pinned Top Tabs + Scrollable Body + Pinned Footer) -->
+    <!-- MODE 1: First-Run Windows Setup Window -->
     <div class="setup-shell" id="setupShellView">
       <div class="setup-window-card">
         <nav class="setup-top-tabs" id="setupTopTabs"></nav>
@@ -1226,7 +1309,7 @@
       </div>
     </div>
 
-    <!-- MODE 2: Main Settings Home Window (Windows 11 Settings Style) -->
+    <!-- MODE 2: Main Settings Home Window -->
     <div class="settings-shell" id="settingsShellView" style="display: none;">
       <aside class="nav-sidebar" id="settingsSidebar" tabindex="0">
         <nav class="nav-list" id="settingsNavList"></nav>
@@ -1241,12 +1324,43 @@
 
   <script>
     // =========================================================================
-    // Application State (Tab-Only Animation Flag + Automatic Config Loading)
+    // Curated 18-App Self-Hosted App Store Catalog (Bundled onto USB from Host PC)
     // =========================================================================
+    const APP_STORE_CATALOG = [
+      { id: "jellyfin", title: "Jellyfin", category: "Media & Photos", recommended: true, tag: "Movies & TV", ram: "512 MB", desc: "Stream your movies, TV shows, and music to any phone, smart TV, or browser with zero subscriptions." },
+      { id: "nextcloud", title: "Nextcloud", category: "Cloud & Files", recommended: true, tag: "Personal Cloud", ram: "512 MB", desc: "Private Google Drive & Google Workspace replacement for files, calendars, contacts, and phone backups." },
+      { id: "pihole", title: "Pi-hole", category: "Network & Ad-Block", recommended: true, tag: "Ad Blocker", ram: "128 MB", desc: "Network-wide DNS ad-blocker that blocks ads and trackers on every device connected to your Wi-Fi." },
+      { id: "immich", title: "Immich", category: "Media & Photos", recommended: true, tag: "Photo Backup", ram: "1 GB", desc: "Fast self-hosted Google Photos alternative with automatic mobile camera backup and album sharing." },
+      { id: "homeassistant", title: "Home Assistant", category: "Smart Home", recommended: true, tag: "Smart Home", ram: "512 MB", desc: "Control and automate smart lights, plugs, sensors, and Zigbee/Matter devices locally in your home." },
+      { id: "vaultwarden", title: "Vaultwarden", category: "Security & Tools", recommended: true, tag: "Passwords", ram: "64 MB", desc: "Lightweight Bitwarden-compatible password manager server for browser extensions and mobile apps." },
+      { id: "adguardhome", title: "AdGuard Home", category: "Network & Ad-Block", recommended: false, tag: "Family DNS", ram: "128 MB", desc: "DNS ad-blocker, family parental control filter, and encrypted DNS-over-HTTPS dashboard." },
+      { id: "plex", title: "Plex Media Server", category: "Media & Photos", recommended: false, tag: "Movies & TV", ram: "512 MB", desc: "Organize and stream personal movies, TV shows, and music to Plex apps on any smart TV or console." },
+      { id: "syncthing", title: "Syncthing", category: "Cloud & Files", recommended: false, tag: "File Sync", ram: "128 MB", desc: "Continuous peer-to-peer folder synchronization across your computers and phones." },
+      { id: "filebrowser", title: "FileBrowser", category: "Cloud & Files", recommended: false, tag: "Web Files", ram: "64 MB", desc: "Simple web file manager to browse, upload, download, and share files stored on your server." },
+      { id: "qbittorrent", title: "qBittorrent", category: "Media & Photos", recommended: false, tag: "Downloads", ram: "256 MB", desc: "Web-based torrent download client with magnet link and RSS feed automation." },
+      { id: "uptimekuma", title: "Uptime Kuma", category: "Security & Tools", recommended: false, tag: "Monitoring", ram: "128 MB", desc: "Self-hosted status monitor that alerts you if your websites, home services, or internet go down." },
+      { id: "portainer", title: "Portainer CE", category: "Security & Tools", recommended: false, tag: "Containers", ram: "128 MB", desc: "Visual management UI for Docker containers, images, volumes, and Compose stacks." },
+      { id: "nginxproxymanager", title: "Nginx Proxy Manager", category: "Network & Ad-Block", recommended: false, tag: "Reverse Proxy", ram: "128 MB", desc: "Route custom domain names to your home apps with free Let's Encrypt HTTPS certificates." },
+      { id: "paperless", title: "Paperless-ngx", category: "Cloud & Files", recommended: false, tag: "Document OCR", ram: "512 MB", desc: "Document scanner and archive that turns PDFs, receipts, and bills into searchable text." },
+      { id: "stirlingpdf", title: "Stirling-PDF", category: "Security & Tools", recommended: false, tag: "PDF Toolkit", ram: "256 MB", desc: "All-in-one local web toolkit to merge, split, compress, convert, and sign PDF files privately." },
+      { id: "navidrome", title: "Navidrome", category: "Media & Photos", recommended: false, tag: "Music Server", ram: "64 MB", desc: "Fast, lightweight personal music streaming server compatible with Subsonic mobile apps." },
+      { id: "gitea", title: "Gitea", category: "Security & Tools", recommended: false, tag: "Git Server", ram: "128 MB", desc: "Lightweight self-hosted GitHub alternative for private code repositories and issues." }
+    ];
+
+    const APP_CATEGORIES = [
+      "All",
+      "Recommended",
+      "Media & Photos",
+      "Cloud & Files",
+      "Network & Ad-Block",
+      "Smart Home",
+      "Security & Tools"
+    ];
+
     const SETUP_TABS = [
       { id: "network", label: "Network" },
-      { id: "apps", label: "Apps" },
-      { id: "storage", label: "Storage & USB" },
+      { id: "apps", label: "Apps & Store" },
+      { id: "storage", label: "Laptop & USB" },
       { id: "power", label: "Power" },
       { id: "finish", label: "Finish" }
     ];
@@ -1254,13 +1368,12 @@
     const SETTINGS_TABS = [
       { id: "system", label: "System", icon: "💻" },
       { id: "network", label: "Network & internet", icon: "🌐" },
-      { id: "apps", label: "Apps & dashboards", icon: "🧩" },
-      { id: "storage", label: "Storage & USB", icon: "🖴" },
+      { id: "apps", label: "Apps & store", icon: "🧩" },
+      { id: "storage", label: "Laptop & USB flash", icon: "🖴" },
       { id: "power", label: "Power & battery", icon: "🔋" },
       { id: "config", label: "Configuration & LAN", icon: "📄" }
     ];
 
-    // Controls whether the next render plays the full tab transition animation
     let shouldAnimateTab = true;
 
     const state = {
@@ -1279,7 +1392,7 @@
       configSavedLocally: false,
       savedConfigPath: "Instant_Server_Data/instant-server-config.json",
 
-      // User Configuration (Starts with empty Wi-Fi, passwords, and optional fields)
+      // Q1: Identity & Network
       hostname: "instant-server",
       username: "admin",
       password: "",
@@ -1291,15 +1404,26 @@
       static_dns: "",
       ssh_authorized_key: "",
 
-      // Apps & Services
+      // Q2: Dashboards & Pre-Selected Self-Hosted Apps
       dashboard_choice: "both",
+      selected_apps: ["jellyfin", "nextcloud", "pihole", "immich", "homeassistant", "vaultwarden"],
+      appSearchQuery: "",
+      appCategoryFilter: "All",
+      prebundle_offline_images: false,
       enable_pihole_dns_prep: true,
       enable_samba_nas: true,
       enable_intel_vaapi: true,
       enable_tailscale: false,
       tailscale_authkey: "",
 
-      // Target Laptop Storage Mode & USB
+      // Q3: Target Laptop Hardware Questionnaire, ISO Source & USB Partitioning
+      laptop_age_hint: "unknown",      // 'unknown', 'modern_uefi', 'legacy_bios'
+      laptop_ram_hint: "unknown",      // 'unknown', 'low_2_4gb', 'standard_8gb_plus'
+      usb_partition_scheme: "auto",    // 'auto' (Universal Hybrid), 'gpt_uefi' (GPT), 'mbr_bios' (MBR)
+      iso_source_mode: "official_dl",  // 'official_dl' (Auto-pull from Ubuntu), 'local_file'
+      custom_iso_path: "",
+      confirm_usb_erase: true,
+
       install_mode: "dual_boot",
       dual_boot_Allocation_gb: 45,
       confirm_erase_main_drive: false,
@@ -1307,7 +1431,7 @@
       storage_layout: "direct",
       boot_mode: "auto",
 
-      // Laptop Power & Survival
+      // Q4: Laptop Power & Survival
       ignore_lid_switch: true,
       screen_blank_seconds: "60",
       battery_charge_start_pct: 40,
@@ -1351,7 +1475,7 @@
     }
 
     // =========================================================================
-    // Backend Hardware Bridge (pywebview JS API + Local Desktop Server + Fallback)
+    // Backend Hardware Bridge
     // =========================================================================
     async function callBackend(endpoint, method = "GET", payload = null) {
       try {
@@ -1378,9 +1502,7 @@
             return await resp.json();
           }
         }
-      } catch (_err) {
-        // Fallback when running in standalone preview without Python backend
-      }
+      } catch (_err) {}
       return null;
     }
 
@@ -1398,11 +1520,19 @@
         static_dns: state.static_dns ? state.static_dns.split(",").map(s => s.trim()).filter(Boolean) : [],
         ssh_authorized_keys: state.ssh_authorized_key.trim() ? [state.ssh_authorized_key.trim()] : [],
         dashboard_choice: state.dashboard_choice,
+        selected_apps: Array.isArray(state.selected_apps) ? state.selected_apps : [],
+        prebundle_offline_images: state.prebundle_offline_images,
         enable_pihole_dns_prep: state.enable_pihole_dns_prep,
         enable_samba_nas: state.enable_samba_nas,
         enable_intel_vaapi: state.enable_intel_vaapi,
         enable_tailscale: state.enable_tailscale,
         tailscale_authkey: state.tailscale_authkey.trim(),
+        laptop_age_hint: state.laptop_age_hint,
+        laptop_ram_hint: state.laptop_ram_hint,
+        usb_partition_scheme: state.usb_partition_scheme,
+        custom_iso_path: state.iso_source_mode === "local_file" ? state.custom_iso_path.trim() : "",
+        confirm_usb_erase: state.confirm_usb_erase,
+        format_usb: true,
         install_mode: state.install_mode,
         dual_boot_Allocation_gb: Number(state.dual_boot_Allocation_gb) || 45,
         confirm_erase_main_drive: state.confirm_erase_main_drive,
@@ -1425,9 +1555,10 @@
       const keys = [
         "hostname", "username", "password", "wifi_ssid", "wifi_password",
         "enable_usb_tethering", "static_ip_cidr", "static_gateway",
-        "dashboard_choice", "enable_pihole_dns_prep", "enable_samba_nas",
-        "enable_intel_vaapi", "enable_tailscale", "tailscale_authkey",
-        "install_mode", "dual_boot_Allocation_gb", "confirm_erase_main_drive",
+        "dashboard_choice", "prebundle_offline_images", "enable_pihole_dns_prep",
+        "enable_samba_nas", "enable_intel_vaapi", "enable_tailscale", "tailscale_authkey",
+        "laptop_age_hint", "laptop_ram_hint", "usb_partition_scheme", "custom_iso_path",
+        "confirm_usb_erase", "install_mode", "dual_boot_Allocation_gb", "confirm_erase_main_drive",
         "ubuntu_release", "storage_layout", "boot_mode", "ignore_lid_switch",
         "screen_blank_seconds", "battery_charge_start_pct", "battery_charge_stop_pct",
         "ups_shutdown_battery_pct", "enable_low_ram_zram", "safe_gpu_nomodeset"
@@ -1435,6 +1566,12 @@
       keys.forEach(k => {
         if (cfg[k] !== undefined) state[k] = cfg[k];
       });
+      if (Array.isArray(cfg.selected_apps)) {
+        state.selected_apps = cfg.selected_apps;
+      }
+      if (cfg.custom_iso_path && String(cfg.custom_iso_path).trim()) {
+        state.iso_source_mode = "local_file";
+      }
       state.screen_blank_seconds = String(state.screen_blank_seconds || "60");
       state.ubuntu_release = String(state.ubuntu_release || "24.04");
       if (Array.isArray(cfg.static_dns)) {
@@ -1448,7 +1585,6 @@
     async function initAppStartup() {
       let loadedFromDisk = false;
 
-      // 1. Check synchronous boot config injected by instant_server_cli.py
       if (window.__INSTANT_SERVER_BOOT_CONFIG__ && window.__INSTANT_SERVER_BOOT_CONFIG__.exists && window.__INSTANT_SERVER_BOOT_CONFIG__.config) {
         applyConfigToState(window.__INSTANT_SERVER_BOOT_CONFIG__.config);
         state.configSavedLocally = true;
@@ -1457,7 +1593,6 @@
         loadedFromDisk = true;
       }
 
-      // 2. Also query backend load-config endpoint (for pywebview / HTTP server)
       if (!loadedFromDisk) {
         const res = await callBackend("load-config", "GET");
         if (res && res.exists && res.config) {
@@ -1469,7 +1604,6 @@
         }
       }
 
-      // 3. Fallback to browser localStorage when previewing in standalone Canvas
       if (!loadedFromDisk) {
         try {
           const cached = localStorage.getItem("instant_server_saved_config");
@@ -1502,6 +1636,7 @@
             size_gb: 32.0,
             bus: "usb",
             removable: true,
+            mountpoints: ["D:\\"],
             triple_lock_passed: true,
             block_reasons: []
           },
@@ -1512,6 +1647,7 @@
             size_gb: 512.0,
             bus: "nvme",
             removable: false,
+            mountpoints: ["C:\\"],
             triple_lock_passed: false,
             block_reasons: ["System OS drive is protected"]
           }
@@ -1549,7 +1685,7 @@
     }
 
     // =========================================================================
-    // Validation & Real Flashing Execution (Logs + Neat Progress Bar)
+    // Validation & Real Bootable ISO + USB Flashing Execution
     // =========================================================================
     function checkIncompleteRequirements() {
       const missing = [];
@@ -1568,9 +1704,15 @@
       if (state.install_mode === "auto_erase" && !state.confirm_erase_main_drive) {
         missing.push("Confirm 'I know what I'm doing' for Erase Main Drive mode, or switch to Dual-Boot.");
       }
+      if (state.iso_source_mode === "local_file" && !state.custom_iso_path.trim()) {
+        missing.push("Enter the file path to your local Ubuntu Server .iso file, or switch to Automatic Official ISO Download.");
+      }
       const usb = state.usbDevices.find(d => d.device_id === state.selectedUsbId && d.triple_lock_passed);
       if (!usb) {
-        missing.push("Select an approved removable USB flash drive in Storage & USB.");
+        missing.push("Select an approved removable USB flash drive in Laptop & USB.");
+      }
+      if (!state.confirm_usb_erase) {
+        missing.push("Confirm that all existing data on the selected USB drive will be erased and formatted.");
       }
       return missing;
     }
@@ -1591,11 +1733,12 @@
       } catch (_e) {}
 
       state.flashing = true;
-      state.flashProgress = 8;
-      state.flashStatusText = "Starting Instant Server USB provisioning...";
+      state.flashProgress = 6;
+      state.flashStatusText = "Pulling Ubuntu Server ISO & preparing bootable USB...";
       state.flashLogs = [
         "[00:00] Saved config to Instant_Server_Data/instant-server-config.json",
-        `[00:01] Target server: ${payload.hostname}.local (${payload.username})`
+        `[00:01] Target server: ${payload.hostname}.local | Selected apps: ${state.selected_apps.length}`,
+        `[00:02] USB partition scheme: ${state.usb_partition_scheme.toUpperCase()} (Laptop age hint: ${state.laptop_age_hint})`
       ];
       renderApp();
 
@@ -1605,7 +1748,7 @@
         pollTimer = setInterval(async () => {
           const snap = await callBackend("status", "GET");
           if (!snap) return;
-          state.flashProgress = snap.percent || Math.min(95, state.flashProgress + 12);
+          state.flashProgress = snap.percent || Math.min(95, state.flashProgress + 8);
           if (Array.isArray(snap.events) && snap.events.length > 0) {
             state.flashLogs = snap.events.map((ev, idx) => {
               const sec = String(idx + 1).padStart(2, "0");
@@ -1617,9 +1760,9 @@
             clearInterval(pollTimer);
             state.flashing = false;
             state.flashProgress = 100;
-            state.flashStatusText = "USB drive is ready! Plug it into your laptop and boot from USB.";
-            state.flashLogs.push("[DONE] Instant Server USB provisioning completed.");
-            showToast("Instant Server USB is ready");
+            state.flashStatusText = "Bootable USB drive is ready! Plug it into your old laptop and power it on.";
+            state.flashLogs.push("[DONE] Bootable Ubuntu Server ISO + GRUB autoinstall + pre-unpacked apps written to USB.");
+            showToast("Bootable Instant Server USB is ready");
           } else if (snap.status === "FAILED") {
             clearInterval(pollTimer);
             state.flashing = false;
@@ -1633,12 +1776,15 @@
 
       const selectedUsb = state.usbDevices.find(d => d.device_id === state.selectedUsbId);
       const usbLabel = selectedUsb ? `${selectedUsb.model} (${selectedUsb.device_node})` : "USB Drive";
+      const schemeDesc = state.usb_partition_scheme === "mbr_bios"
+        ? "MBR (Legacy BIOS + CSM active boot)"
+        : "GPT + Hybrid UEFI/BIOS";
       const steps = [
-        { pct: 24, msg: `Verified Ubuntu Server ${state.ubuntu_release} LTS image checksum` },
-        { pct: 48, msg: `Writing boot image to ${usbLabel}` },
-        { pct: 72, msg: "Relocating UEFI backup GPT header and creating cidata partition" },
-        { pct: 90, msg: "Writing cloud-init user-data, network config, and laptop power rules" },
-        { pct: 100, msg: "USB drive is ready! Plug it into your laptop and boot from USB." }
+        { pct: 22, msg: `Pulling official Ubuntu Server ${state.ubuntu_release} LTS ISO & verifying SHA256SUMS` },
+        { pct: 44, msg: `Formatting ${usbLabel} as ${schemeDesc} (label: CIDATA)` },
+        { pct: 68, msg: `Extracting bootable ISO tree (EFI/BOOT, casper/vmlinuz, initrd) & patching GRUB autoinstall` },
+        { pct: 86, msg: `Pre-unpacking ${state.selected_apps.length} self-hosted CasaOS app bundle(s) (${state.selected_apps.slice(0, 4).join(", ")}${state.selected_apps.length > 4 ? "..." : ""}) onto USB` },
+        { pct: 100, msg: "Bootable USB drive is ready! Plug it into your old laptop and power it on." }
       ];
       let idx = 0;
       clearInterval(pollTimer);
@@ -1646,25 +1792,25 @@
         if (idx >= steps.length) {
           clearInterval(pollTimer);
           state.flashing = false;
-          showToast("Instant Server USB is ready");
+          showToast("Bootable Instant Server USB is ready");
           renderApp();
           return;
         }
         const st = steps[idx++];
         state.flashProgress = st.pct;
         state.flashStatusText = st.msg;
-        state.flashLogs.push(`[00:0${idx + 1}] ${st.msg}`);
+        state.flashLogs.push(`[00:0${idx + 2}] ${st.msg}`);
         if (st.pct === 100) {
           state.flashing = false;
           clearInterval(pollTimer);
-          showToast("Instant Server USB is ready");
+          showToast("Bootable Instant Server USB is ready");
         }
         renderApp();
       }, 650);
     }
 
     // =========================================================================
-    // Shared UI Builders (Switches, Custom Win11 ComboBox, Expander, Logs)
+    // Shared UI Builders
     // =========================================================================
     function renderSwitch(action, isOn) {
       return `
@@ -1746,7 +1892,7 @@
         ${missingHtml}
         <div class="flash-panel">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
-            <span style="font-weight:600;font-size:13.5px;">${esc(state.flashStatusText || "Preparing USB...")}</span>
+            <span style="font-weight:600;font-size:13.5px;">${esc(state.flashStatusText || "Preparing bootable USB...")}</span>
             <span class="badge ${state.flashProgress === 100 ? "badge-success" : "badge-accent"}">${state.flashProgress}%</span>
           </div>
           <div class="progress-track">
@@ -1773,7 +1919,7 @@
       const usb = state.usbDevices.find(d => d.device_id === state.selectedUsbId && d.triple_lock_passed);
       return {
         modeLabel: modeNames[state.install_mode] || "Dual-Boot",
-        dashLabel: dashNames[state.dashboard_choice] || "Cockpit + CasaOS",
+        dashLabel: `${dashNames[state.dashboard_choice] || "Cockpit + CasaOS"} (${state.selected_apps.length} apps)`,
         usbLabel: usb ? `${usb.model} (${usb.size_gb} GB)` : "No USB selected",
         wifiLabel: state.wifi_ssid.trim() ? state.wifi_ssid.trim() : "Ethernet / USB Tethering"
       };
@@ -1797,12 +1943,13 @@ autoinstall:
     install-server: true
     allow-pw: true
 ${storageSnippet}
+  # Pre-unpacked CasaOS apps on USB: ${state.selected_apps.join(", ") || "none"}
   late-commands:
-    - curtin in-target -- bash /cdrom/cidata/scripts/p2_late_laptop_hardening.sh`;
+    - curtin in-target -- bash /cdrom/cidata/p2_late_laptop_hardening.sh`;
     }
 
     // =========================================================================
-    // Tab Content Builders (With Data Attributes for Flicker-Free In-Place Updates)
+    // Tab Content Builders
     // =========================================================================
     function buildNetworkSection() {
       const basicHtml = `
@@ -1900,15 +2047,50 @@ ${storageSnippet}
       `;
     }
 
+    function renderFilteredAppCardsHtml() {
+      const q = state.appSearchQuery.trim().toLowerCase();
+      const cat = state.appCategoryFilter;
+      const filtered = APP_STORE_CATALOG.filter(app => {
+        if (cat === "Recommended" && !app.recommended) return false;
+        if (cat !== "All" && cat !== "Recommended" && app.category !== cat) return false;
+        if (q && !(app.title + " " + app.desc + " " + app.tag + " " + app.category).toLowerCase().includes(q)) return false;
+        return true;
+      });
+
+      if (filtered.length === 0) {
+        return `<div class="win-card"><div class="card-title">No apps match your search filter.</div></div>`;
+      }
+
+      return filtered.map(app => {
+        const isChecked = state.selected_apps.includes(app.id);
+        return `
+          <div class="app-card ${isChecked ? "checked" : ""}" data-action="toggle-app-card" data-app="${esc(app.id)}">
+            <div style="display:flex;align-items:flex-start;gap:12px;min-width:0;flex:1;">
+              <input type="checkbox" class="app-checkbox" ${isChecked ? "checked" : ""} />
+              <div class="card-text">
+                <div class="card-title">
+                  <span>${esc(app.title)}</span>
+                  ${app.recommended ? `<span class="badge badge-accent">Recommended</span>` : ""}
+                  <span class="badge badge-success">${esc(app.tag)}</span>
+                </div>
+                <div class="card-desc">${esc(app.desc)}</div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
     function buildAppsSection() {
       const dashboards = [
-        { id: "both", icon: "✨", title: "Cockpit + CasaOS", desc: "Install both the system manager and the 1-click app store", rec: true },
-        { id: "cockpit", icon: "🎛", title: "Cockpit", desc: "Lightweight system dashboard for storage, network, and terminal", rec: false },
-        { id: "casaos", icon: "🐳", title: "CasaOS", desc: "1-click self-hosted app store for Jellyfin, Nextcloud, and Docker apps", rec: false },
-        { id: "none", icon: "⌨", title: "SSH Only", desc: "Headless terminal server with no web dashboard", rec: false }
+        { id: "both", icon: "✨", title: "Cockpit + CasaOS", desc: "System web console plus the CasaOS 1-click app store (install even more apps anytime later)", rec: true },
+        { id: "cockpit", icon: "🎛", title: "Cockpit", desc: "Lightweight system manager for storage, network, and terminal", rec: false },
+        { id: "casaos", icon: "🐳", title: "CasaOS", desc: "Self-hosted home cloud dashboard and 1-click Docker app store", rec: false },
+        { id: "none", icon: "⌨", title: "SSH Only", desc: "Minimal terminal server with no web dashboard", rec: false }
       ];
 
       const basicHtml = `
+        <div class="section-label">1. Primary web dashboard</div>
         <div class="card-stack">
           ${dashboards.map(d => {
             const active = state.dashboard_choice === d.id;
@@ -1931,9 +2113,57 @@ ${storageSnippet}
             `;
           }).join("")}
         </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-top:4px;">
+          <div>
+            <div class="section-label" style="margin:0;">2. Pre-select self-hosted apps to bundle onto USB (<span id="lblSelectedAppsCount">${state.selected_apps.length}</span> selected)</div>
+            <div style="font-size:12px;color:var(--text-secondary);">Selected apps are pre-unpacked onto your USB drive and automatically registered into CasaOS & Docker. You can also install more apps later inside CasaOS.</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <button type="button" class="win-btn win-btn-sm" data-action="apps-select-recommended">Recommended</button>
+            <button type="button" class="win-btn win-btn-sm" data-action="apps-select-all">Select all</button>
+            <button type="button" class="win-btn win-btn-sm" data-action="apps-unselect-all">Unselect all</button>
+          </div>
+        </div>
+
+        <div class="appstore-toolbar">
+          <div class="appstore-top-row">
+            <input
+              type="text"
+              class="win-input"
+              style="flex:1;min-width:220px;"
+              id="appStoreSearchInput"
+              data-field="appSearchQuery"
+              value="${esc(state.appSearchQuery)}"
+              placeholder="Search self-hosted apps (e.g. Jellyfin, Nextcloud, Pi-hole, photos, adblock)..."
+            />
+          </div>
+          <div class="appstore-filter-pills" id="appCategoryPills">
+            ${APP_CATEGORIES.map(cat => `
+              <button type="button" class="filter-pill ${state.appCategoryFilter === cat ? "active" : ""}" data-action="filter-app-category" data-category="${esc(cat)}">
+                ${esc(cat)}
+              </button>
+            `).join("")}
+          </div>
+        </div>
+
+        <div class="appstore-grid" id="appStoreGridContainer">
+          ${renderFilteredAppCardsHtml()}
+        </div>
       `;
 
       const advHtml = `
+        <div class="win-card">
+          <div class="card-left">
+            <div class="card-icon">📦</div>
+            <div class="card-text">
+              <div class="card-title">Pre-download container images on this PC (Offline bundle)</div>
+              <div class="card-desc">Downloads the full Docker image layers onto the USB stick from this PC so apps install even without internet</div>
+            </div>
+          </div>
+          <div class="card-right">${renderSwitch("toggle-offline-images", state.prebundle_offline_images)}</div>
+        </div>
+
         <div class="win-card">
           <div class="card-left">
             <div class="card-icon">🛡</div>
@@ -2020,7 +2250,7 @@ ${storageSnippet}
         </div>
       ` : state.install_mode === "auto_erase" ? `
         <div class="notice-banner ${state.confirm_erase_main_drive ? "notice-banner-warning" : ""}" id="bannerAutoErase">
-          <div style="font-weight:600;">Warning: This will erase all files on the target laptop's main drive</div>
+          <div style="font-weight:600;">Warning: This will erase all files on the target laptop's main internal drive</div>
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:4px;">
             <input type="checkbox" data-action="toggle-confirm-erase" ${state.confirm_erase_main_drive ? "checked" : ""} style="accent-color:var(--danger);width:16px;height:16px;" />
             <span>I know what I'm doing — erase the target laptop's main internal drive</span>
@@ -2043,7 +2273,7 @@ ${storageSnippet}
                     ${dev.triple_lock_passed ? "Ready" : "Protected System Drive"}
                   </span>
                 </div>
-                <div class="card-desc">${esc(dev.device_node)} ${dev.block_reasons && dev.block_reasons.length ? "• " + esc(dev.block_reasons[0]) : ""}</div>
+                <div class="card-desc">${esc(dev.device_node)} ${dev.mountpoints && dev.mountpoints.length ? "(" + esc(dev.mountpoints.join(", ")) + ")" : ""} ${dev.block_reasons && dev.block_reasons.length ? "• " + esc(dev.block_reasons[0]) : ""}</div>
               </div>
             </div>
             <div class="card-right">
@@ -2058,10 +2288,51 @@ ${storageSnippet}
       const advHtml = `
         <div class="win-card">
           <div class="card-left">
+            <div class="card-icon">🧭</div>
+            <div class="card-text">
+              <div class="card-title">USB partition scheme & target firmware (Rufus mode)</div>
+              <div class="card-desc">Automatically set from your laptop age answer above, or override manually</div>
+            </div>
+          </div>
+          <div class="card-right">
+            ${renderComboBox("usb_partition_scheme", [
+              { value: "auto", label: "Universal Hybrid (UEFI + Legacy BIOS)" },
+              { value: "gpt_uefi", label: "GPT Partition Scheme for UEFI" },
+              { value: "mbr_bios", label: "MBR Partition Scheme for BIOS / CSM" }
+            ])}
+          </div>
+        </div>
+
+        <div class="win-card">
+          <div class="card-left">
             <div class="card-icon">💿</div>
             <div class="card-text">
-              <div class="card-title">Ubuntu Server version</div>
-              <div class="card-desc">Official Ubuntu Server LTS release</div>
+              <div class="card-title">Ubuntu Server ISO source</div>
+              <div class="card-desc">Pull official ISO automatically from Ubuntu, or use a downloaded .iso file on your PC</div>
+            </div>
+          </div>
+          <div class="card-right" style="flex-wrap:wrap;">
+            ${renderComboBox("iso_source_mode", [
+              { value: "official_dl", label: "Auto-Download Official Ubuntu ISO" },
+              { value: "local_file", label: "Use Local .iso File on This PC" }
+            ])}
+            <input
+              id="customIsoPathInput"
+              class="win-input"
+              style="min-width:240px; ${state.iso_source_mode === "local_file" ? "" : "display:none;"}"
+              data-field="custom_iso_path"
+              value="${esc(state.custom_iso_path)}"
+              placeholder="C:\\Downloads\\ubuntu-24.04.1-live-server-amd64.iso"
+            />
+          </div>
+        </div>
+
+        <div class="win-card">
+          <div class="card-left">
+            <div class="card-icon">🏷</div>
+            <div class="card-text">
+              <div class="card-title">Ubuntu Server LTS release</div>
+              <div class="card-desc">Official Ubuntu Server LTS version</div>
             </div>
           </div>
           <div class="card-right">
@@ -2076,8 +2347,8 @@ ${storageSnippet}
           <div class="card-left">
             <div class="card-icon">🗂</div>
             <div class="card-text">
-              <div class="card-title">Filesystem layout</div>
-              <div class="card-desc">Partition structure on the server drive</div>
+              <div class="card-title">Target laptop filesystem layout</div>
+              <div class="card-desc">Partition structure on the laptop hard drive</div>
             </div>
           </div>
           <div class="card-right">
@@ -2092,7 +2363,44 @@ ${storageSnippet}
 
       return `
         <div class="tab-flow-stack">
-          <div class="section-label">Target laptop hard drive mode</div>
+          <div class="section-label">1. About the target laptop (If you don't know, leave on "I don't know")</div>
+          <div class="card-stack">
+            <div class="win-card">
+              <div class="card-left">
+                <div class="card-icon">🕰</div>
+                <div class="card-text">
+                  <div class="card-title">How old is the target laptop?</div>
+                  <div class="card-desc">Selects the right boot loader (UEFI GPT vs Legacy BIOS MBR). "I don't know" creates a universal hybrid boot USB.</div>
+                </div>
+              </div>
+              <div class="card-right">
+                ${renderComboBox("laptop_age_hint", [
+                  { value: "unknown", label: "I don't know (Universal Hybrid Boot)" },
+                  { value: "modern_uefi", label: "2013 or newer (UEFI + GPT)" },
+                  { value: "legacy_bios", label: "2012 or older (Legacy BIOS + MBR)" }
+                ])}
+              </div>
+            </div>
+
+            <div class="win-card">
+              <div class="card-left">
+                <div class="card-icon">🧠</div>
+                <div class="card-text">
+                  <div class="card-title">How much RAM does the laptop have?</div>
+                  <div class="card-desc">Tunes memory compression (zram) so even 2 GB – 4 GB laptops run containers smoothly</div>
+                </div>
+              </div>
+              <div class="card-right">
+                ${renderComboBox("laptop_ram_hint", [
+                  { value: "unknown", label: "I don't know (Auto-tune memory)" },
+                  { value: "low_2_4gb", label: "2 GB – 4 GB RAM (Low-RAM boost)" },
+                  { value: "standard_8gb_plus", label: "8 GB or more (Standard)" }
+                ])}
+              </div>
+            </div>
+          </div>
+
+          <div class="section-label">2. Target laptop hard drive installation mode</div>
           <div class="card-stack">
             ${modes.map(m => {
               const active = state.install_mode === m.id;
@@ -2118,11 +2426,19 @@ ${storageSnippet}
           </div>
 
           <div style="display:flex;align-items:center;justify-content:space-between;">
-            <div class="section-label" style="margin:0;">Select USB drive to flash</div>
+            <div class="section-label" style="margin:0;">3. Select USB drive to format & make bootable</div>
             <button type="button" class="win-btn" data-action="scan-usb">${state.scanningUsb ? "Scanning..." : "↻ Refresh drives"}</button>
           </div>
           <div class="card-stack">
             ${usbListHtml}
+          </div>
+
+          <div class="notice-banner notice-banner-warning" id="bannerUsbFormatWarn">
+            <div style="font-weight:600;">USB Format Warning: All existing files on the selected USB stick will be erased</div>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:2px;">
+              <input type="checkbox" data-action="toggle-confirm-usb-erase" ${state.confirm_usb_erase ? "checked" : ""} style="accent-color:var(--accent);width:16px;height:16px;" />
+              <span>Format the selected USB drive and write the bootable Ubuntu Server ISO + pre-selected apps</span>
+            </label>
           </div>
 
           ${renderExpander("storage", "Advanced options", advHtml)}
@@ -2223,6 +2539,7 @@ ${storageSnippet}
 
     function buildFinishSection() {
       const sum = buildSummaryLabels();
+      const selectedTitles = APP_STORE_CATALOG.filter(a => state.selected_apps.includes(a.id)).map(a => a.title);
       return `
         <div class="tab-flow-stack">
           <div class="card-stack">
@@ -2258,8 +2575,8 @@ ${storageSnippet}
               <div class="card-left">
                 <div class="card-icon">🧩</div>
                 <div class="card-text">
-                  <div class="card-title">Apps & dashboards</div>
-                  <div class="card-desc">${esc(sum.dashLabel)}</div>
+                  <div class="card-title">Dashboards & ${selectedTitles.length} pre-selected apps</div>
+                  <div class="card-desc">${esc(selectedTitles.join(", ") || "None selected")}</div>
                 </div>
               </div>
               <div class="card-right">
@@ -2271,8 +2588,8 @@ ${storageSnippet}
               <div class="card-left">
                 <div class="card-icon">🖴</div>
                 <div class="card-text">
-                  <div class="card-title">Storage & USB drive</div>
-                  <div class="card-desc">${esc(sum.modeLabel)} • ${esc(sum.usbLabel)}</div>
+                  <div class="card-title">Bootable USB & target laptop mode</div>
+                  <div class="card-desc">${esc(sum.modeLabel)} • ${esc(sum.usbLabel)} • Scheme: ${esc(state.usb_partition_scheme.toUpperCase())}</div>
                 </div>
               </div>
               <div class="card-right">
@@ -2287,7 +2604,7 @@ ${storageSnippet}
     }
 
     // =========================================================================
-    // Render Mode 1: First-Run Windows Setup View (Animates Only on Tab Switch)
+    // Render Mode 1: First-Run Windows Setup View
     // =========================================================================
     function renderSetupView() {
       const topTabsEl = document.getElementById("setupTopTabs");
@@ -2306,11 +2623,11 @@ ${storageSnippet}
 
       const tabIdx = SETUP_TABS.findIndex(t => t.id === state.setupTab);
       const headers = {
-        network: { title: "Connect your server", desc: "Name your server and optionally enter your Wi-Fi details." },
-        apps: { title: "Choose your apps", desc: "Pick the web dashboard and home server tools you want pre-installed." },
-        storage: { title: "Select installation mode and USB drive", desc: "Choose how the target laptop hard drive should be used and pick your USB stick." },
-        power: { title: "Laptop power & battery settings", desc: "Configure lid-close behavior and battery protection for 24/7 running." },
-        finish: { title: "Ready to flash or save", desc: "Flash your USB drive right now, or save your configuration locally and open the home settings page." }
+        network: { title: "Connect your server", desc: "Name your server and optionally enter your home Wi-Fi details." },
+        apps: { title: "Choose dashboards & self-hosted apps", desc: "Pick your web dashboard and check the self-hosted apps you want pre-bundled onto the USB drive." },
+        storage: { title: "Target laptop details & bootable USB", desc: "Tell us if you know how old the laptop is (or pick 'I don't know' for universal boot) and select your USB stick." },
+        power: { title: "Laptop power & battery settings", desc: "Configure lid-close behavior and battery protection for 24/7 operation." },
+        finish: { title: "Ready to format & flash bootable USB", desc: "Pulls the official Ubuntu Server ISO, formats the USB drive, and bundles your config and selected apps." }
       };
       const hdr = headers[state.setupTab] || headers.network;
 
@@ -2348,7 +2665,7 @@ ${storageSnippet}
           ` : `
             <button type="button" class="win-btn" data-action="save-config-home">Save configuration</button>
             <button type="button" class="win-btn win-btn-accent win-btn-large" data-action="start-flash" ${state.flashing ? "disabled" : ""}>
-              ${state.flashing ? "Flashing USB..." : "Confirm & Flash USB"}
+              ${state.flashing ? "Flashing Bootable USB..." : "Confirm & Flash Bootable USB"}
             </button>
           `}
         </div>
@@ -2356,7 +2673,7 @@ ${storageSnippet}
     }
 
     // =========================================================================
-    // Render Mode 2: Main Settings Home Window (Animates Only on Tab Switch)
+    // Render Mode 2: Main Settings Home Window
     // =========================================================================
     function renderSettingsView() {
       const navEl = document.getElementById("settingsNavList");
@@ -2392,7 +2709,7 @@ ${storageSnippet}
             <button type="button" class="win-btn" data-action="save-config-home">Save configuration</button>
             ${isLast ? `
               <button type="button" class="win-btn win-btn-accent win-btn-large" data-action="start-flash" ${state.flashing ? "disabled" : ""}>
-                ${state.flashing ? "Flashing USB..." : "Flash USB"}
+                ${state.flashing ? "Flashing Bootable USB..." : "Flash Bootable USB"}
               </button>
             ` : `
               <button type="button" class="win-btn win-btn-accent" data-action="settings-next">Next →</button>
@@ -2403,15 +2720,7 @@ ${storageSnippet}
 
       if (state.settingsTab === "system") {
         const sum = buildSummaryLabels();
-        const enabledApps = [];
-        if (state.dashboard_choice === "both") enabledApps.push("Cockpit", "CasaOS");
-        else if (state.dashboard_choice === "cockpit") enabledApps.push("Cockpit");
-        else if (state.dashboard_choice === "casaos") enabledApps.push("CasaOS");
-        else enabledApps.push("SSH Only");
-        if (state.enable_pihole_dns_prep) enabledApps.push("Pi-hole DNS");
-        if (state.enable_samba_nas) enabledApps.push("Samba File Share");
-        if (state.enable_intel_vaapi) enabledApps.push("Intel Hardware Acceleration");
-        if (state.enable_tailscale) enabledApps.push("Tailscale VPN");
+        const selectedTitles = APP_STORE_CATALOG.filter(a => state.selected_apps.includes(a.id)).map(a => a.title);
 
         mainEl.innerHTML = `
           <div class="${animClass} tab-flow-stack">
@@ -2448,8 +2757,8 @@ ${storageSnippet}
                 <div class="card-left">
                   <div class="card-icon">🧩</div>
                   <div class="card-text">
-                    <div class="card-title">Apps & dashboards</div>
-                    <div class="card-desc">${esc(enabledApps.join(", "))}</div>
+                    <div class="card-title">Apps & store (${selectedTitles.length} selected)</div>
+                    <div class="card-desc">${esc(selectedTitles.join(", ") || "No extra apps selected")}</div>
                   </div>
                 </div>
                 <div class="card-right"><span>›</span></div>
@@ -2459,8 +2768,8 @@ ${storageSnippet}
                 <div class="card-left">
                   <div class="card-icon">🖴</div>
                   <div class="card-text">
-                    <div class="card-title">Storage & USB</div>
-                    <div class="card-desc">${esc(sum.modeLabel)} • Target USB: ${esc(sum.usbLabel)}</div>
+                    <div class="card-title">Laptop & USB flash</div>
+                    <div class="card-desc">${esc(sum.modeLabel)} • Target USB: ${esc(sum.usbLabel)} • Boot scheme: ${esc(state.usb_partition_scheme.toUpperCase())}</div>
                   </div>
                 </div>
                 <div class="card-right"><span>›</span></div>
@@ -2480,7 +2789,7 @@ ${storageSnippet}
 
             <div class="center-flash-row">
               <button type="button" class="win-btn win-btn-accent win-btn-large" data-action="start-flash" ${state.flashing ? "disabled" : ""}>
-                ${state.flashing ? "Flashing USB..." : "Flash USB"}
+                ${state.flashing ? "Flashing Bootable USB..." : "Flash Bootable USB"}
               </button>
             </div>
 
@@ -2571,8 +2880,8 @@ ${storageSnippet}
       const items = [
         { tab: "network", title: "Server name & admin login", desc: "Change hostname, admin username, and password", keys: "hostname password username login" },
         { tab: "network", title: "Wi-Fi & USB tethering", desc: "Configure wireless SSID, password, and phone USB tethering", keys: "wifi wireless ssid tethering static ip ssh" },
-        { tab: "apps", title: "Cockpit & CasaOS", desc: "Select web dashboards and 1-click container apps", keys: "cockpit casaos docker jellyfin pihole samba tailscale" },
-        { tab: "storage", title: "Hard drive mode & Dual-Boot", desc: "Choose Dual-Boot, Erase main drive, or Select after plugging in", keys: "dual boot erase disk drive storage partition usb flash" },
+        { tab: "apps", title: "Self-Hosted App Store & CasaOS", desc: "Pre-select Jellyfin, Nextcloud, Pi-hole, Immich, Home Assistant, Vaultwarden, and more", keys: "cockpit casaos docker jellyfin nextcloud pihole immich homeassistant vaultwarden plex syncthing qbittorrent portainer" },
+        { tab: "storage", title: "Laptop age, UEFI/BIOS & Bootable USB Flash", desc: "Configure GPT/MBR boot scheme, official Ubuntu ISO download, and Dual-Boot", keys: "dual boot erase disk drive storage partition usb flash iso rufus uefi bios gpt mbr" },
         { tab: "power", title: "Lid close & battery limiter", desc: "Keep running with lid closed and cap battery charge at 60%", keys: "power lid battery ups zram screen blank" },
         { tab: "config", title: "Saved configuration & LAN scanner", desc: "Save instant-server-config.json or scan LAN", keys: "yaml config save lan discover" }
       ].filter(it => (it.title + " " + it.desc + " " + it.keys).toLowerCase().includes(q));
@@ -2641,7 +2950,19 @@ ${storageSnippet}
       if (lbl) lbl.textContent = isOn ? "On" : "Off";
     }
 
-    // Active Scrollbar Highlight on Wheel, Scroll, or Arrow Keys
+    function refreshAppGridInPlace() {
+      const grid = document.getElementById("appStoreGridContainer");
+      if (grid) grid.innerHTML = renderFilteredAppCardsHtml();
+      const countLbl = document.getElementById("lblSelectedAppsCount");
+      if (countLbl) countLbl.textContent = String(state.selected_apps.length);
+      const pillsWrap = document.getElementById("appCategoryPills");
+      if (pillsWrap) {
+        pillsWrap.querySelectorAll(".filter-pill").forEach(btn => {
+          btn.classList.toggle("active", btn.getAttribute("data-category") === state.appCategoryFilter);
+        });
+      }
+    }
+
     function attachSleekScrollListeners() {
       const markScrolling = (el) => {
         if (!el || !el.classList) return;
@@ -2709,11 +3030,10 @@ ${storageSnippet}
       renderSettingsView();
     });
 
-    // Delegated Clicks (In-Place for Toggles, Expanders & Dropdowns; Tab Animation ONLY on Tab Switch)
+    // Delegated Clicks
     document.body.addEventListener("click", async (e) => {
       const target = e.target.closest("[data-action]");
 
-      // Close open dropdown in-place if user clicks anywhere outside a combobox
       if (!e.target.closest(".win-combobox") && state.openDropdownField !== null) {
         state.openDropdownField = null;
         document.querySelectorAll(".win-combobox.open").forEach(cb => cb.classList.remove("open"));
@@ -2722,7 +3042,7 @@ ${storageSnippet}
       if (!target) return;
       const action = target.getAttribute("data-action");
 
-      // 1. Custom Win11 ComboBox Dropdown (In-Place, Zero Flicker)
+      // 1. Custom Win11 ComboBox Dropdown (In-Place)
       if (action === "toggle-dropdown") {
         const field = target.getAttribute("data-field");
         const box = target.closest(".win-combobox");
@@ -2737,6 +3057,19 @@ ${storageSnippet}
         const label = target.getAttribute("data-label") || val;
         if (field) {
           state[field] = val;
+        }
+        // Automatically sync USB partition scheme when user selects laptop age hint
+        if (field === "laptop_age_hint") {
+          if (val === "modern_uefi") state.usb_partition_scheme = "gpt_uefi";
+          else if (val === "legacy_bios") state.usb_partition_scheme = "mbr_bios";
+          else state.usb_partition_scheme = "auto";
+          state.openDropdownField = null;
+          renderApp();
+          return;
+        }
+        if (field === "iso_source_mode") {
+          const isoIn = document.getElementById("customIsoPathInput");
+          if (isoIn) isoIn.style.display = val === "local_file" ? "" : "none";
         }
         state.openDropdownField = null;
         const box = target.closest(".win-combobox");
@@ -2757,7 +3090,39 @@ ${storageSnippet}
         return;
       }
 
-      // 2. Advanced Options Expander (In-Place CSS Grid Transition, Zero Flicker)
+      // 2. Self-Hosted App Store Selection Actions (In-Place, Zero Flicker)
+      if (action === "toggle-app-card") {
+        const appId = target.getAttribute("data-app");
+        if (!appId) return;
+        const idx = state.selected_apps.indexOf(appId);
+        if (idx >= 0) state.selected_apps.splice(idx, 1);
+        else state.selected_apps.push(appId);
+        const nowChecked = state.selected_apps.includes(appId);
+        target.classList.toggle("checked", nowChecked);
+        const cb = target.querySelector(".app-checkbox");
+        if (cb) cb.checked = nowChecked;
+        const countLbl = document.getElementById("lblSelectedAppsCount");
+        if (countLbl) countLbl.textContent = String(state.selected_apps.length);
+        return;
+      } else if (action === "apps-select-all") {
+        state.selected_apps = APP_STORE_CATALOG.map(a => a.id);
+        refreshAppGridInPlace();
+        return;
+      } else if (action === "apps-select-recommended") {
+        state.selected_apps = APP_STORE_CATALOG.filter(a => a.recommended).map(a => a.id);
+        refreshAppGridInPlace();
+        return;
+      } else if (action === "apps-unselect-all") {
+        state.selected_apps = [];
+        refreshAppGridInPlace();
+        return;
+      } else if (action === "filter-app-category") {
+        state.appCategoryFilter = target.getAttribute("data-category") || "All";
+        refreshAppGridInPlace();
+        return;
+      }
+
+      // 3. Advanced Options Expander (In-Place CSS Grid Transition)
       if (action === "toggle-expander") {
         const key = target.getAttribute("data-expander");
         if (key) {
@@ -2770,10 +3135,14 @@ ${storageSnippet}
         return;
       }
 
-      // 3. Toggle Switches (In-Place Thumb Slide, Zero Flicker)
+      // 4. Toggle Switches (In-Place)
       if (action === "toggle-tethering") {
         state.enable_usb_tethering = !state.enable_usb_tethering;
         updateSwitchInPlace(target, state.enable_usb_tethering);
+        return;
+      } else if (action === "toggle-offline-images") {
+        state.prebundle_offline_images = !state.prebundle_offline_images;
+        updateSwitchInPlace(target, state.prebundle_offline_images);
         return;
       } else if (action === "toggle-pihole") {
         state.enable_pihole_dns_prep = !state.enable_pihole_dns_prep;
@@ -2810,9 +3179,12 @@ ${storageSnippet}
         const banner = document.getElementById("bannerAutoErase");
         if (banner) banner.classList.toggle("notice-banner-warning", state.confirm_erase_main_drive);
         return;
+      } else if (action === "toggle-confirm-usb-erase") {
+        state.confirm_usb_erase = !!target.checked;
+        return;
       }
 
-      // 4. Tab Navigation Actions (Trigger Smooth Tab Switch Animation)
+      // 5. Tab Navigation Actions (Trigger Smooth Tab Switch Animation)
       if (action === "switch-setup-tab" || action === "jump-setup-tab") {
         const nextTab = target.getAttribute("data-tab") || "network";
         if (state.setupTab !== nextTab) shouldAnimateTab = true;
@@ -2915,13 +3287,15 @@ ${storageSnippet}
       }
     });
 
-    // Delegated Field Inputs (In-Place Slider & Text Updates — Zero Re-Render Flicker!)
+    // Delegated Field Inputs (In-Place Slider, App Search & Text Updates)
     document.body.addEventListener("input", (e) => {
       const field = e.target.getAttribute("data-field");
       if (!field) return;
       state[field] = e.target.value;
 
-      if (field === "hostname") {
+      if (field === "appSearchQuery") {
+        refreshAppGridInPlace();
+      } else if (field === "hostname") {
         const hostDesc = document.getElementById("descServerHostname");
         if (hostDesc) {
           hostDesc.textContent = `Name used to reach your server on your home network (${state.hostname || "instant-server"}.local)`;

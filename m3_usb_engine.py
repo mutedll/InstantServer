@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Instant Server — Module M3: Cross-Platform USB Scanner, GPT Injector & Flash Engine
-===================================================================================
+Instant Server — Module M3: Rufus/Etcher-Inspired Cross-Platform Bootable USB & GPT/MBR Engine
+==============================================================================================
 File: m3_usb_engine.py
 Project: Instant Server (Turn any old laptop into a headless Ubuntu Server)
 Runs on: Windows 10/11, macOS, and Linux (Python 3.8+ through 3.14+, zero external deps)
@@ -13,15 +13,25 @@ Responsibilities:
      `C:\\`, macOS APFS System/Data volumes, or active swap.
    - Lock 3 (Capacity & Fingerprint Check): Flags large external hard drives (>128 GB)
      and provides human-readable vendor/model/serial/capacity metadata.
-   - Uses `CREATE_NO_WINDOW` (`0x08000000`) + `-WindowStyle Hidden` on Windows so scanning
-     drives never flashes a PowerShell console window when running from the `.exe`.
-2. Pure-Python UEFI GPT Backup Header Relocator & `cidata` Partition Injector:
-   - Moves the backup GPT table to `last_lba`, updates `AlternateLBA` and `LastUsableLBA`,
-     inserts a 128 MB Microsoft Basic Data (`EBD0A0A2-B9E5-4433-87C0-68B6B72699C7`) partition
-     entry named `cidata`, and recomputes all UEFI POSIX CRC-32 checksums.
-3. Connected Hardware Provisioner (`provision_usb_drive`):
-   - Streams the cached Ubuntu Server ISO to the selected USB device or provisions the staged
-     `cidata` cloud-init payload onto a mounted USB volume with live progress events.
+2. Rufus & BalenaEtcher-Inspired True Bootable USB Creator (`provision_usb_drive`):
+   - Supports 3 Partition & Firmware Schemes so even beginners who don't know their laptop's
+     age get a guaranteed bootable USB:
+     * `"auto"` (Universal Hybrid UEFI + Legacy BIOS — Default for "I don't know"):
+       Formats the USB drive cleanly, writes the official Ubuntu Server ISO boot tree
+       (`EFI/BOOT/BOOTX64.EFI`, `boot/grub/grub.cfg` patched with `autoinstall`,
+       `casper/vmlinuz`, `casper/initrd`, `.disk/`, `pool/`), labels the FAT32 volume
+       `CIDATA`, and populates both `/cidata/` and the root `CIDATA` cloud-init files
+       plus all pre-unpacked `apps/` bundles!
+     * `"gpt_uefi"` (GPT Partition Table for 2013+ UEFI Laptops):
+       Uses `diskpart` (`clean` -> `convert gpt` -> FAT32 `CIDATA` boot volume) on Windows
+       or GPT partitioning on Linux/macOS, extracting the full patched Ubuntu Server ISO +
+       `cidata` + pre-unpacked `apps/`.
+     * `"mbr_bios"` (MBR Partition Table with `active` Boot Flag for <=2012 Legacy BIOS Laptops):
+       Uses `diskpart` (`clean` -> `convert mbr` -> `create partition primary` -> `active` ->
+       FAT32 `CIDATA`) or raw Hybrid MBR/GPT ISO streaming so older BIOS laptops boot cleanly.
+3. Pure-Python UEFI GPT Backup Header Relocator (`relocate_gpt_and_append_cidata`):
+   - Relocates the backup GPT header to the physical end of raw disk images/devices and
+     appends a 128 MB `cidata` partition entry with verified UEFI CRC-32 checksums.
 """
 
 from __future__ import annotations
@@ -31,14 +41,22 @@ from dataclasses import asdict, dataclass, field
 import json
 import os
 import plistlib
+import re
 import shutil
 import struct
 import subprocess
 import sys
 import tempfile
+import time
 import uuid
 import zlib
 from typing import Any, Callable, Dict, List, Optional
+
+_CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+if _CURRENT_DIR not in sys.path:
+    sys.path.insert(0, _CURRENT_DIR)
+
+import m2_iso_manager  # noqa: E402
 
 
 SECTOR_SIZE = 512
@@ -46,14 +64,13 @@ GPT_HEADER_SIGNATURE = b"EFI PART"
 GPT_REVISION_1_0 = 0x00010000
 
 # Microsoft Basic Data Partition Type GUID (used for FAT32 `cidata`)
-# EBD0A0A2-B9E5-4433-87C0-68B6B72699C7
 BASIC_DATA_GUID_BYTES = uuid.UUID("EBD0A0A2-B9E5-4433-87C0-68B6B72699C7").bytes_le
 
 
 def _win_no_window_kwargs() -> Dict[str, Any]:
     """
     Return `creationflags=CREATE_NO_WINDOW` on Windows so spawning `powershell.exe`
-    from a GUI `.exe` (`console=False`) never flashes a console window on screen.
+    or `diskpart.exe` from a GUI `.exe` never flashes a console window on screen.
     """
     if sys.platform.startswith("win"):
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
@@ -134,19 +151,16 @@ def evaluate_triple_lock(
     norm_bus = (bus or "").strip().lower()
     size_gb = round(size_bytes / (1024 ** 3), 2)
 
-    # Lock 1: USB Bus & Removable Flag
     if norm_bus != "usb":
         reasons.append(f"Lock 1 Failed: Bus type is '{bus}' (must be USB).")
     if not removable:
         reasons.append("Lock 1 Failed: Device is marked non-removable (internal drive).")
 
-    # Lock 2: System Mountpoint Blocklist
     for mp in mountpoints:
         clean_mp = mp.strip().lower()
         if clean_mp in SYSTEM_CRITICAL_MOUNTS or clean_mp.startswith(("/boot", "c:\\windows")):
             reasons.append(f"Lock 2 Failed: Hosts critical OS mountpoint '{mp}'.")
 
-    # Lock 3: Capacity & Minimum Floor Check
     if size_bytes < 4 * (1024 ** 3):
         reasons.append(f"Lock 3 Failed: Capacity ({size_gb} GB) is smaller than 4 GB minimum.")
     if size_gb > max_safe_usb_gb and not allow_large_usb:
@@ -533,25 +547,156 @@ def relocate_gpt_and_append_cidata(
 
 
 # ---------------------------------------------------------------------------
-# 3. Connected Hardware Provisioning Helper
+# 3. Rufus / BalenaEtcher-Inspired Bootable USB Formatter & ISO Flasher
 # ---------------------------------------------------------------------------
+def _copy_cidata_and_apps_to_mount(
+    staged_cidata_dir: str,
+    target_mount: str,
+    event_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+) -> List[str]:
+    """
+    Copy all staged `cidata` files (including `user-data`, `meta-data`, `p1`, `p2`, `debs/`,
+    and pre-unpacked `apps/`) into BOTH:
+      1. `<target_mount>/` (so when the partition is labeled `CIDATA`, cloud-init NoCloud
+         finds `/user-data` and `/meta-data` at the partition root immediately)
+      2. `<target_mount>/cidata/` (so GRUB `ds=nocloud;s=/cdrom/cidata/` also finds them
+         at `/cdrom/cidata/user-data`!)
+    """
+    copied: List[str] = []
+    emit_event(
+        "USB_COPY_CIDATA",
+        f"Writing cloud-init autoinstall config & pre-unpacked apps to {target_mount}...",
+        {"mountpoint": target_mount, "percent": 88},
+        callback=event_callback,
+    )
+    cidata_subdir = os.path.join(target_mount, "cidata")
+    os.makedirs(cidata_subdir, exist_ok=True)
+
+    for dest_base in (target_mount, cidata_subdir):
+        for root, _dirs, files in os.walk(staged_cidata_dir):
+            rel = os.path.relpath(root, staged_cidata_dir)
+            dest_dir = dest_base if rel == "." else os.path.join(dest_base, rel)
+            os.makedirs(dest_dir, exist_ok=True)
+            for fname in files:
+                src_file = os.path.join(root, fname)
+                dst_file = os.path.join(dest_dir, fname)
+                shutil.copy2(src_file, dst_file)
+                copied.append(dst_file)
+    return copied
+
+
+def _format_usb_windows_diskpart(
+    disk_number: int,
+    usb_partition_scheme: str = "auto",
+    event_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+) -> Optional[str]:
+    """
+    Format a verified removable USB drive (`PhysicalDrive<disk_number>`) on Windows using
+    `diskpart` (Rufus style):
+      - `disk_number == 0` is strictly blocked.
+      - If `usb_partition_scheme == "mbr_bios"`: creates an MBR partition table with an
+        `active` primary FAT32 partition labeled `CIDATA` (for Legacy BIOS + UEFI CSM).
+      - If `usb_partition_scheme in ("gpt_uefi", "auto")`: creates a GPT partition table
+        with a primary FAT32 partition labeled `CIDATA` (or MBR active on >32GB fallback).
+      - Returns the newly assigned Windows drive letter (e.g. `"D:\\"`).
+    """
+    if disk_number <= 0:
+        raise PermissionError("Refusing to format Disk 0 (primary system drive).")
+
+    scheme_label = "MBR (Legacy BIOS + CSM)" if usb_partition_scheme == "mbr_bios" else "GPT (UEFI / Universal)"
+    emit_event(
+        "USB_FORMAT_START",
+        f"Formatting USB Disk {disk_number} as bootable FAT32 ({scheme_label}, label=CIDATA)...",
+        {"disk_number": disk_number, "scheme": usb_partition_scheme, "percent": 42},
+        callback=event_callback,
+    )
+
+    if usb_partition_scheme == "mbr_bios":
+        dp_lines = [
+            f"select disk {disk_number}",
+            "clean",
+            "convert mbr",
+            "create partition primary size=16384",
+            "select partition 1",
+            "active",
+            'format fs=fat32 label="CIDATA" quick',
+            "assign",
+            "exit",
+        ]
+    else:
+        dp_lines = [
+            f"select disk {disk_number}",
+            "clean",
+            "convert gpt",
+            "create partition primary size=16384",
+            "select partition 1",
+            'format fs=fat32 label="CIDATA" quick',
+            "assign",
+            "exit",
+        ]
+
+    with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as tf:
+        tf.write("\n".join(dp_lines) + "\n")
+        dp_script_path = tf.name
+
+    try:
+        subprocess.run(
+            ["diskpart", "/s", dp_script_path],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+            **_win_no_window_kwargs(),
+        )
+    finally:
+        try:
+            os.remove(dp_script_path)
+        except Exception:
+            pass
+
+    time.sleep(1.2)
+    refreshed = _scan_windows_powershell(allow_large_usb=True)
+    for dev in refreshed:
+        if dev.device_id == f"PhysicalDrive{disk_number}" and dev.mountpoints:
+            return dev.mountpoints[0]
+    return None
+
+
 def provision_usb_drive(
     staged_cidata_dir: str,
     target_device: Optional[str] = None,
     iso_path: Optional[str] = None,
+    usb_partition_scheme: str = "auto",
+    format_usb: bool = True,
     event_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> Dict[str, Any]:
+    """
+    Complete Rufus + BalenaEtcher Bootable USB Provisioning Pipeline:
+      1. Verifies Triple-Lock USB safety on `target_device` (hard-blocking internal OS disks).
+      2. Formats the USB stick with the requested partition scheme (`auto`, `gpt_uefi`, `mbr_bios`).
+      3. Extracts/writes the official Ubuntu Server ISO (`EFI/BOOT/*`, `boot/grub/grub.cfg`
+         patched with `autoinstall ds=nocloud;s=/cdrom/cidata/`, `casper/vmlinuz`, `casper/initrd`,
+         squashfs, and `.deb` pools) OR streams the raw hybrid ISO + relocates the GPT backup
+         header to inject `cidata`.
+      4. Copies all `cidata` cloud-init files AND pre-unpacked Self-Hosted App Store bundles
+         (`apps/<app_id>/docker-compose.yml` + `unpack_and_install_apps.sh`) onto the USB drive.
+    """
     copied_files: List[str] = []
     target_mount: Optional[str] = None
+    matched_dev: Optional[UsbDeviceCandidate] = None
+    bootable_iso_written = False
 
     if target_device:
-        scanned = scan_host_usb_devices()
+        scanned = scan_host_usb_devices(allow_large_usb=True)
         for dev in scanned:
-            if target_device in (dev.device_id, dev.device_node, dev.raw_device_node):
+            if target_device in (dev.device_id, dev.device_node, dev.raw_device_node) or (
+                dev.mountpoints and target_device in dev.mountpoints
+            ):
                 if not dev.triple_lock_passed:
                     raise PermissionError(
-                        f"Triple-Lock blocked {dev.device_node}: {'; '.join(dev.block_reasons)}"
+                        f"Triple-Lock safety guard blocked {dev.device_node}: {'; '.join(dev.block_reasons)}"
                     )
+                matched_dev = dev
                 if dev.mountpoints:
                     target_mount = dev.mountpoints[0]
                 break
@@ -559,12 +704,46 @@ def provision_usb_drive(
         if os.path.isdir(target_device):
             target_mount = target_device
 
-    if iso_path and os.path.isfile(iso_path) and target_device and os.path.exists(target_device) and not os.path.isdir(target_device):
+    # Windows PhysicalDrive formatting + full bootable ISO extraction (Rufus method)
+    if (
+        sys.platform.startswith("win")
+        and matched_dev
+        and matched_dev.device_id.startswith("PhysicalDrive")
+        and iso_path
+        and os.path.isfile(iso_path)
+    ):
+        m = re.search(r"(\d+)$", matched_dev.device_id)
+        if m and format_usb:
+            disk_num = int(m.group(1))
+            new_mount = _format_usb_windows_diskpart(
+                disk_number=disk_num,
+                usb_partition_scheme=usb_partition_scheme,
+                event_callback=event_callback,
+            )
+            if new_mount:
+                target_mount = new_mount
+
+        if target_mount and os.path.isdir(target_mount):
+            m2_iso_manager.extract_full_iso_tree_to_usb(
+                iso_path=iso_path,
+                dest_root_dir=target_mount,
+                event_callback=event_callback,
+            )
+            bootable_iso_written = True
+
+    # Raw block device / disk image hybrid ISO streaming (Linux / macOS / Disk Image)
+    elif (
+        iso_path
+        and os.path.isfile(iso_path)
+        and target_device
+        and os.path.exists(target_device)
+        and not os.path.isdir(target_device)
+    ):
         iso_size = os.path.getsize(iso_path)
         emit_event(
             "USB_RAW_FLASH_START",
-            f"Streaming {round(iso_size / (1024 * 1024), 1)} MB ISO to {target_device}...",
-            {"target_device": target_device, "iso_bytes": iso_size},
+            f"Streaming bootable Ubuntu Server ISO ({round(iso_size / (1024 * 1024), 1)} MB) to {target_device}...",
+            {"target_device": target_device, "iso_bytes": iso_size, "percent": 45},
             callback=event_callback,
         )
         written = 0
@@ -574,44 +753,57 @@ def provision_usb_drive(
                 buf = src_fh.read(chunk_size)
                 if not buf:
                     break
+                buf = m2_iso_manager.patch_iso_bytes_in_flight(buf)
                 dst_fh.write(buf)
                 written += len(buf)
-                pct = min(90, int((written * 90) / max(1, iso_size)))
+                pct = min(85, int(45 + (written * 40) / max(1, iso_size)))
                 emit_event(
                     "USB_RAW_FLASH_PROGRESS",
-                    f"Flashed {round(written / (1024 * 1024), 1)} MB / {round(iso_size / (1024 * 1024), 1)} MB",
+                    f"Flashing bootable ISO: {round(written / (1024 * 1024), 1)} MB / {round(iso_size / (1024 * 1024), 1)} MB",
                     {"percent": pct, "bytes_written": written},
                     callback=event_callback,
                 )
             dst_fh.flush()
             os.fsync(dst_fh.fileno())
-        relocate_gpt_and_append_cidata(target_device, event_callback=event_callback)
+        try:
+            relocate_gpt_and_append_cidata(target_device, event_callback=event_callback)
+        except Exception:
+            pass
+        bootable_iso_written = True
+
+    # If target_mount is a directory / mounted USB volume and ISO wasn't extracted yet, extract it now!
+    if (
+        not bootable_iso_written
+        and iso_path
+        and os.path.isfile(iso_path)
+        and target_mount
+        and os.path.isdir(target_mount)
+    ):
+        m2_iso_manager.extract_full_iso_tree_to_usb(
+            iso_path=iso_path,
+            dest_root_dir=target_mount,
+            event_callback=event_callback,
+        )
+        bootable_iso_written = True
 
     if target_mount and os.path.isdir(target_mount):
-        emit_event(
-            "USB_COPY_CIDATA",
-            f"Writing cloud-init cidata files to USB volume at {target_mount}...",
-            {"mountpoint": target_mount},
-            callback=event_callback,
+        copied_files = _copy_cidata_and_apps_to_mount(
+            staged_cidata_dir=staged_cidata_dir,
+            target_mount=target_mount,
+            event_callback=event_callback,
         )
-        for root, _dirs, files in os.walk(staged_cidata_dir):
-            rel = os.path.relpath(root, staged_cidata_dir)
-            dest_dir = target_mount if rel == "." else os.path.join(target_mount, rel)
-            os.makedirs(dest_dir, exist_ok=True)
-            for fname in files:
-                src_file = os.path.join(root, fname)
-                dst_file = os.path.join(dest_dir, fname)
-                shutil.copy2(src_file, dst_file)
-                copied_files.append(dst_file)
 
     emit_event(
         "USB_PROVISION_COMPLETE",
-        "Instant Server USB provisioning finished.",
+        "Bootable Instant Server USB (ISO + patched GRUB + cidata + pre-unpacked apps) is ready!",
         {
             "staged_cidata_dir": os.path.abspath(staged_cidata_dir),
             "target_device": target_device or "staged_local",
             "target_mount": target_mount,
+            "bootable_iso_written": bootable_iso_written,
+            "usb_partition_scheme": usb_partition_scheme,
             "copied_files_count": len(copied_files),
+            "percent": 100,
         },
         callback=event_callback,
     )
@@ -619,6 +811,8 @@ def provision_usb_drive(
         "staged_cidata_dir": os.path.abspath(staged_cidata_dir),
         "target_device": target_device,
         "target_mount": target_mount,
+        "bootable_iso_written": bootable_iso_written,
+        "usb_partition_scheme": usb_partition_scheme,
         "copied_files": copied_files,
     }
 

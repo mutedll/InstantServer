@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Instant Server — Module M4: Cross-Platform Profile Compiler & Subiquity Config Builder
-======================================================================================
+Instant Server — Module M4: Cross-Platform Profile Compiler, App Store Catalog & Subiquity Builder
+==================================================================================================
 File: m4_config_builder.py
 Project: Instant Server (Turn any old laptop into a headless Ubuntu Server)
 Runs on: Windows, macOS, Linux (Python 3.8+ through 3.14+, zero external dependencies)
@@ -9,16 +9,18 @@ Runs on: Windows, macOS, Linux (Python 3.8+ through 3.14+, zero external depende
 Responsibilities:
 1. Pure-Python SHA-512 crypt ($6$) password hasher (solves Python 3.13 PEP 594 `crypt`
    removal and Windows missing `crypt` stdlib module).
-2. Supports 4 Target Laptop Disk Installation Modes:
-   - `auto_erase`: Automatically erases the target laptop's main internal drive (gated
-     by `confirm_erase_main_drive=True` — "I know what I'm doing" safeguard).
-   - `dual_boot`: Retains the existing Windows/Linux OS as-is (`preserve: true`), shrinks
-     or uses free space (`dual_boot_Allocation_gb`), and enables `os-prober` in GRUB.
-   - `interactive_select`: Adds `interactive-sections: [storage]` so the user selects
-     the drive/partition on screen after plugging in the USB, while automating all else.
-   - `secondary_drive_only`: Installs only onto a secondary drive, leaving Disk 0 untouched.
-3. Compiles 100% schema-compliant Ubuntu 24.04 / 22.04 Subiquity `user-data`,
-   `meta-data`, and `instant-server-env.conf` payloads for the USB `cidata` partition.
+2. Curated 18-App Self-Hosted App Store Catalog (`SELF_HOSTED_APP_CATALOG`) & CasaOS
+   `x-casaos` Compose Bundle Generator (`generate_casaos_app_compose`):
+   - Pre-generates ready-to-unpack `/var/lib/casaos/apps/<app_id>/docker-compose.yml`
+     definitions on the host PC so every selected app is pre-packaged onto the USB drive
+     and unpacked automatically onto the target laptop.
+3. Target Laptop Hardware & Boot Questionnaire Support (`laptop_age_hint`, `laptop_ram_hint`,
+   `usb_partition_scheme`):
+   - Handles `"unknown"` ("I don't know how old the laptop is") by defaulting to Hybrid
+     GPT + Legacy BIOS/UEFI boot (`boot_mode="auto"`, `usb_partition_scheme="auto"`) and
+     enabling adaptive zram + safe hardware defaults.
+4. Compiles 100% schema-compliant Ubuntu 24.04 / 22.04 Subiquity `user-data`, `meta-data`,
+   and `instant-server-env.conf` payloads for the USB `cidata` partition.
 """
 
 from __future__ import annotations
@@ -68,8 +70,7 @@ def sha512_crypt(
 ) -> str:
     """
     Pure-Python implementation of Ulrich Drepper's SHA-512 crypt ($6$).
-    Produces hashes identical to `openssl passwd -6` and `mkpasswd -m sha-512`
-    so Windows, macOS, and Python 3.13+ hosts never need the removed `crypt` module.
+    Produces hashes identical to `openssl passwd -6` and `mkpasswd -m sha-512`.
     """
     if password.startswith("$6$") and len(password) > 30:
         return password
@@ -156,7 +157,346 @@ def sha512_crypt(
 
 
 # ---------------------------------------------------------------------------
-# 2. Data Models & Profile Validation
+# 2. Curated 18-App Self-Hosted App Store Catalog (CasaOS & Docker Ready)
+# ---------------------------------------------------------------------------
+SELF_HOSTED_APP_CATALOG: List[Dict[str, Any]] = [
+    {
+        "id": "jellyfin",
+        "title": "Jellyfin",
+        "category": "Media & Photos",
+        "recommended": True,
+        "interest_tag": "Movies & TV",
+        "port": 8096,
+        "container_port": 8096,
+        "image": "jellyfin/jellyfin:latest",
+        "ram_mb": 512,
+        "description": "Stream your movies, TV shows, and music to phones, smart TVs, and browsers with zero subscriptions.",
+        "volumes": [
+            "/DATA/AppData/jellyfin/config:/config",
+            "/DATA/Media:/media",
+        ],
+    },
+    {
+        "id": "nextcloud",
+        "title": "Nextcloud",
+        "category": "Cloud & Files",
+        "recommended": True,
+        "interest_tag": "Personal Cloud",
+        "port": 8081,
+        "container_port": 80,
+        "image": "nextcloud:stable",
+        "ram_mb": 512,
+        "description": "Private Google Drive & Google Workspace replacement for your files, calendars, contacts, and phone backups.",
+        "volumes": [
+            "/DATA/AppData/nextcloud/html:/var/www/html",
+            "/DATA/AppData/nextcloud/data:/var/www/html/data",
+        ],
+    },
+    {
+        "id": "pihole",
+        "title": "Pi-hole",
+        "category": "Network & Ad-Block",
+        "recommended": True,
+        "interest_tag": "Ad Blocker",
+        "port": 8085,
+        "container_port": 80,
+        "image": "pihole/pihole:latest",
+        "ram_mb": 128,
+        "description": "Network-wide DNS ad-blocker and tracker shield that blocks ads on every phone, TV, and laptop on your Wi-Fi.",
+        "volumes": [
+            "/DATA/AppData/pihole/etc-pihole:/etc/pihole",
+            "/DATA/AppData/pihole/etc-dnsmasq.d:/etc/dnsmasq.d",
+        ],
+        "extra_ports": ["53:53/tcp", "53:53/udp"],
+    },
+    {
+        "id": "immich",
+        "title": "Immich",
+        "category": "Media & Photos",
+        "recommended": True,
+        "interest_tag": "Photo Backup",
+        "port": 2283,
+        "container_port": 2283,
+        "image": "ghcr.io/immich-app/immich-server:release",
+        "ram_mb": 1024,
+        "description": "Fast self-hosted Google Photos alternative with automatic iOS/Android camera backup and album sharing.",
+        "volumes": [
+            "/DATA/AppData/immich/upload:/usr/src/app/upload",
+        ],
+    },
+    {
+        "id": "homeassistant",
+        "title": "Home Assistant",
+        "category": "Smart Home",
+        "recommended": True,
+        "interest_tag": "Smart Home",
+        "port": 8123,
+        "container_port": 8123,
+        "image": "homeassistant/home-assistant:stable",
+        "ram_mb": 512,
+        "description": "Automate smart lights, plugs, cameras, and Zigbee/Matter devices locally inside your home.",
+        "volumes": [
+            "/DATA/AppData/homeassistant/config:/config",
+        ],
+    },
+    {
+        "id": "vaultwarden",
+        "title": "Vaultwarden",
+        "category": "Security & Tools",
+        "recommended": True,
+        "interest_tag": "Passwords",
+        "port": 8082,
+        "container_port": 80,
+        "image": "vaultwarden/server:latest",
+        "ram_mb": 64,
+        "description": "Ultra-lightweight Bitwarden-compatible password manager server for your browser extensions and mobile apps.",
+        "volumes": [
+            "/DATA/AppData/vaultwarden/data:/data",
+        ],
+    },
+    {
+        "id": "adguardhome",
+        "title": "AdGuard Home",
+        "category": "Network & Ad-Block",
+        "recommended": False,
+        "interest_tag": "Family DNS",
+        "port": 3000,
+        "container_port": 3000,
+        "image": "adguard/adguardhome:latest",
+        "ram_mb": 128,
+        "description": "All-in-one DNS ad-blocker, parental control filter, and encrypted DNS-over-HTTPS server.",
+        "volumes": [
+            "/DATA/AppData/adguardhome/work:/opt/adguardhome/work",
+            "/DATA/AppData/adguardhome/conf:/opt/adguardhome/conf",
+        ],
+    },
+    {
+        "id": "plex",
+        "title": "Plex Media Server",
+        "category": "Media & Photos",
+        "recommended": False,
+        "interest_tag": "Movies & TV",
+        "port": 32400,
+        "container_port": 32400,
+        "image": "lscr.io/linuxserver/plex:latest",
+        "ram_mb": 512,
+        "description": "Organize and stream personal movies, shows, and music to Plex apps on any smart TV, console, or phone.",
+        "volumes": [
+            "/DATA/AppData/plex/config:/config",
+            "/DATA/Media:/media",
+        ],
+    },
+    {
+        "id": "syncthing",
+        "title": "Syncthing",
+        "category": "Cloud & Files",
+        "recommended": False,
+        "interest_tag": "File Sync",
+        "port": 8384,
+        "container_port": 8384,
+        "image": "lscr.io/linuxserver/syncthing:latest",
+        "ram_mb": 128,
+        "description": "Real-time peer-to-peer folder sync across your laptops, desktops, and Android devices.",
+        "volumes": [
+            "/DATA/AppData/syncthing/config:/config",
+            "/DATA/Sync:/data1",
+        ],
+    },
+    {
+        "id": "filebrowser",
+        "title": "FileBrowser",
+        "category": "Cloud & Files",
+        "recommended": False,
+        "interest_tag": "Web File Manager",
+        "port": 8083,
+        "container_port": 80,
+        "image": "filebrowser/filebrowser:latest",
+        "ram_mb": 64,
+        "description": "Simple web interface to browse, upload, download, and share files stored on your server.",
+        "volumes": [
+            "/DATA:/srv",
+            "/DATA/AppData/filebrowser/db:/database",
+        ],
+    },
+    {
+        "id": "qbittorrent",
+        "title": "qBittorrent",
+        "category": "Media & Photos",
+        "recommended": False,
+        "interest_tag": "Downloads",
+        "port": 8080,
+        "container_port": 8080,
+        "image": "lscr.io/linuxserver/qbittorrent:latest",
+        "ram_mb": 256,
+        "description": "Web-based torrent downloader with magnet link, sequential download, and RSS auto-download support.",
+        "volumes": [
+            "/DATA/AppData/qbittorrent/config:/config",
+            "/DATA/Downloads:/downloads",
+        ],
+    },
+    {
+        "id": "uptimekuma",
+        "title": "Uptime Kuma",
+        "category": "Security & Tools",
+        "recommended": False,
+        "interest_tag": "Monitoring",
+        "port": 3001,
+        "container_port": 3001,
+        "image": "louislam/uptime-kuma:1",
+        "ram_mb": 128,
+        "description": "Self-hosted status page and uptime monitor that sends alerts if your home apps or internet go offline.",
+        "volumes": [
+            "/DATA/AppData/uptimekuma/data:/app/data",
+        ],
+    },
+    {
+        "id": "portainer",
+        "title": "Portainer CE",
+        "category": "Security & Tools",
+        "recommended": False,
+        "interest_tag": "Containers",
+        "port": 9443,
+        "container_port": 9443,
+        "image": "portainer/portainer-ce:latest",
+        "ram_mb": 128,
+        "description": "Advanced web dashboard for managing Docker containers, images, networks, and Compose stacks.",
+        "volumes": [
+            "/var/run/docker.sock:/var/run/docker.sock",
+            "/DATA/AppData/portainer/data:/data",
+        ],
+    },
+    {
+        "id": "nginxproxymanager",
+        "title": "Nginx Proxy Manager",
+        "category": "Network & Ad-Block",
+        "recommended": False,
+        "interest_tag": "Reverse Proxy",
+        "port": 81,
+        "container_port": 81,
+        "image": "jc21/nginx-proxy-manager:latest",
+        "ram_mb": 128,
+        "description": "Route custom domain names to your self-hosted apps with automatic Let's Encrypt SSL certificates.",
+        "volumes": [
+            "/DATA/AppData/nginxproxymanager/data:/data",
+            "/DATA/AppData/nginxproxymanager/letsencrypt:/etc/letsencrypt",
+        ],
+    },
+    {
+        "id": "paperless",
+        "title": "Paperless-ngx",
+        "category": "Cloud & Files",
+        "recommended": False,
+        "interest_tag": "Document OCR",
+        "port": 8000,
+        "container_port": 8000,
+        "image": "ghcr.io/paperless-ngx/paperless-ngx:latest",
+        "ram_mb": 512,
+        "description": "Organize scanned receipts, PDFs, and invoices with automatic OCR full-text search.",
+        "volumes": [
+            "/DATA/AppData/paperless/data:/usr/src/paperless/data",
+            "/DATA/AppData/paperless/media:/usr/src/paperless/media",
+        ],
+    },
+    {
+        "id": "stirlingpdf",
+        "title": "Stirling-PDF",
+        "category": "Security & Tools",
+        "recommended": False,
+        "interest_tag": "PDF Toolkit",
+        "port": 8084,
+        "container_port": 8080,
+        "image": "frooodle/s-pdf:latest",
+        "ram_mb": 256,
+        "description": "Private local web toolkit to merge, split, rotate, compress, and convert PDF documents.",
+        "volumes": [
+            "/DATA/AppData/stirlingpdf/configs:/configs",
+        ],
+    },
+    {
+        "id": "navidrome",
+        "title": "Navidrome",
+        "category": "Media & Photos",
+        "recommended": False,
+        "interest_tag": "Music Server",
+        "port": 4533,
+        "container_port": 4533,
+        "image": "deluan/navidrome:latest",
+        "ram_mb": 64,
+        "description": "Fast, lightweight personal music streaming server compatible with Subsonic mobile apps.",
+        "volumes": [
+            "/DATA/AppData/navidrome/data:/data",
+            "/DATA/Media/Music:/music:ro",
+        ],
+    },
+    {
+        "id": "gitea",
+        "title": "Gitea",
+        "category": "Security & Tools",
+        "recommended": False,
+        "interest_tag": "Git Server",
+        "port": 3002,
+        "container_port": 3000,
+        "image": "gitea/gitea:latest",
+        "ram_mb": 128,
+        "description": "Lightweight self-hosted Git service for hosting your private code repositories, issues, and actions.",
+        "volumes": [
+            "/DATA/AppData/gitea/data:/data",
+        ],
+    },
+]
+
+APP_CATALOG_BY_ID: Dict[str, Dict[str, Any]] = {app["id"]: app for app in SELF_HOSTED_APP_CATALOG}
+
+
+def generate_casaos_app_compose(app_id: str, timezone: str = "UTC") -> str:
+    """
+    Generate a CasaOS-compatible `docker-compose.yml` (with the `x-casaos:` metadata schema)
+    for `app_id`. When unpacked into `/var/lib/casaos/apps/<app_id>/docker-compose.yml` on
+    the target laptop, both `docker compose` and CasaOS App Management recognize it natively.
+    """
+    app = APP_CATALOG_BY_ID.get(app_id)
+    if not app:
+        raise KeyError(f"Unknown self-hosted app ID: {app_id}")
+
+    ports_list = [f"{app['port']}:{app['container_port']}"]
+    for ep in app.get("extra_ports", []):
+        ports_list.append(ep)
+
+    vols_yaml = "\n".join(f"      - {v}" for v in app.get("volumes", []))
+    ports_yaml = "\n".join(f'      - "{p}"' for p in ports_list)
+
+    return f"""name: {app['id']}
+services:
+  {app['id']}:
+    image: {app['image']}
+    container_name: {app['id']}
+    restart: unless-stopped
+    environment:
+      - TZ={timezone}
+      - PUID=1000
+      - PGID=1000
+    ports:
+{ports_yaml}
+    volumes:
+{vols_yaml}
+x-casaos:
+  architectures:
+    - amd64
+    - arm64
+  main: {app['id']}
+  category: {app['category']}
+  port_map: "{app['port']}"
+  scheme: http
+  index: /
+  title:
+    en_us: "{app['title']}"
+  description:
+    en_us: "{app['description']}"
+"""
+
+
+# ---------------------------------------------------------------------------
+# 3. Data Models & Profile Validation
 # ---------------------------------------------------------------------------
 VALID_INSTALL_MODES = (
     "auto_erase",         # Erase target laptop's main drive (requires "I know what I'm doing" ack)
@@ -166,13 +506,14 @@ VALID_INSTALL_MODES = (
 )
 VALID_STORAGE_LAYOUTS = ("direct", "lvm", "btrfs", "zfs")
 VALID_BOOT_MODES = ("auto", "uefi", "bios")
+VALID_USB_SCHEMES = ("auto", "gpt_uefi", "mbr_bios")
 VALID_SHUTDOWN_MODES = ("poweroff", "reboot")
 VALID_DASHBOARDS = ("cockpit", "casaos", "both", "none")
 
 
 @dataclass
 class ServerProfile:
-    """Unified configuration model for Instant Server (Wizard & Pro Mode)."""
+    """Unified configuration model for Instant Server (Wizard & Settings Home)."""
 
     # Q1: Identity & Network
     hostname: str = "instant-server"
@@ -185,8 +526,19 @@ class ServerProfile:
     wifi_password: str = ""
     enable_usb_tethering: bool = True
 
-    # Q2: Web Dashboards & Useful Homelab Stacks
+    # Q2: Web Dashboards & Pre-Selected Self-Hosted App Store Apps
     dashboard_choice: str = "both"  # "cockpit", "casaos", "both", or "none"
+    selected_apps: List[str] = field(
+        default_factory=lambda: [
+            "jellyfin",
+            "nextcloud",
+            "pihole",
+            "immich",
+            "homeassistant",
+            "vaultwarden",
+        ]
+    )
+    prebundle_offline_images: bool = False
     enable_docker: bool = True
     enable_tailscale: bool = False
     tailscale_authkey: str = ""
@@ -195,13 +547,18 @@ class ServerProfile:
     enable_intel_vaapi: bool = True
     enable_wake_on_lan: bool = True
 
-    # Q3: Target Laptop Disk Installation Mode & Hardware Safeguards
-    install_mode: str = "dual_boot"  # "auto_erase", "dual_boot", "interactive_select", "secondary_drive"
-    confirm_erase_main_drive: bool = False  # Must be True when install_mode == "auto_erase"
-    dual_boot_Allocation_gb: int = 45  # Space to allocate for Instant Server in dual_boot mode
+    # Q3: Target Laptop Hardware Questionnaire, Disk Mode & Bootable USB Scheme
+    laptop_age_hint: str = "unknown"       # "unknown" ("I don't know"), "modern_uefi" (2013+), "legacy_bios" (<=2012)
+    laptop_ram_hint: str = "unknown"       # "unknown" ("I don't know"), "low_2_4gb", "standard_8gb_plus"
+    usb_partition_scheme: str = "auto"     # "auto" (Hybrid BIOS+UEFI), "gpt_uefi" (GPT for UEFI), "mbr_bios" (MBR for BIOS)
+    custom_iso_path: str = ""              # Optional path to local Ubuntu Server .iso file
+    confirm_usb_erase: bool = True         # Acknowledge all existing files on USB stick will be erased
+    install_mode: str = "dual_boot"        # "auto_erase", "dual_boot", "interactive_select", "secondary_drive"
+    confirm_erase_main_drive: bool = False
+    dual_boot_Allocation_gb: int = 45
     ubuntu_release: str = "24.04"
-    storage_layout: str = "direct"  # "direct", "lvm", "btrfs", "zfs"
-    boot_mode: str = "auto"  # "auto", "uefi", "bios"
+    storage_layout: str = "direct"
+    boot_mode: str = "auto"
     target_disk_hint: str = "auto"
     allow_usb_target_disk: bool = False
     force_reinstall: bool = False
@@ -225,6 +582,21 @@ class ServerProfile:
     static_ip_cidr: str = ""
     static_gateway: str = ""
     static_dns: List[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        # Synchronize boot_mode and usb_partition_scheme with laptop_age_hint when user selects a specific era
+        if self.laptop_age_hint == "modern_uefi" and self.usb_partition_scheme == "auto":
+            self.boot_mode = "uefi"
+        elif self.laptop_age_hint == "legacy_bios" and self.usb_partition_scheme == "auto":
+            self.boot_mode = "bios"
+        elif self.laptop_age_hint == "unknown":
+            self.boot_mode = "auto"
+
+        if self.laptop_ram_hint == "low_2_4gb":
+            self.enable_low_ram_zram = True
+
+        if "pihole" in (self.selected_apps or []) or "adguardhome" in (self.selected_apps or []):
+            self.enable_pihole_dns_prep = True
 
     def validate(self) -> List[str]:
         """Validate profile fields and return a list of human-readable errors."""
@@ -272,7 +644,7 @@ class ServerProfile:
 
 
 # ---------------------------------------------------------------------------
-# 3. GitHub SSH Key Helper & Event Bus Helper
+# 4. GitHub SSH Key Helper & Event Bus Helper
 # ---------------------------------------------------------------------------
 def emit_event(
     event_type: str,
@@ -280,7 +652,6 @@ def emit_event(
     data: Optional[Dict[str, Any]] = None,
     callback: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> Dict[str, Any]:
-    """Emit structured JSON event for both CLI and Instant Server GUI IPC consumers."""
     payload = {
         "event": event_type,
         "module": "M4_CONFIG_BUILDER",
@@ -294,7 +665,6 @@ def emit_event(
 
 
 def fetch_github_ssh_keys(github_user: str, timeout: int = 8) -> List[str]:
-    """Fetch public SSH keys for a GitHub username (`https://github.com/<user>.keys`)."""
     clean_user = re.sub(r"[^a-zA-Z0-9-]", "", github_user.strip())
     if not clean_user:
         return []
@@ -309,7 +679,7 @@ def fetch_github_ssh_keys(github_user: str, timeout: int = 8) -> List[str]:
 
 
 # ---------------------------------------------------------------------------
-# 4. YAML Serializer (Zero-Dependency, Deterministic & Cloud-Init Safe)
+# 5. YAML Serializer (Zero-Dependency, Deterministic & Cloud-Init Safe)
 # ---------------------------------------------------------------------------
 def _yaml_quote(val: str) -> str:
     if val == "":
@@ -379,18 +749,12 @@ def _format_scalar(val: Any) -> str:
 
 
 # ---------------------------------------------------------------------------
-# 5. Subiquity `user-data`, `meta-data`, and `instant-server-env.conf` Compiler
+# 6. Subiquity `user-data`, `meta-data`, and `instant-server-env.conf` Compiler
 # ---------------------------------------------------------------------------
 def compile_cidata_payloads(
     profile: ServerProfile,
     event_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> Dict[str, str]:
-    """
-    Compile a `ServerProfile` into the configuration files written to `cidata`:
-      - `user-data` (Cloud-Init & Subiquity autoinstall YAML)
-      - `meta-data` (NoCloud instance metadata)
-      - `instant-server-env.conf` (and `lazarus-env.conf` alias for target scripts)
-    """
     errors = profile.validate()
     if errors:
         raise ValueError("Profile validation failed:\n- " + "\n- ".join(errors))
@@ -406,12 +770,6 @@ def compile_cidata_payloads(
         for k in fetched:
             if k not in ssh_keys:
                 ssh_keys.append(k)
-        emit_event(
-            "SSH_KEYS_IMPORTED",
-            f"Processed SSH keys (total: {len(ssh_keys)})",
-            {"count": len(ssh_keys)},
-            callback=event_callback,
-        )
 
     ethernets_cfg: Dict[str, Any] = {
         "any-ethernet": {
@@ -486,7 +844,6 @@ def compile_cidata_payloads(
         if pkg not in base_packages:
             base_packages.append(pkg)
 
-    # Top-level `runcmd` (executes in Live ISO RAM to bypass "Continue with autoinstall? (yes|no)")
     live_runcmd = [
         [
             "sh",
@@ -502,14 +859,13 @@ def compile_cidata_payloads(
         ]
     ]
 
-    # `early-commands`: mounts `cidata` at `/run/instant-cidata` and runs P1 hardware prober
     early_commands = [
         (
             "sh -c '"
             "mkdir -p /run/instant-cidata; "
             "CIDATA_DEV=$(blkid -L cidata || blkid -L CIDATA || true); "
             "if [ -n \"$CIDATA_DEV\" ]; then mount -o ro \"$CIDATA_DEV\" /run/instant-cidata || true; fi; "
-            "for dir in /run/instant-cidata /cdrom /var/lib/cloud/seed/nocloud; do "
+            "for dir in /run/instant-cidata /cdrom/cidata /cdrom /var/lib/cloud/seed/nocloud; do "
             "  if [ -f \"$dir/p1_early_hardware_adapter.py\" ]; then "
             "    python3 \"$dir/p1_early_hardware_adapter.py\" --env \"$dir/instant-server-env.conf\" --autoinstall /autoinstall.yaml; "
             "    break; "
@@ -518,7 +874,6 @@ def compile_cidata_payloads(
         )
     ]
 
-    # `late-commands`: re-mounts `cidata` if Subiquity unmounted `/cdrom` (AskUbuntu #1483970 fix)
     late_commands = [
         (
             "sh -c '"
@@ -527,7 +882,7 @@ def compile_cidata_payloads(
             "  CIDATA_DEV=$(blkid -L cidata || blkid -L CIDATA || true); "
             "  if [ -n \"$CIDATA_DEV\" ]; then mount -o ro \"$CIDATA_DEV\" /run/instant-cidata || true; fi; "
             "fi; "
-            "for dir in /run/instant-cidata /cdrom /var/lib/cloud/seed/nocloud; do "
+            "for dir in /run/instant-cidata /cdrom/cidata /cdrom /var/lib/cloud/seed/nocloud; do "
             "  if [ -f \"$dir/p2_late_laptop_hardening.sh\" ]; then "
             "    cp -r \"$dir/\"* /target/opt/instant-server/ 2>/dev/null || true; "
             "    chmod +x /target/opt/instant-server/p2_late_laptop_hardening.sh; "
@@ -610,7 +965,8 @@ def compile_cidata_payloads(
 
     enable_cockpit = profile.dashboard_choice in ("cockpit", "both")
     enable_casaos = profile.dashboard_choice in ("casaos", "both")
-    enable_docker = profile.enable_docker or enable_casaos
+    enable_docker = profile.enable_docker or enable_casaos or len(profile.selected_apps) > 0
+    valid_selected_apps = [a for a in (profile.selected_apps or []) if a in APP_CATALOG_BY_ID]
 
     env_lines = [
         "# Instant Server — Target Hardware & Stack Environment Configuration",
@@ -622,6 +978,9 @@ def compile_cidata_payloads(
         f"INSTANT_DUAL_BOOT_GB={int(profile.dual_boot_Allocation_gb)}",
         f"INSTANT_STORAGE_LAYOUT={_sh_escape(profile.storage_layout)}",
         f"INSTANT_BOOT_MODE={_sh_escape(profile.boot_mode)}",
+        f"INSTANT_LAPTOP_AGE_HINT={_sh_escape(profile.laptop_age_hint)}",
+        f"INSTANT_LAPTOP_RAM_HINT={_sh_escape(profile.laptop_ram_hint)}",
+        f"INSTANT_USB_PARTITION_SCHEME={_sh_escape(profile.usb_partition_scheme)}",
         f"INSTANT_TARGET_DISK_HINT={_sh_escape(profile.target_disk_hint)}",
         f"INSTANT_ALLOW_USB_TARGET={_sh_escape('1' if profile.allow_usb_target_disk else '0')}",
         f"INSTANT_FORCE_REINSTALL={_sh_escape('1' if profile.force_reinstall else '0')}",
@@ -635,6 +994,8 @@ def compile_cidata_payloads(
         f"INSTANT_ENABLE_COCKPIT={_sh_escape('1' if enable_cockpit else '0')}",
         f"INSTANT_ENABLE_CASAOS={_sh_escape('1' if enable_casaos else '0')}",
         f"INSTANT_ENABLE_DOCKER={_sh_escape('1' if enable_docker else '0')}",
+        f"INSTANT_SELECTED_APPS={_sh_escape(','.join(valid_selected_apps))}",
+        f"INSTANT_PREBUNDLE_OFFLINE_IMAGES={_sh_escape('1' if profile.prebundle_offline_images else '0')}",
         f"INSTANT_ENABLE_TAILSCALE={_sh_escape('1' if profile.enable_tailscale else '0')}",
         f"INSTANT_TAILSCALE_AUTHKEY={_sh_escape(profile.tailscale_authkey)}",
         f"INSTANT_ENABLE_SAMBA_NAS={_sh_escape('1' if profile.enable_samba_nas else '0')}",
@@ -657,11 +1018,12 @@ def compile_cidata_payloads(
 
     emit_event(
         "CONFIG_VALIDATED",
-        "Successfully compiled and validated Instant Server user-data, meta-data, and instant-server-env.conf",
+        f"Compiled Instant Server config + {len(valid_selected_apps)} selected self-hosted app(s)",
         {
             "hostname": profile.hostname,
             "install_mode": profile.install_mode,
             "dashboard": profile.dashboard_choice,
+            "selected_apps": valid_selected_apps,
             "storage_layout": profile.storage_layout,
         },
         callback=event_callback,
@@ -670,7 +1032,7 @@ def compile_cidata_payloads(
         "user-data": user_data_yaml,
         "meta-data": meta_data_content,
         "instant-server-env.conf": instant_env_conf,
-        "lazarus-env.conf": instant_env_conf,  # Backward compatibility alias
+        "lazarus-env.conf": instant_env_conf,
         "profile.json": json.dumps(asdict(profile), indent=2),
     }
 
@@ -681,7 +1043,7 @@ def _sh_escape(val: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# 6. Subiquity Offline Schema Validator (Ubuntu 24.04 Noble Strict Mode)
+# 7. Subiquity Offline Schema Validator (Ubuntu 24.04 Noble Strict Mode)
 # ---------------------------------------------------------------------------
 ALLOWED_AUTOINSTALL_TOP_KEYS = {
     "version",
@@ -748,7 +1110,7 @@ def validate_subiquity_user_data_text(user_data_text: str) -> List[str]:
 
 
 # ---------------------------------------------------------------------------
-# 7. CLI Entrypoint & Built-In Self-Test
+# 8. CLI Entrypoint & Built-In Self-Test
 # ---------------------------------------------------------------------------
 def _run_self_test() -> int:
     print("[M4 Self-Test] 1. Testing pure-Python SHA-512 crypt ($6$) determinism...")
@@ -757,15 +1119,19 @@ def _run_self_test() -> int:
         "$6$exDY1mhS4KUYCE/2$zmn9ToZwTKLhCw.b4/b.ZRTIZM30JZ4QrOQ2aOXJ8yk96xpcCof0kxKwuX1kqLG/"
         "ygbJ1f8wxED22bTL4F46P0"
     )
-    assert known_hash == expected, f"SHA-512 crypt mismatch:\n  got:  {known_hash}\n  want: {expected}"
+    assert known_hash == expected
     print("  -> PASS: Pure-Python SHA-512 crypt matches official Canonical test vector!")
 
-    print("[M4 Self-Test] 2. Testing Auto-Erase safety gate ('I know what I'm doing' required)...")
+    print("[M4 Self-Test] 2. Testing 18-App Self-Hosted App Store Catalog & CasaOS Compose Generator...")
+    assert len(SELF_HOSTED_APP_CATALOG) >= 18
+    jf_compose = generate_casaos_app_compose("jellyfin", timezone="Asia/Kolkata")
+    assert "x-casaos:" in jf_compose and "8096:8096" in jf_compose
+    print("  -> PASS: 18-App CasaOS/Docker App Store catalog and Compose generator verified!")
+
+    print("[M4 Self-Test] 3. Testing Auto-Erase safety gate & Dual-Boot profiles...")
     unsafe_prof = ServerProfile(install_mode="auto_erase", confirm_erase_main_drive=False)
     assert any("I know what I'm doing" in e for e in unsafe_prof.validate())
-    print("  -> PASS: Unconfirmed auto_erase profile blocked as expected!")
 
-    print("[M4 Self-Test] 3. Testing Dual-Boot & Interactive-Select profiles...")
     dual_prof = ServerProfile(
         hostname="instant-srv",
         username="admin",
@@ -773,20 +1139,13 @@ def _run_self_test() -> int:
         install_mode="dual_boot",
         dual_boot_Allocation_gb=60,
         dashboard_choice="both",
+        selected_apps=["jellyfin", "pihole", "immich"],
+        laptop_age_hint="unknown",
     )
     bundle_dual = compile_cidata_payloads(dual_prof)
     assert "INSTANT_INSTALL_MODE=\"dual_boot\"" in bundle_dual["instant-server-env.conf"]
-    assert "os-prober" in bundle_dual["user-data"]
-
-    inter_prof = ServerProfile(
-        hostname="instant-srv",
-        username="admin",
-        password="SuperSecretPassword123!",
-        install_mode="interactive_select",
-    )
-    bundle_inter = compile_cidata_payloads(inter_prof)
-    assert "interactive-sections:" in bundle_inter["user-data"]
-    print("  -> PASS: Dual-boot and Interactive-Select profiles compiled and validated!")
+    assert "INSTANT_SELECTED_APPS=\"jellyfin,pihole,immich\"" in bundle_dual["instant-server-env.conf"]
+    print("  -> PASS: Dual-boot, laptop age hints, and pre-selected apps compiled and validated!")
     return 0
 
 

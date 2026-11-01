@@ -6,28 +6,8 @@
 # Project: Instant Server (Turn any old laptop into a headless Ubuntu Server)
 # Runs inside `/target` chroot during Subiquity `late-commands` AND registers
 # a resilient first-boot systemd service (`instant-server-firstboot.service`) for
-# online dashboard/stack provisioning (Cockpit, CasaOS, Docker, Tailscale, etc.).
-#
-# Community Bugs Solved in This Script:
-# 1. Offline Wi-Fi Catch-22 (AskUbuntu #1274373 & #1483970): Installs pre-staged
-#    `.deb` packages (`wpasupplicant`, `rfkill`, `tlp`, `avahi-daemon`) from `cidata`.
-# 2. Dual-Boot GRUB Missing Windows/Original OS (Ubuntu MATE #27106 & Reddit):
-#    Sets `GRUB_DISABLE_OS_PROBER=false` and runs `os-prober` + `update-grub`
-#    when `INSTANT_INSTALL_MODE=dual_boot` so original OS boot entries are kept.
-# 3. Lid-Close Suspend (AskUbuntu #15520): Configures `HandleLidSwitch=ignore`
-#    across battery, AC, and dock states + masks systemd sleep targets.
-# 4. Screen Always-On Drain (tankibaj Gist): Configures `consoleblank=60` and
-#    `GRUB_RECORDFAIL_TIMEOUT=2`.
-# 5. "Spicy Pillow" Swollen Battery Prevention (r/homelab & AskUbuntu #1526046):
-#    Configures `tlp` + `/sys/class/power_supply/BAT*/charge_control_end_threshold`
-#    and installs a 60s UPS battery watchdog that cleanly powers off below 15%.
-# 6. CasaOS on Ubuntu 24.04 + Docker 29+ "Failed to load apps" Bug
-#    (GitHub IceWhaleTech/CasaOS #2387): Creates `docker.service.d/override.conf`
-#    with `Environment=DOCKER_MIN_API_VERSION=1.24`.
-# 7. Cockpit "Unmanaged Networking" Bug on Ubuntu Server (GitHub cockpit #22534):
-#    Installs `network-manager` and migrates Netplan to `renderer: NetworkManager`.
-# 8. Pi-hole / AdGuard Port 53 Conflict (Reddit r/pihole): Disables
-#    `systemd-resolved` stub listener (`DNSStubListener=no`) on port 53.
+# online dashboard/stack provisioning (Cockpit, CasaOS, Docker, Tailscale, and
+# all pre-unpacked Self-Hosted App Store bundles from `/opt/instant-server/apps`).
 # ==============================================================================
 
 set -euo pipefail
@@ -62,6 +42,7 @@ INSTANT_ENABLE_WOL="${INSTANT_ENABLE_WOL:-${LAZARUS_ENABLE_WOL:-1}}"
 INSTANT_ENABLE_COCKPIT="${INSTANT_ENABLE_COCKPIT:-${LAZARUS_ENABLE_COCKPIT:-1}}"
 INSTANT_ENABLE_CASAOS="${INSTANT_ENABLE_CASAOS:-${LAZARUS_ENABLE_CASAOS:-1}}"
 INSTANT_ENABLE_DOCKER="${INSTANT_ENABLE_DOCKER:-${LAZARUS_ENABLE_DOCKER:-1}}"
+INSTANT_SELECTED_APPS="${INSTANT_SELECTED_APPS:-jellyfin,nextcloud,pihole}"
 INSTANT_ENABLE_TAILSCALE="${INSTANT_ENABLE_TAILSCALE:-${LAZARUS_ENABLE_TAILSCALE:-0}}"
 INSTANT_TAILSCALE_AUTHKEY="${INSTANT_TAILSCALE_AUTHKEY:-${LAZARUS_TAILSCALE_AUTHKEY:-}}"
 INSTANT_ENABLE_SAMBA_NAS="${INSTANT_ENABLE_SAMBA_NAS:-${LAZARUS_ENABLE_SAMBA_NAS:-1}}"
@@ -69,7 +50,7 @@ INSTANT_ENABLE_PIHOLE_DNS_PREP="${INSTANT_ENABLE_PIHOLE_DNS_PREP:-${LAZARUS_ENAB
 INSTANT_ENABLE_INTEL_VAAPI="${INSTANT_ENABLE_INTEL_VAAPI:-${LAZARUS_ENABLE_INTEL_VAAPI:-1}}"
 
 if [[ "${1:-}" == "--self-test" ]]; then
-    echo "[P2 Self-Test] Instant Server Bash syntax and configuration blocks verified successfully."
+    echo "[P2 Self-Test] Instant Server Bash syntax, CasaOS app unpacker hook, and hardening blocks verified."
     exit 0
 fi
 
@@ -123,7 +104,6 @@ if [[ -f /etc/default/grub ]]; then
         echo "GRUB_RECORDFAIL_TIMEOUT=2" >> /etc/default/grub
     fi
 
-    # Enable os-prober when Dual-Boot mode is active so existing Windows/Linux OS is retained in GRUB
     if [[ "${INSTANT_INSTALL_MODE}" == "dual_boot" ]]; then
         log_info "Enabling GRUB os-prober for Dual-Boot OS retention..."
         if grep -q "^#\?GRUB_DISABLE_OS_PROBER=" /etc/default/grub; then
@@ -245,7 +225,7 @@ EOF
 fi
 
 # ------------------------------------------------------------------------------
-# 7. First-Boot Online Stack Installer & `tty1` Discovery Banner Generator
+# 7. First-Boot Online Stack Installer, App Unpacker & `tty1` Discovery Banner
 # ------------------------------------------------------------------------------
 cat << 'EOF' > /usr/local/sbin/instant-server-firstboot-stacks.sh
 #!/usr/bin/env bash
@@ -275,6 +255,7 @@ update_tty1_banner() {
   SSH Access      : ssh ${INSTANT_USERNAME:-admin}@${mdns_host}  (or @${ip_addr})
   Cockpit Web UI  : https://${mdns_host}:9090   (or https://${ip_addr}:9090)
   CasaOS AppStore : http://${mdns_host}         (or http://${ip_addr})
+  Pre-Bundled Apps: ${INSTANT_SELECTED_APPS:-none}
   Battery Guard   : Active (${INSTANT_BAT_START_THRESH:-40}%-${INSTANT_BAT_STOP_THRESH:-60}% charge cap | UPS shutdown @ ${INSTANT_UPS_SHUTDOWN_PCT:-15}%)
 ================================================================================
 
@@ -287,7 +268,16 @@ if [[ -f "$STAMP_FILE" ]]; then
     exit 0
 fi
 
+# Unpack pre-bundled CasaOS app definitions onto /var/lib/casaos/apps even before online checks
+if [[ -f "/opt/instant-server/apps/unpack_and_install_apps.sh" ]]; then
+    chmod +x /opt/instant-server/apps/unpack_and_install_apps.sh
+fi
+
 if ! ping -c 2 -W 3 1.1.1.1 >/dev/null 2>&1 && ! ping -c 2 -W 3 archive.ubuntu.com >/dev/null 2>&1; then
+    # Even if offline, run the unpacker in case offline container image tarballs were bundled
+    if [[ -x "/opt/instant-server/apps/unpack_and_install_apps.sh" ]]; then
+        /opt/instant-server/apps/unpack_and_install_apps.sh || true
+    fi
     exit 0
 fi
 
@@ -330,7 +320,12 @@ if [[ "${INSTANT_ENABLE_CASAOS:-1}" == "1" ]]; then
     systemctl restart docker casaos-app-management casaos 2>/dev/null || true
 fi
 
-# 3. Optional Tailscale Zero-Config Mesh VPN
+# 3. Unpack & Deploy All Pre-Selected Self-Hosted Apps from USB Bundle
+if [[ -x "/opt/instant-server/apps/unpack_and_install_apps.sh" ]]; then
+    /opt/instant-server/apps/unpack_and_install_apps.sh || true
+fi
+
+# 4. Optional Tailscale Zero-Config Mesh VPN
 if [[ "${INSTANT_ENABLE_TAILSCALE:-0}" == "1" ]]; then
     curl -fsSL https://tailscale.com/install.sh | sh || true
     systemctl enable --now tailscaled || true
@@ -339,7 +334,7 @@ if [[ "${INSTANT_ENABLE_TAILSCALE:-0}" == "1" ]]; then
     fi
 fi
 
-# 4. Optional Samba LAN NAS Share
+# 5. Optional Samba LAN NAS Share
 if [[ "${INSTANT_ENABLE_SAMBA_NAS:-1}" == "1" ]]; then
     apt-get install -y samba || true
     mkdir -p /srv/instant-server-share
@@ -361,7 +356,7 @@ SAMBA_EOF
     fi
 fi
 
-# 5. Optional Intel QuickSync VA-API Drivers for Jellyfin/Plex Transcoding
+# 6. Optional Intel QuickSync VA-API Drivers for Jellyfin/Plex Transcoding
 if [[ "${INSTANT_ENABLE_INTEL_VAAPI:-1}" == "1" ]]; then
     apt-get install -y vainfo intel-media-va-driver i965-va-driver 2>/dev/null || true
     usermod -aG render,video "${INSTANT_USERNAME:-admin}" 2>/dev/null || true
@@ -374,7 +369,7 @@ chmod +x /usr/local/sbin/instant-server-firstboot-stacks.sh
 
 cat << 'EOF' > /etc/systemd/system/instant-server-firstboot.service
 [Unit]
-Description=Instant Server First-Boot Dashboard & Stack Provisioner
+Description=Instant Server First-Boot Dashboard & Pre-Bundled Apps Provisioner
 After=network-online.target
 Wants=network-online.target
 
