@@ -1166,18 +1166,120 @@
       background: var(--accent);
       transition: width 0.25s ease;
     }
+    .flash-terminal-wrap {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
     .flash-log-box {
-      background: rgba(0, 0, 0, 0.24);
+      background: rgba(10, 12, 16, 0.78);
       border: 1px solid var(--border-card);
       border-radius: var(--radius);
       padding: 12px 14px;
       font-family: var(--font-mono);
       font-size: 12px;
-      line-height: 1.55;
-      color: var(--text-secondary);
-      max-height: 190px;
+      line-height: 1.6;
+      color: #d4dce8;
+      max-height: 210px;
       overflow-y: auto;
       user-select: text;
+      overscroll-behavior: contain;
+    }
+    html[data-theme="light"] .flash-log-box {
+      background: #181c24;
+      color: #e2e8f0;
+    }
+    .term-log-line {
+      white-space: pre-wrap;
+      word-break: break-word;
+      padding: 1px 0;
+    }
+    .term-live-progress {
+      margin-top: 6px;
+      padding: 6px 10px;
+      border-radius: 6px;
+      background: rgba(96, 205, 255, 0.12);
+      border: 1px solid rgba(96, 205, 255, 0.28);
+      color: #60cdff;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 600;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .resume-scroll-pill {
+      position: absolute;
+      right: 14px;
+      bottom: 12px;
+      padding: 5px 12px;
+      border-radius: 999px;
+      background: var(--accent);
+      color: var(--accent-text);
+      border: none;
+      font-family: var(--font-sans);
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+      z-index: 5;
+      transition: transform 0.12s ease, opacity 0.15s ease;
+    }
+    .resume-scroll-pill:hover {
+      transform: translateY(-1px);
+    }
+    .win-btn-danger {
+      background: var(--danger-bg);
+      border-color: var(--danger);
+      color: var(--danger);
+      font-weight: 600;
+    }
+    .win-btn-danger:hover:not(:disabled) {
+      background: var(--danger);
+      color: #ffffff;
+    }
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+      backdrop-filter: blur(6px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 120;
+      padding: 20px;
+    }
+    .modal-backdrop.open {
+      display: flex;
+    }
+    .modal-dialog {
+      width: 100%;
+      max-width: 460px;
+      background: var(--acrylic-sidebar);
+      border: 1px solid var(--border-control);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-setup);
+      padding: 22px 24px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .modal-title {
+      font-family: var(--font-display);
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .modal-body {
+      font-size: 13.5px;
+      line-height: 1.5;
+      color: var(--text-secondary);
+    }
+    .modal-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 4px;
     }
 
     .bottom-nav-row {
@@ -1317,6 +1419,20 @@
       <main class="content-area" id="settingsScrollArea" tabindex="0">
         <div class="content-inner" id="settingsMainContent"></div>
       </main>
+    </div>
+  </div>
+
+  <!-- Close-While-Flashing Warning Modal -->
+  <div class="modal-backdrop" id="closeWarningModal" role="dialog" aria-modal="true" aria-labelledby="closeWarnTitle">
+    <div class="modal-dialog">
+      <div class="modal-title" id="closeWarnTitle">Flashing is still in progress</div>
+      <div class="modal-body">
+        Closing Instant Server right now will interrupt the Ubuntu Server ISO download or leave your USB drive incomplete. Would you like to keep flashing, or cancel flashing and close the app?
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="win-btn win-btn-accent" data-action="dismiss-close-warning">Keep flashing</button>
+        <button type="button" class="win-btn win-btn-danger" data-action="confirm-cancel-and-exit">Cancel flashing &amp; exit</button>
+      </div>
     </div>
   </div>
 
@@ -1460,9 +1576,15 @@
       scanningUsb: false,
 
       flashing: false,
+      flashCancelled: false,
       flashProgress: 0,
       flashStatusText: "",
       flashLogs: [],
+      renderedLogCount: 0,
+      activeProgressLine: "",
+      logAutoScroll: true,
+      closeWarningOpen: false,
+      forceClosing: false,
       validationErrors: [],
 
       lanScanResults: [],
@@ -1499,6 +1621,9 @@
           if (endpoint === "save-config" && api.save_config) return await api.save_config(payload);
           if (endpoint === "usb" && api.scan_usb_devices) return await api.scan_usb_devices();
           if (endpoint === "flash" && api.start_build) return await api.start_build(payload);
+          if (endpoint === "cancel" && api.cancel_build) return await api.cancel_build();
+          if (endpoint === "heartbeat" && api.heartbeat) return await api.heartbeat();
+          if (endpoint === "shutdown" && api.shutdown_app) return await api.shutdown_app(true);
           if (endpoint === "status" && api.poll_build_status) return await api.poll_build_status();
           if (endpoint === "discover" && api.discover_servers) return await api.discover_servers(state.hostname);
         }
@@ -1731,6 +1856,126 @@
       return missing;
     }
 
+    function buildAsciiTerminalBar(pct, label, detail) {
+      const clamped = Math.max(0, Math.min(100, Number(pct) || 0));
+      const width = 22;
+      const filled = Math.round((clamped / 100) * width);
+      const bar = "█".repeat(filled) + "░".repeat(Math.max(0, width - filled));
+      const pctStr = clamped.toFixed(1).padStart(5, " ") + "%";
+      return detail
+        ? `⟳ ${label}: [${bar}] ${pctStr} │ ${detail}`
+        : `⟳ ${label}: [${bar}] ${pctStr}`;
+    }
+
+    function scrollTerminalToBottomIfSticky() {
+      const logBox = document.getElementById("flashLogBox");
+      if (!logBox) return;
+      if (state.logAutoScroll) {
+        logBox._programmaticScroll = true;
+        logBox.scrollTop = logBox.scrollHeight;
+        setTimeout(() => { logBox._programmaticScroll = false; }, 40);
+      }
+      const resumeBtn = document.getElementById("btnResumeAutoScroll");
+      if (resumeBtn) {
+        resumeBtn.style.display = state.logAutoScroll ? "none" : "inline-flex";
+      }
+    }
+
+    function updateFlashPanelInPlace() {
+      const panel = document.getElementById("flashPanelCard");
+      if (!panel) {
+        renderApp();
+        return;
+      }
+
+      const titleEl = document.getElementById("flashStatusTitle");
+      if (titleEl) {
+        titleEl.textContent = state.flashStatusText || "Preparing bootable USB...";
+      }
+
+      const badgeEl = document.getElementById("flashBadgePct");
+      if (badgeEl) {
+        badgeEl.textContent = `${state.flashProgress}%`;
+        badgeEl.className = "badge " + (
+          state.flashProgress === 100
+            ? "badge-success"
+            : state.flashCancelled
+            ? "badge-warning"
+            : "badge-accent"
+        );
+      }
+
+      const fillEl = document.getElementById("flashProgressFill");
+      if (fillEl) {
+        fillEl.style.width = `${state.flashProgress}%`;
+      }
+
+      const hdrActions = document.getElementById("flashPanelHeaderActions");
+      if (hdrActions) {
+        const hasCancelBtn = !!hdrActions.querySelector("[data-action='cancel-flash']");
+        if (state.flashing && !hasCancelBtn) {
+          hdrActions.innerHTML = `<button type="button" class="win-btn win-btn-sm win-btn-danger" data-action="cancel-flash">✕ Cancel flashing</button>`;
+        } else if (!state.flashing && hasCancelBtn) {
+          hdrActions.innerHTML = "";
+        }
+      }
+
+      // Update footer / primary flash buttons in place so user sees Cancel / Flash status without re-rendering DOM
+      document.querySelectorAll("[data-action='start-flash']").forEach(btn => {
+        btn.disabled = state.flashing;
+        btn.textContent = state.flashing ? "Flashing Bootable USB..." : "Confirm & Flash Bootable USB";
+      });
+      document.querySelectorAll(".footer-cancel-flash-wrap").forEach(wrap => {
+        wrap.style.display = state.flashing ? "inline-flex" : "none";
+      });
+
+      const linesContainer = document.getElementById("flashLogLines");
+      if (linesContainer) {
+        if (state.renderedLogCount > state.flashLogs.length) {
+          linesContainer.innerHTML = "";
+          state.renderedLogCount = 0;
+        }
+        for (let i = state.renderedLogCount; i < state.flashLogs.length; i++) {
+          const row = document.createElement("div");
+          row.className = "term-log-line";
+          row.textContent = state.flashLogs[i];
+          linesContainer.appendChild(row);
+        }
+        state.renderedLogCount = state.flashLogs.length;
+      }
+
+      const liveRow = document.getElementById("flashTerminalLiveRow");
+      if (liveRow) {
+        if (state.activeProgressLine) {
+          liveRow.style.display = "block";
+          liveRow.textContent = state.activeProgressLine;
+        } else {
+          liveRow.style.display = "none";
+          liveRow.textContent = "";
+        }
+      }
+
+      scrollTerminalToBottomIfSticky();
+    }
+
+    async function cancelFlashingProcess(exitAfterCancel = false) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+      await callBackend("cancel", "POST");
+      state.flashing = false;
+      state.flashCancelled = true;
+      state.activeProgressLine = "";
+      state.flashStatusText = "Flashing cancelled by user — safe to unplug or retry anytime.";
+      state.flashLogs.push("[CANCELLED] Flashing stopped by user. Any partial ISO download is saved for resume.");
+      updateFlashPanelInPlace();
+      showToast("Flashing cancelled");
+      if (exitAfterCancel) {
+        state.forceClosing = true;
+        await callBackend("shutdown", "POST", { force: true });
+        window.close();
+      }
+    }
+
     async function startFlashingProcess() {
       if (state.flashing) return;
       const missing = checkIncompleteRequirements();
@@ -1747,14 +1992,28 @@
       } catch (_e) {}
 
       state.flashing = true;
+      state.flashCancelled = false;
       state.flashProgress = 6;
-      state.flashStatusText = "Pulling Ubuntu Server ISO & preparing bootable USB...";
+      state.logAutoScroll = true;
+      state.renderedLogCount = 0;
+      state.flashStatusText = `Preparing Ubuntu Server ${state.ubuntu_release}.1 LTS bootable USB...`;
       state.flashLogs = [
         "[00:00] Saved config to Instant_Server_Data/instant-server-config.json",
         `[00:01] Target server: ${payload.hostname}.local | Selected apps: ${state.selected_apps.length}`,
         `[00:02] USB partition scheme: ${state.usb_partition_scheme.toUpperCase()} (Laptop age hint: ${state.laptop_age_hint})`
       ];
+      state.activeProgressLine = buildAsciiTerminalBar(6.0, "Initializing Pipeline", "Checking local ISO cache & mirrors");
       renderApp();
+      state.renderedLogCount = state.flashLogs.length;
+      scrollTerminalToBottomIfSticky();
+
+      // Scroll outer pane once so the terminal panel is comfortably in view
+      setTimeout(() => {
+        const panel = document.getElementById("flashPanelCard");
+        if (panel && panel.scrollIntoView) {
+          panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+      }, 60);
 
       const startRes = await callBackend("flash", "POST", payload);
       if (startRes && startRes.started) {
@@ -1762,65 +2021,104 @@
         pollTimer = setInterval(async () => {
           const snap = await callBackend("status", "GET");
           if (!snap) return;
-          state.flashProgress = snap.percent || Math.min(95, state.flashProgress + 8);
+          state.flashProgress = snap.percent || state.flashProgress;
+
           if (Array.isArray(snap.events) && snap.events.length > 0) {
-            state.flashLogs = snap.events.map((ev, idx) => {
+            const backendLines = snap.events.map((ev, idx) => {
+              if (ev.formatted_line) return ev.formatted_line;
               const sec = String(idx + 1).padStart(2, "0");
               return `[00:${sec}] ${ev.message}`;
             });
+            state.flashLogs = [
+              "[00:00] Saved config to Instant_Server_Data/instant-server-config.json",
+              ...backendLines
+            ];
             state.flashStatusText = snap.events[snap.events.length - 1].message;
           }
+
+          if (snap.active_progress && snap.active_progress.terminal_line) {
+            state.activeProgressLine = snap.active_progress.terminal_line;
+            state.flashStatusText = snap.active_progress.message || state.flashStatusText;
+          } else {
+            state.activeProgressLine = "";
+          }
+
           if (snap.status === "COMPLETED") {
             clearInterval(pollTimer);
+            pollTimer = null;
             state.flashing = false;
             state.flashProgress = 100;
+            state.activeProgressLine = "";
             state.flashStatusText = "Bootable USB drive is ready! Plug it into your old laptop and power it on.";
             state.flashLogs.push("[DONE] Bootable Ubuntu Server ISO + GRUB autoinstall + pre-unpacked apps written to USB.");
             showToast("Bootable Instant Server USB is ready");
+          } else if (snap.status === "CANCELLED") {
+            clearInterval(pollTimer);
+            pollTimer = null;
+            state.flashing = false;
+            state.flashCancelled = true;
+            state.activeProgressLine = "";
+            state.flashStatusText = "Flashing cancelled by user.";
           } else if (snap.status === "FAILED") {
             clearInterval(pollTimer);
+            pollTimer = null;
             state.flashing = false;
+            state.activeProgressLine = "";
             state.flashStatusText = `Failed: ${snap.error || "Check logs"}`;
             state.flashLogs.push(`[ERROR] ${snap.error || "Provisioning failed"}`);
           }
-          renderApp();
-        }, 450);
+          updateFlashPanelInPlace();
+        }, 380);
         return;
       }
 
+      // Browser preview simulation with realistic in-place terminal progress bar (no new-line spam!)
       const selectedUsb = state.usbDevices.find(d => d.device_id === state.selectedUsbId);
       const usbLabel = selectedUsb ? `${selectedUsb.model} (${selectedUsb.device_node})` : "USB Drive";
       const schemeDesc = state.usb_partition_scheme === "mbr_bios"
         ? "MBR (Legacy BIOS + CSM active boot)"
         : "GPT + Hybrid UEFI/BIOS";
-      const steps = [
-        { pct: 22, msg: `Pulling official Ubuntu Server ${state.ubuntu_release} LTS ISO & verifying SHA256SUMS` },
-        { pct: 44, msg: `Formatting ${usbLabel} as ${schemeDesc} (label: CIDATA)` },
-        { pct: 68, msg: `Extracting bootable ISO tree (EFI/BOOT, casper/vmlinuz, initrd) & patching GRUB autoinstall` },
-        { pct: 86, msg: `Pre-unpacking ${state.selected_apps.length} self-hosted CasaOS app bundle(s) (${state.selected_apps.slice(0, 4).join(", ")}${state.selected_apps.length > 4 ? "..." : ""}) onto USB` },
-        { pct: 100, msg: "Bootable USB drive is ready! Plug it into your old laptop and power it on." }
+
+      const simPhases = [
+        { type: "log", pct: 10, msg: `[00:03] Resolving official Ubuntu Server ${state.ubuntu_release}.1 LTS mirror & SHA256SUMS...` },
+        { type: "bar", pct: 16, stagePct: 28.4, label: "Downloading Ubuntu ISO", detail: "749.8 / 2640.0 MB @ 24.5 MB/s" },
+        { type: "bar", pct: 24, stagePct: 64.2, label: "Downloading Ubuntu ISO", detail: "1694.9 / 2640.0 MB @ 25.1 MB/s" },
+        { type: "bar", pct: 34, stagePct: 100.0, label: "Downloading Ubuntu ISO", detail: "2640.0 / 2640.0 MB @ 25.0 MB/s" },
+        { type: "log", pct: 40, msg: `[00:06] Official Ubuntu Server ${state.ubuntu_release}.1 LTS ISO SHA-256 checksum verified!` },
+        { type: "log", pct: 46, msg: `[00:07] Formatting ${usbLabel} as ${schemeDesc} (label: CIDATA)...` },
+        { type: "bar", pct: 58, stagePct: 42.0, label: "Writing Bootable ISO to USB", detail: "1092.0 / 2600.0 MB (casper/vmlinuz & initrd)" },
+        { type: "bar", pct: 74, stagePct: 88.5, label: "Writing Bootable ISO to USB", detail: "2301.0 / 2600.0 MB (casper/ubuntu-server-minimal.squashfs)" },
+        { type: "log", pct: 86, msg: `[00:10] Pre-unpacking ${state.selected_apps.length} self-hosted CasaOS app bundle(s) (${state.selected_apps.slice(0, 4).join(", ")}${state.selected_apps.length > 4 ? "..." : ""}) onto USB...` },
+        { type: "done", pct: 100, msg: "[DONE] Bootable Ubuntu Server ISO + GRUB autoinstall + pre-unpacked apps written to USB." }
       ];
       let idx = 0;
       clearInterval(pollTimer);
       pollTimer = setInterval(() => {
-        if (idx >= steps.length) {
+        if (!state.flashing || idx >= simPhases.length) {
           clearInterval(pollTimer);
-          state.flashing = false;
-          showToast("Bootable Instant Server USB is ready");
-          renderApp();
+          pollTimer = null;
           return;
         }
-        const st = steps[idx++];
-        state.flashProgress = st.pct;
-        state.flashStatusText = st.msg;
-        state.flashLogs.push(`[00:0${idx + 2}] ${st.msg}`);
-        if (st.pct === 100) {
+        const step = simPhases[idx++];
+        state.flashProgress = step.pct;
+        if (step.type === "log") {
+          state.activeProgressLine = "";
+          state.flashLogs.push(step.msg);
+          state.flashStatusText = step.msg.replace(/^\[[0-9:]+\]\s*/, "");
+        } else if (step.type === "bar") {
+          state.activeProgressLine = buildAsciiTerminalBar(step.stagePct, step.label, step.detail);
+          state.flashStatusText = `${step.label}: ${step.detail}`;
+        } else if (step.type === "done") {
+          state.activeProgressLine = "";
+          state.flashLogs.push(step.msg);
+          state.flashStatusText = "Bootable USB drive is ready! Plug it into your old laptop and power it on.";
           state.flashing = false;
           clearInterval(pollTimer);
+          pollTimer = null;
           showToast("Bootable Instant Server USB is ready");
         }
-        renderApp();
-      }, 650);
+        updateFlashPanelInPlace();
+      }, 480);
     }
 
     // =========================================================================
@@ -1902,17 +2200,46 @@
         return missingHtml;
       }
 
+      const badgeClass = state.flashProgress === 100
+        ? "badge-success"
+        : state.flashCancelled
+        ? "badge-warning"
+        : "badge-accent";
+
       return `
         ${missingHtml}
-        <div class="flash-panel">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
-            <span style="font-weight:600;font-size:13.5px;">${esc(state.flashStatusText || "Preparing bootable USB...")}</span>
-            <span class="badge ${state.flashProgress === 100 ? "badge-success" : "badge-accent"}">${state.flashProgress}%</span>
+        <div class="flash-panel" id="flashPanelCard">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+            <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1;">
+              <span id="flashStatusTitle" style="font-weight:600;font-size:13.5px;">${esc(state.flashStatusText || "Preparing bootable USB...")}</span>
+              <span id="flashBadgePct" class="badge ${badgeClass}">${state.flashProgress}%</span>
+            </div>
+            <div id="flashPanelHeaderActions" style="display:flex;align-items:center;gap:8px;">
+              ${state.flashing ? `
+                <button type="button" class="win-btn win-btn-sm win-btn-danger" data-action="cancel-flash">
+                  ✕ Cancel flashing
+                </button>
+              ` : ""}
+            </div>
           </div>
           <div class="progress-track">
-            <div class="progress-fill" style="width: ${state.flashProgress}%;"></div>
+            <div class="progress-fill" id="flashProgressFill" style="width: ${state.flashProgress}%;"></div>
           </div>
-          <div class="flash-log-box">${state.flashLogs.map(l => esc(l)).join("\n")}</div>
+          <div class="flash-terminal-wrap">
+            <div class="flash-log-box" id="flashLogBox" tabindex="0">
+              <div id="flashLogLines">${state.flashLogs.map(l => `<div class="term-log-line">${esc(l)}</div>`).join("")}</div>
+              <div id="flashTerminalLiveRow" class="term-live-progress" style="${state.activeProgressLine ? "" : "display:none;"}">${esc(state.activeProgressLine || "")}</div>
+            </div>
+            <button
+              type="button"
+              id="btnResumeAutoScroll"
+              class="resume-scroll-pill"
+              data-action="resume-log-autoscroll"
+              style="${state.logAutoScroll ? "display:none;" : "display:inline-flex;"}"
+            >
+              ↓ Auto-scroll paused — Jump to bottom
+            </button>
+          </div>
         </div>
       `;
     }
@@ -2686,6 +3013,9 @@ ${storageSnippet}
             <button type="button" class="win-btn win-btn-accent" data-action="setup-next">Proceed →</button>
           ` : `
             <button type="button" class="win-btn" data-action="save-config-home">Save configuration</button>
+            <span class="footer-cancel-flash-wrap" style="display:${state.flashing ? "inline-flex" : "none"};">
+              <button type="button" class="win-btn win-btn-danger" data-action="cancel-flash">✕ Cancel flashing</button>
+            </span>
             <button type="button" class="win-btn win-btn-accent win-btn-large" data-action="start-flash" ${state.flashing ? "disabled" : ""}>
               ${state.flashing ? "Flashing Bootable USB..." : "Confirm & Flash Bootable USB"}
             </button>
@@ -2809,10 +3139,13 @@ ${storageSnippet}
               </div>
             </div>
 
-            <div class="center-flash-row">
+            <div class="center-flash-row" style="flex-direction:row;flex-wrap:wrap;">
               <button type="button" class="win-btn win-btn-accent win-btn-large" data-action="start-flash" ${state.flashing ? "disabled" : ""}>
                 ${state.flashing ? "Flashing Bootable USB..." : "Flash Bootable USB"}
               </button>
+              <span class="footer-cancel-flash-wrap" style="display:${state.flashing ? "inline-flex" : "none"};">
+                <button type="button" class="win-btn win-btn-danger win-btn-large" data-action="cancel-flash">✕ Cancel flashing</button>
+              </span>
             </div>
 
             ${renderFlashProgressAndLogsCard()}
@@ -2994,7 +3327,20 @@ ${storageSnippet}
       };
 
       document.addEventListener("scroll", (e) => {
-        markScrolling(e.target);
+        const el = e.target;
+        markScrolling(el);
+        if (el && el.id === "flashLogBox") {
+          if (el._programmaticScroll) return;
+          const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+          const atBottom = distFromBottom <= 24;
+          if (state.logAutoScroll !== atBottom) {
+            state.logAutoScroll = atBottom;
+            const resumeBtn = document.getElementById("btnResumeAutoScroll");
+            if (resumeBtn) {
+              resumeBtn.style.display = state.logAutoScroll ? "none" : "inline-flex";
+            }
+          }
+        }
       }, true);
 
       window.addEventListener("keydown", (e) => {
@@ -3288,6 +3634,19 @@ ${storageSnippet}
         await saveConfigurationAndOpenHome();
       } else if (action === "start-flash") {
         await startFlashingProcess();
+      } else if (action === "cancel-flash") {
+        await cancelFlashingProcess(false);
+      } else if (action === "resume-log-autoscroll") {
+        state.logAutoScroll = true;
+        scrollTerminalToBottomIfSticky();
+      } else if (action === "dismiss-close-warning") {
+        state.closeWarningOpen = false;
+        const modal = document.getElementById("closeWarningModal");
+        if (modal) modal.classList.remove("open");
+      } else if (action === "confirm-cancel-and-exit") {
+        const modal = document.getElementById("closeWarningModal");
+        if (modal) modal.classList.remove("open");
+        await cancelFlashingProcess(true);
       } else if (action === "copy-yaml") {
         const text = generateYamlPreview();
         try {
@@ -3348,9 +3707,48 @@ ${storageSnippet}
       }
     });
 
+    // Native pywebview hook when user clicks window X while flashing is active
+    window.__showCloseWhileFlashingWarning = () => {
+      state.closeWarningOpen = true;
+      const modal = document.getElementById("closeWarningModal");
+      if (modal) modal.classList.add("open");
+    };
+
+    // Browser/App-Window close warning when flashing is in progress
+    window.addEventListener("beforeunload", (e) => {
+      if (state.flashing && !state.forceClosing) {
+        state.closeWarningOpen = true;
+        const modal = document.getElementById("closeWarningModal");
+        if (modal) modal.classList.add("open");
+        e.preventDefault();
+        e.returnValue = "USB flashing is currently in progress. Closing now will interrupt the installation.";
+        return e.returnValue;
+      }
+    });
+
+    // Immediately terminate background Python/exe process when the window closes
+    function notifyBackendWindowClosed() {
+      try {
+        if (window.location.protocol.startsWith("http") && navigator.sendBeacon) {
+          const blob = new Blob([JSON.stringify({ force: true })], { type: "application/json" });
+          navigator.sendBeacon(window.location.origin + "/api/shutdown", blob);
+        } else {
+          callBackend("shutdown", "POST", { force: true });
+        }
+      } catch (_err) {}
+    }
+
+    window.addEventListener("pagehide", () => {
+      notifyBackendWindowClosed();
+    });
+
     window.addEventListener("load", () => {
       attachSleekScrollListeners();
       initAppStartup();
+      // Keep-alive heartbeat every 2s so backend exits automatically if window is closed
+      setInterval(() => {
+        callBackend("heartbeat", "POST", {});
+      }, 2000);
     });
   </script>
 </body>

@@ -299,10 +299,20 @@ def compute_file_sha256(
             processed += len(buf)
             if event_callback and total > 0:
                 pct = round((processed / total) * 100, 1)
+                done_mb = round(processed / (1024 * 1024), 1)
+                tot_mb = round(total / (1024 * 1024), 1)
                 emit_event(
                     "ISO_VERIFY_PROGRESS",
-                    f"Verifying ISO SHA-256 integrity ({pct}%)",
-                    {"bytes_verified": processed, "total_bytes": total, "percent": int(10 + pct * 0.15)},
+                    f"Verifying ISO SHA-256 integrity: {done_mb} MB / {tot_mb} MB ({pct}%)",
+                    {
+                        "in_place": True,
+                        "label": "Verifying ISO SHA-256",
+                        "stage_percent": pct,
+                        "detail": f"{done_mb} / {tot_mb} MB",
+                        "bytes_verified": processed,
+                        "total_bytes": total,
+                        "percent": int(10 + pct * 0.15),
+                    },
                     callback=event_callback,
                 )
 
@@ -392,6 +402,10 @@ def download_file_resumable(
                         "ISO_DOWNLOAD_PROGRESS",
                         f"Downloading official Ubuntu ISO: {dl_mb} MB / {tot_mb} MB ({dl_pct}% @ {speed_mbps} MB/s)",
                         {
+                            "in_place": True,
+                            "label": "Downloading Ubuntu ISO",
+                            "stage_percent": dl_pct,
+                            "detail": f"{dl_mb} / {tot_mb} MB @ {speed_mbps} MB/s",
                             "downloaded_bytes": downloaded,
                             "total_bytes": total_bytes,
                             "download_percent": dl_pct,
@@ -658,7 +672,12 @@ class ISO9660Reader:
             idx += length
         return "".join(parts)
 
-    def extract_Entry(self, entry: Dict[str, Any], dest_file: str) -> str:
+    def extract_Entry(
+        self,
+        entry: Dict[str, Any],
+        dest_file: str,
+        chunk_callback: Optional[Callable[[int], None]] = None,
+    ) -> str:
         os.makedirs(os.path.dirname(os.path.abspath(dest_file)), exist_ok=True)
         self.fh.seek(int(entry["lba"]) * ISO_SECTOR_SIZE)
         remaining = int(entry["size"])
@@ -669,6 +688,8 @@ class ISO9660Reader:
                     break
                 out.write(chunk)
                 remaining -= len(chunk)
+                if chunk_callback:
+                    chunk_callback(len(chunk))
         return dest_file
 
 
@@ -681,15 +702,50 @@ def extract_full_iso_tree_to_usb(
     extracted_count = 0
     total_bytes = 0
 
+    emit_event(
+        "ISO_EXTRACT_START",
+        f"Extracting bootable Ubuntu ISO tree & patching GRUB autoinstall onto {dest_root_dir}...",
+        {"dest_root_dir": dest_root_dir, "percent": 45},
+        callback=event_callback,
+    )
+
     with ISO9660Reader(iso_path) as reader:
         all_files = reader.list_all_files()
         total_files = max(1, len(all_files))
+        grand_total_bytes = max(1, sum(int(e["size"]) for e in all_files))
+        last_emit_t = 0.0
+
         for idx, entry in enumerate(all_files):
             rel_path = entry["path"].lstrip("/")
             out_path = os.path.join(dest_root_dir, rel_path.replace("/", os.sep))
-            reader.extract_Entry(entry, out_path)
+
+            def _on_chunk(n_bytes: int, _entry_name: str = entry["name"], _idx: int = idx) -> None:
+                nonlocal total_bytes, last_emit_t
+                total_bytes += n_bytes
+                now = time.time()
+                if now - last_emit_t >= 0.25 or total_bytes >= grand_total_bytes:
+                    last_emit_t = now
+                    stage_pct = min(100.0, round((total_bytes / grand_total_bytes) * 100, 1))
+                    ui_pct = min(85, int(45 + (stage_pct * 0.40)))
+                    done_mb = round(total_bytes / (1024 * 1024), 1)
+                    tot_mb = round(grand_total_bytes / (1024 * 1024), 1)
+                    emit_event(
+                        "ISO_EXTRACT_PROGRESS",
+                        f"Writing ISO to USB: {done_mb} MB / {tot_mb} MB ({stage_pct}%) — {_entry_name}",
+                        {
+                            "in_place": True,
+                            "label": "Writing Bootable ISO to USB",
+                            "stage_percent": stage_pct,
+                            "detail": f"{done_mb} / {tot_mb} MB ({_idx + 1}/{total_files} files • {_entry_name})",
+                            "extracted_files": _idx + 1,
+                            "total_files": total_files,
+                            "percent": ui_pct,
+                        },
+                        callback=event_callback,
+                    )
+
+            reader.extract_Entry(entry, out_path, chunk_callback=_on_chunk)
             extracted_count += 1
-            total_bytes += int(entry["size"])
 
             if rel_path.lower() in ("boot/grub/grub.cfg", "boot/grub/loopback.cfg"):
                 try:
@@ -700,12 +756,21 @@ def extract_full_iso_tree_to_usb(
                 except Exception:
                     pass
 
-            if idx % 20 == 0 or idx == total_files - 1:
-                pct = min(85, int(45 + ((idx + 1) / total_files) * 40))
+            if idx == total_files - 1:
+                done_mb = round(total_bytes / (1024 * 1024), 1)
+                tot_mb = round(grand_total_bytes / (1024 * 1024), 1)
                 emit_event(
                     "ISO_EXTRACT_PROGRESS",
-                    f"Extracting bootable ISO files to USB ({idx + 1}/{total_files}: {entry['name']})",
-                    {"extracted_files": idx + 1, "total_files": total_files, "percent": pct},
+                    f"Writing ISO to USB: {done_mb} MB / {tot_mb} MB (100.0%)",
+                    {
+                        "in_place": True,
+                        "label": "Writing Bootable ISO to USB",
+                        "stage_percent": 100.0,
+                        "detail": f"{done_mb} / {tot_mb} MB ({total_files}/{total_files} files)",
+                        "extracted_files": total_files,
+                        "total_files": total_files,
+                        "percent": 85,
+                    },
                     callback=event_callback,
                 )
 

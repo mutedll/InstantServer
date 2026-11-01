@@ -486,23 +486,61 @@ def discover_instant_servers_on_lan(
 
 
 # ---------------------------------------------------------------------------
-# 2. Asynchronous Job Runner & Local HTTP / `pywebview` GUI Bridge
+# 2. Asynchronous Job Runner, Cancellation, & Local HTTP / `pywebview` GUI Bridge
 # ---------------------------------------------------------------------------
+IN_PLACE_PROGRESS_EVENTS = {
+    "ISO_DOWNLOAD_PROGRESS",
+    "ISO_VERIFY_PROGRESS",
+    "ISO_EXTRACT_PROGRESS",
+    "USB_RAW_FLASH_PROGRESS",
+    "DOCKER_PULL_PROGRESS",
+}
+
+
+def format_terminal_progress_bar(
+    stage_percent: float,
+    label: str = "Progress",
+    detail: str = "",
+    width: int = 22,
+) -> str:
+    """Build a clean terminal-style single-line progress bar (`[████████░░░░] 62.4% │ ...`)."""
+    clamped = max(0.0, min(100.0, float(stage_percent)))
+    filled = int(round((clamped / 100.0) * width))
+    bar = ("█" * filled) + ("░" * max(0, width - filled))
+    pct_str = f"{clamped:5.1f}%"
+    if detail:
+        return f"⟳ {label}: [{bar}] {pct_str} │ {detail}"
+    return f"⟳ {label}: [{bar}] {pct_str}"
+
+
 class AsyncPipelineManager:
     def __init__(self, base_dir: Optional[str] = None) -> None:
         self.base_dir = base_dir
         self._lock = threading.Lock()
+        self._cancel_requested = threading.Event()
         self.status: str = "IDLE"
         self.percent: int = 0
+        self.job_start_time: float = 0.0
         self.events: List[Dict[str, Any]] = []
+        self.active_progress: Optional[Dict[str, Any]] = None
         self.last_result: Optional[Dict[str, Any]] = None
         self.error: Optional[str] = None
 
+    def _elapsed_tag(self) -> str:
+        elapsed = max(0, int(time.time() - (self.job_start_time or time.time())))
+        mins = elapsed // 60
+        secs = elapsed % 60
+        return f"[{mins:02d}:{secs:02d}]"
+
     def _record_event(self, payload: Dict[str, Any]) -> None:
+        ev = payload.get("event", "")
+        data = payload.get("data") or {}
+
+        # Honor user cancellation immediately between any chunk/file step
+        if self._cancel_requested.is_set() and ev not in ("JOB_CANCELLED", "JOB_FAILED"):
+            raise InterruptedError("Flashing cancelled by user.")
+
         with self._lock:
-            self.events.append(payload)
-            ev = payload.get("event", "")
-            data = payload.get("data") or {}
             if "percent" in data:
                 self.percent = max(self.percent, int(data["percent"]))
             elif ev == "M4_COMPILE_COMPLETE":
@@ -513,6 +551,51 @@ class AsyncPipelineManager:
                 self.percent = max(self.percent, 88)
             elif ev == "USB_PROVISION_COMPLETE":
                 self.percent = 100
+
+            # In-place terminal progress updates overwrite active_progress instead of spamming new lines!
+            if ev in IN_PLACE_PROGRESS_EVENTS or data.get("in_place") is True:
+                stage_pct = float(
+                    data.get(
+                        "stage_percent",
+                        data.get("download_percent", data.get("percent", self.percent)),
+                    )
+                )
+                label = str(data.get("label") or "Progress")
+                detail = str(data.get("detail") or payload.get("message") or "")
+                self.active_progress = {
+                    "event": ev,
+                    "label": label,
+                    "stage_percent": round(stage_pct, 1),
+                    "detail": detail,
+                    "message": payload.get("message", ""),
+                    "terminal_line": format_terminal_progress_bar(stage_pct, label=label, detail=detail),
+                }
+                return
+
+            # Clear in-place bar when a transfer phase completes
+            if ev in (
+                "ISO_VERIFIED",
+                "ISO_CACHE_HIT",
+                "ISO_CACHE_FOUND",
+                "USB_COPY_CIDATA",
+                "USB_PROVISION_COMPLETE",
+                "JOB_FAILED",
+                "JOB_CANCELLED",
+            ):
+                self.active_progress = None
+
+            entry = dict(payload)
+            entry["seq"] = len(self.events) + 1
+            entry["elapsed"] = self._elapsed_tag()
+            entry["formatted_line"] = f"{entry['elapsed']} {entry.get('message', '')}"
+            self.events.append(entry)
+
+    def cancel_job(self) -> Dict[str, Any]:
+        with self._lock:
+            if self.status != "RUNNING":
+                return {"cancelled": False, "status": self.status}
+            self._cancel_requested.set()
+        return {"cancelled": True, "status": "CANCELLING"}
 
     def start_stage_job(
         self,
@@ -527,9 +610,12 @@ class AsyncPipelineManager:
         with self._lock:
             if self.status == "RUNNING":
                 return {"started": False, "reason": "Job already running"}
+            self._cancel_requested.clear()
             self.status = "RUNNING"
             self.percent = 5
+            self.job_start_time = time.time()
             self.events = []
+            self.active_progress = None
             self.last_result = None
             self.error = None
 
@@ -577,9 +663,23 @@ class AsyncPipelineManager:
                 )
                 summary["usb_provision"] = usb_res
                 with self._lock:
+                    self.active_progress = None
                     self.last_result = summary
                     self.percent = 100
                     self.status = "COMPLETED"
+            except InterruptedError as cancel_exc:
+                self._record_event(
+                    {
+                        "event": "JOB_CANCELLED",
+                        "module": "CLI_BRIDGE",
+                        "message": f"Cancelled: {cancel_exc}",
+                        "data": {},
+                    }
+                )
+                with self._lock:
+                    self.active_progress = None
+                    self.error = str(cancel_exc)
+                    self.status = "CANCELLED"
             except Exception as exc:
                 self._record_event(
                     {
@@ -590,6 +690,7 @@ class AsyncPipelineManager:
                     }
                 )
                 with self._lock:
+                    self.active_progress = None
                     self.error = str(exc)
                     self.status = "FAILED"
 
@@ -603,7 +704,8 @@ class AsyncPipelineManager:
                 "status": self.status,
                 "percent": self.percent,
                 "event_count": len(self.events),
-                "events": list(self.events[-50:]),
+                "events": list(self.events[-120:]),
+                "active_progress": dict(self.active_progress) if self.active_progress else None,
                 "result": self.last_result,
                 "error": self.error,
             }
@@ -614,6 +716,10 @@ class InstantServerJsApi:
         self.base_dir = base_dir or get_launch_root_dir()
         ensure_workspace_folder(self.base_dir)
         self.jobs = AsyncPipelineManager(base_dir=self.base_dir)
+        self.force_close_confirmed: bool = False
+        self.last_heartbeat: float = time.time()
+        self.client_connected: bool = False
+        self._webview_window: Any = None
 
     def probe_host(self) -> Dict[str, Any]:
         return asdict(m1_host_probe.probe_host_environment())
@@ -653,11 +759,96 @@ class InstantServerJsApi:
             auto_download_iso=auto_download_iso,
         )
 
+    def cancel_build(self) -> Dict[str, Any]:
+        return self.jobs.cancel_job()
+
     def poll_build_status(self) -> Dict[str, Any]:
+        self.last_heartbeat = time.time()
+        self.client_connected = True
         return self.jobs.get_snapshot()
+
+    def heartbeat(self) -> Dict[str, Any]:
+        self.last_heartbeat = time.time()
+        self.client_connected = True
+        return {"ok": True, "status": self.jobs.status}
+
+    def shutdown_app(self, force: bool = True) -> Dict[str, Any]:
+        self.force_close_confirmed = True
+        self.jobs.cancel_job()
+        _remove_pid_file(self.base_dir)
+
+        def _hard_exit() -> None:
+            time.sleep(0.12)
+            try:
+                if self._webview_window is not None:
+                    self._webview_window.destroy()
+            except Exception:
+                pass
+            os._exit(0)
+
+        threading.Thread(target=_hard_exit, daemon=True).start()
+        return {"shutting_down": True}
 
     def discover_servers(self, hostname: str = "instant-server") -> Dict[str, Any]:
         return discover_instant_servers_on_lan(hostname=hostname)
+
+
+def _get_pid_file_path(base_dir: Optional[str] = None) -> str:
+    paths = ensure_workspace_folder(base_dir)
+    return os.path.join(paths["workspace_dir"], "instant-server.pid")
+
+
+def _remove_pid_file(base_dir: Optional[str] = None) -> None:
+    try:
+        pid_path = _get_pid_file_path(base_dir)
+        if os.path.isfile(pid_path):
+            os.remove(pid_path)
+    except Exception:
+        pass
+
+
+def _cleanup_previous_instance(port: int, base_dir: Optional[str] = None) -> None:
+    """Ensure any previously running InstantServer.exe background process is terminated before starting."""
+    try:
+        import urllib.request
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/shutdown",
+            data=b'{"force": true}',
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=0.6) as _:
+            pass
+        time.sleep(0.25)
+    except Exception:
+        pass
+
+    pid_path = _get_pid_file_path(base_dir)
+    if os.path.isfile(pid_path):
+        try:
+            with open(pid_path, "r", encoding="utf-8") as fh:
+                old_pid = int(fh.read().strip())
+            if old_pid > 0 and old_pid != os.getpid():
+                if sys.platform.startswith("win"):
+                    subprocess.run(
+                        ["taskkill", "/F", "/T", "/PID", str(old_pid)],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        check=False,
+                        **_win_no_window_kwargs(),
+                    )
+                else:
+                    import signal
+                    os.kill(old_pid, signal.SIGTERM)
+                time.sleep(0.2)
+        except Exception:
+            pass
+
+    try:
+        with open(pid_path, "w", encoding="utf-8") as fh:
+            fh.write(str(os.getpid()))
+    except Exception:
+        pass
 
 
 def _set_windows_taskbar_app_id() -> None:
@@ -669,7 +860,7 @@ def _set_windows_taskbar_app_id() -> None:
             pass
 
 
-def _open_standalone_desktop_window(url: str) -> None:
+def _open_standalone_desktop_window(url: str, profile_dir: str) -> Optional[subprocess.Popen]:
     candidates: List[str] = []
     if sys.platform.startswith("win"):
         prog_files = [
@@ -704,19 +895,28 @@ def _open_standalone_desktop_window(url: str) -> None:
             if found:
                 candidates.append(found)
 
+    os.makedirs(profile_dir, exist_ok=True)
     for exe in candidates:
         try:
-            subprocess.Popen(
-                [exe, f"--app={url}", "--window-size=1220,820"],
+            proc = subprocess.Popen(
+                [
+                    exe,
+                    f"--app={url}",
+                    "--window-size=1220,820",
+                    f"--user-data-dir={profile_dir}",
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                ],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 **_win_no_window_kwargs(),
             )
-            return
+            return proc
         except Exception:
             continue
 
     webbrowser.open(url)
+    return None
 
 
 def _render_gui_html_with_boot_config(gui_html_path: str, base_dir: Optional[str] = None) -> bytes:
@@ -729,9 +929,15 @@ def _render_gui_html_with_boot_config(gui_html_path: str, base_dir: Optional[str
     return html.encode("utf-8")
 
 
+class ReusableThreadingHTTPServer(http.server.ThreadingHTTPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
+
 def launch_desktop_or_browser_gui(port: int = 8765, open_browser: bool = True) -> None:
     _set_windows_taskbar_app_id()
     paths = ensure_workspace_folder()
+    _cleanup_previous_instance(port, paths["root_dir"])
     gui_html_path = os.path.join(_BUNDLED_DIR, "lazarus_gui.html")
     api = InstantServerJsApi(base_dir=paths["root_dir"])
 
@@ -740,8 +946,10 @@ def launch_desktop_or_browser_gui(port: int = 8765, open_browser: bool = True) -
             super().__init__(*args, directory=_BUNDLED_DIR, **kwargs)
 
         def do_GET(self) -> None:
+            api.last_heartbeat = time.time()
             path = self.path.split("?", 1)[0]
             if path in ("/", "/index.html", "/lazarus_gui.html"):
+                api.client_connected = True
                 body = _render_gui_html_with_boot_config(gui_html_path, paths["root_dir"])
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -779,6 +987,8 @@ def launch_desktop_or_browser_gui(port: int = 8765, open_browser: bool = True) -
             return super().do_GET()
 
         def do_POST(self) -> None:
+            api.last_heartbeat = time.time()
+            api.client_connected = True
             path = self.path.split("?", 1)[0]
             length = int(self.headers.get("Content-Length", "0") or "0")
             raw_body = self.rfile.read(length).decode("utf-8") if length > 0 else "{}"
@@ -787,6 +997,15 @@ def launch_desktop_or_browser_gui(port: int = 8765, open_browser: bool = True) -
             except Exception:
                 payload = {}
 
+            if path == "/api/heartbeat":
+                self._send_json(api.heartbeat())
+                return
+            if path == "/api/cancel":
+                self._send_json(api.cancel_build())
+                return
+            if path == "/api/shutdown":
+                self._send_json(api.shutdown_app(force=bool(payload.get("force", True))))
+                return
             if path == "/api/save-config":
                 self._send_json(api.save_config(payload))
                 return
@@ -812,7 +1031,7 @@ def launch_desktop_or_browser_gui(port: int = 8765, open_browser: bool = True) -
         def log_message(self, format: str, *args: Any) -> None:
             pass
 
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", port), GuiHandler)
+    server = ReusableThreadingHTTPServer(("127.0.0.1", port), GuiHandler)
     url = f"http://127.0.0.1:{port}/"
 
     try:
@@ -820,7 +1039,7 @@ def launch_desktop_or_browser_gui(port: int = 8765, open_browser: bool = True) -
 
         srv_thread = threading.Thread(target=server.serve_forever, daemon=True)
         srv_thread.start()
-        webview.create_window(
+        win = webview.create_window(
             "Instant Server",
             url,
             js_api=api,
@@ -828,23 +1047,80 @@ def launch_desktop_or_browser_gui(port: int = 8765, open_browser: bool = True) -
             height=820,
             min_size=(940, 660),
         )
+        api._webview_window = win
+
+        def _on_closing() -> Optional[bool]:
+            if api.jobs.status == "RUNNING" and not api.force_close_confirmed:
+                try:
+                    win.evaluate_js("window.__showCloseWhileFlashingWarning && window.__showCloseWhileFlashingWarning()")
+                except Exception:
+                    pass
+                return False
+            return True
+
+        def _on_closed() -> None:
+            api.jobs.cancel_job()
+            _remove_pid_file(paths["root_dir"])
+            try:
+                server.server_close()
+            except Exception:
+                pass
+            os._exit(0)
+
+        try:
+            win.events.closing += _on_closing
+            win.events.closed += _on_closed
+        except Exception:
+            pass
+
         try:
             webview.start(icon=paths["icon_ico_path"])
         except TypeError:
             webview.start()
-        server.server_close()
+        _on_closed()
         return
     except ImportError:
         pass
 
     print(f"[Instant Server] Workspace folder: {paths['workspace_dir']}")
     print(f"[Instant Server] Desktop UI running at {url}")
+    browser_proc: Optional[subprocess.Popen] = None
     if open_browser:
-        _open_standalone_desktop_window(url)
+        profile_dir = os.path.join(paths["workspace_dir"], "window_profile")
+        browser_proc = _open_standalone_desktop_window(url, profile_dir=profile_dir)
+
+    def _window_lifecycle_watchdog() -> None:
+        """Automatically exit InstantServer.exe when the desktop window is closed."""
+        launch_t = time.time()
+        while True:
+            time.sleep(1.0)
+            # If the dedicated browser process exited and the UI isn't actively sending heartbeats, exit cleanly
+            if browser_proc is not None and browser_proc.poll() is not None:
+                if time.time() - api.last_heartbeat > 3.0:
+                    api.jobs.cancel_job()
+                    _remove_pid_file(paths["root_dir"])
+                    os._exit(0)
+            # If the client connected and then closed the window (no heartbeat for 6.5s), exit cleanly
+            if api.client_connected and (time.time() - api.last_heartbeat > 6.5):
+                api.jobs.cancel_job()
+                _remove_pid_file(paths["root_dir"])
+                os._exit(0)
+            # Safety fallback if no window ever connected within 60s
+            if not api.client_connected and (time.time() - launch_t > 60.0):
+                _remove_pid_file(paths["root_dir"])
+                os._exit(0)
+
+    if open_browser:
+        threading.Thread(target=_window_lifecycle_watchdog, daemon=True).start()
+
     try:
         server.serve_forever()
     except KeyboardInterrupt:
+        pass
+    finally:
+        _remove_pid_file(paths["root_dir"])
         server.server_close()
+        os._exit(0)
 
 
 # ---------------------------------------------------------------------------
@@ -986,6 +1262,33 @@ def _run_self_test() -> int:
         assert snap["result"]["hostname"] == "instant-box"
         assert snap["result"]["staged_apps"] == ["jellyfin", "pihole"]
     print("  -> PASS: Automatic workspace folder, 26-app catalog, and async build verified!")
+
+    print("[CLI Self-Test] 4. Testing In-Place Terminal Progress Bar & Job Cancellation...")
+    bar_str = format_terminal_progress_bar(50.0, label="Downloading ISO", detail="1320 / 2640 MB", width=20)
+    assert "[██████████░░░░░░░░░░]" in bar_str and "50.0%" in bar_str
+    pm = AsyncPipelineManager()
+    pm.status = "RUNNING"
+    pm.job_start_time = time.time()
+    pm._record_event({"event": "JOB_STARTED", "message": "Starting job", "data": {"percent": 8}})
+    for p in (15.0, 35.0, 65.0):
+        pm._record_event({
+            "event": "ISO_DOWNLOAD_PROGRESS",
+            "message": f"Downloading {p}%",
+            "data": {"in_place": True, "label": "Downloading Ubuntu ISO", "stage_percent": p, "detail": f"{p}% @ 20 MB/s", "percent": int(p)},
+        })
+    snap_prog = pm.get_snapshot()
+    # Milestone events count remains 1 while active_progress reflects latest 65.0% in-place!
+    assert snap_prog["event_count"] == 1, f"Expected 1 milestone log line, got {snap_prog['event_count']}"
+    assert snap_prog["active_progress"] is not None
+    assert snap_prog["active_progress"]["stage_percent"] == 65.0
+    cancel_res = pm.cancel_job()
+    assert cancel_res["cancelled"] is True
+    try:
+        pm._record_event({"event": "ISO_DOWNLOAD_PROGRESS", "message": "Next chunk", "data": {"in_place": True}})
+        raise AssertionError("Expected InterruptedError on cancelled job")
+    except InterruptedError:
+        pass
+    print("  -> PASS: In-place terminal progress bar (no log spam) & instant job cancellation verified!")
     return 0
 
 
