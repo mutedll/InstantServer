@@ -1,26 +1,9 @@
-#!/usr/bin/env python3
-"""
-Instant Server — Phase 4: Cross-Platform Standalone Executable Bundler & CI Generator
-====================================================================================
-File: build_executables.py
-Project: Instant Server (Turn any old laptop into a headless Ubuntu Server)
-Runs on: Windows 10/11, macOS, and Linux (Python 3.8+ through 3.14+, zero external deps)
-
-Responsibilities:
-1. Generates the Photoshop-style `IS` application & taskbar icon in all 3 native formats:
-   - `instant_server_icon.ico` (Windows `.exe` & taskbar)
-   - `instant_server_icon.icns` (macOS `.app` bundle & `.dmg`, fixing the PyInstaller `.ico` error)
-   - `instant_server_icon.png` (Linux desktop icon)
-2. Uses PyInstaller 6.22+ `COLLECT` + `BUNDLE` (`onedir`) on macOS (`sys.platform == 'darwin'`)
-   to eliminate the PyInstaller v7 deprecation warning (`Onefile mode in combination with macOS
-   .app bundles`), while keeping single-file `EXE` mode on Windows and Linux.
-3. Generates a zero-warning, zero-notice GitHub Actions CI/CD workflow (`release-executables.yml`).
-"""
-
+# build_executables.py
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field, field
+import importlib
 import json
 import os
 import stat
@@ -32,70 +15,67 @@ _CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 if _CURRENT_DIR not in sys.path:
     sys.path.insert(0, _CURRENT_DIR)
 
-import instant_server_cli  # noqa: E402
-
+for _cand in (
+    _CURRENT_DIR,
+    os.path.join(_CURRENT_DIR, "src", "instant_server"),
+):
+    if os.path.isdir(_cand) and _cand not in sys.path:
+        sys.path.append(_cand)
+cli: Any = importlib.import_module("cli")
 
 def resolve_bundled_resource(filename: str, base_dir: Optional[str] = None) -> str:
-    """
-    Universal path resolver for both normal Python execution and PyInstaller
-    frozen executables (`sys._MEIPASS`).
-    """
     meipass = getattr(sys, "_MEIPASS", None)
     if meipass:
         candidate = os.path.join(meipass, filename)
         if os.path.exists(candidate):
             return candidate
     fallback_base = base_dir or _CURRENT_DIR
+    for sub in (
+        "",
+        os.path.join("src", "instant_server", "ui"),
+        os.path.join("src", "instant_server", "scripts"),
+        os.path.join("src", "instant_server", "native"),
+        os.path.join("src", "instant_server"),
+        "ui",
+        "scripts",
+    ):
+        cand = os.path.join(fallback_base, sub, filename) if sub else os.path.join(fallback_base, filename)
+        if os.path.exists(cand):
+            return cand
     return os.path.join(fallback_base, filename)
-
 
 @dataclass
 class PackagingManifest:
-    """Metadata describing the generated cross-platform packaging artifacts."""
 
     app_name: str = "InstantServer"
     display_name: str = "Instant Server"
     bundle_identifier: str = "io.instantserver.studio"
     version: str = "2.0.0"
-    entrypoint_script: str = "instant_server_cli.py"
+    entrypoint_script: str = "cli.py"
     icon_ico: str = "instant_server_icon.ico"
     icon_png: str = "instant_server_icon.png"
     icon_icns: str = "instant_server_icon.icns"
-    bundled_data_files: List[str] = None  # type: ignore[assignment]
+    bundled_data_files: List[str] = field(
+        default_factory=lambda: [
+            "app_ui.html",
+            "server_dashboard.html",
+            "instant_server_icon.ico",
+            "instant_server_icon.png",
+            "instant_server_icon.icns",
+            "dashboard_service.py",
+            "hardware_adapter.py",
+            "laptop_hardening.sh",
+            "host_probe.py",
+            "iso_manager.py",
+            "usb_engine.py",
+            "config_builder.py",
+            "payload_packager.py",
+            "vm_test_harness.py",
+        ]
+    )
 
-    def __post_init__(self) -> None:
-        if self.bundled_data_files is None:
-            self.bundled_data_files = [
-                "lazarus_gui.html",
-                "instant_server_icon.ico",
-                "instant_server_icon.png",
-                "instant_server_icon.icns",
-                "p1_early_hardware_adapter.py",
-                "p2_late_laptop_hardening.sh",
-                "m1_host_probe.py",
-                "m2_iso_manager.py",
-                "m3_usb_engine.py",
-                "m4_config_builder.py",
-                "m5_payload_packager.py",
-                "vm_test_harness.py",
-            ]
-
-
-# ---------------------------------------------------------------------------
-# 1. PyInstaller `InstantServer.spec` Generator (macOS ICNS + Onedir BUNDLE)
-# ---------------------------------------------------------------------------
 def generate_pyinstaller_spec(manifest: PackagingManifest) -> str:
-    """
-    Generate a deterministic `InstantServer.spec` file:
-      - On macOS (`sys.platform == 'darwin'`): uses `instant_server_icon.icns` and
-        PyInstaller 6.22+ recommended `COLLECT` + `BUNDLE` (`onedir`) layout inside
-        `InstantServer.app` (which `macos_codesign_and_dmg.sh` packages into `InstantServer-macOS.dmg`).
-      - On Windows (`sys.platform.startswith('win')`): builds `InstantServer-Windows.exe`
-        with embedded `PyQt6` + `PyQt6-WebEngine` (no Microsoft Edge or external browser).
-      - On Linux (`sys.platform.startswith('linux')`): builds `InstantServer-Linux`
-        with embedded `PyQt6` + `PyQt6-WebEngine`.
-    """
-    datas_tuples = ",\n    ".join(f"('{f}', '.')" for f in manifest.bundled_data_files)
+    datas_tuples = ",\n    ".join(f"('{f}', '.')" for f in (manifest.bundled_data_files or []))
     return f"""# -*- mode: python ; coding: utf-8 -*-
 # Auto-generated by Instant Server Phase 4 Executable Bundler (build_executables.py)
 # Compatible with PyInstaller 6.x across Windows, macOS, and Linux
@@ -123,12 +103,12 @@ win_icon = '{manifest.icon_ico}' if os.path.exists('{manifest.icon_ico}') else N
 mac_icon = '{manifest.icon_icns}' if os.path.exists('{manifest.icon_icns}') else None
 
 hidden_imports = [
-    'm1_host_probe',
-    'm2_iso_manager',
-    'm3_usb_engine',
-    'm4_config_builder',
-    'm5_payload_packager',
-    'p1_early_hardware_adapter',
+    'host_probe',
+    'iso_manager',
+    'usb_engine',
+    'config_builder',
+    'payload_packager',
+    'hardware_adapter',
     'vm_test_harness',
     'http.server',
     'xmlrpc.client',
@@ -269,14 +249,10 @@ else:
         codesign_identity=None,
         entitlements_file=None,
         icon=win_icon,
-        uac_admin=False,
+        uac_admin=True,
     )
 """
 
-
-# ---------------------------------------------------------------------------
-# 2. Windows UAC `requireAdministrator` Application Manifest Generator
-# ---------------------------------------------------------------------------
 def generate_windows_uac_manifest(manifest: PackagingManifest) -> str:
     return f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
@@ -303,10 +279,6 @@ def generate_windows_uac_manifest(manifest: PackagingManifest) -> str:
 </assembly>
 """
 
-
-# ---------------------------------------------------------------------------
-# 3. macOS Sequoia `Info.plist` & Ad-Hoc Gatekeeper Codesign Helper
-# ---------------------------------------------------------------------------
 def generate_macos_codesign_script(manifest: PackagingManifest) -> str:
     return f"""#!/usr/bin/env bash
 # Instant Server — macOS Gatekeeper Ad-Hoc Codesigning & DMG Packaging Script
@@ -334,10 +306,6 @@ rm -rf "dist/{manifest.app_name}.app" "dist/{manifest.app_name}" || true
 echo "[macOS Packager] Done: dist/{manifest.app_name}-macOS.dmg"
 """
 
-
-# ---------------------------------------------------------------------------
-# 4. Linux AppImage & FUSE2-Free (`APPIMAGE_EXTRACT_AND_RUN=1`) Wrapper
-# ---------------------------------------------------------------------------
 def generate_linux_appimage_wrapper(manifest: PackagingManifest) -> Dict[str, str]:
     apprun = f"""#!/usr/bin/env bash
 # Instant Server — Linux AppDir Entrypoint (FUSE2/FUSE3 Resilient)
@@ -369,22 +337,7 @@ Keywords=Ubuntu;Server;USB;Homelab;CasaOS;Cockpit;
         "instant-server.desktop": desktop_entry,
     }
 
-
-# ---------------------------------------------------------------------------
-# 5. Zero-Warning, Zero-Notice GitHub Actions Workflow (`release.yml`)
-# ---------------------------------------------------------------------------
 def generate_github_actions_workflow(manifest: PackagingManifest) -> str:
-    """
-    Generate `.github/workflows/release.yml` with:
-      - Node.js 24 native actions (`actions/checkout@v6`, `actions/setup-python@v6`,
-        `actions/upload-artifact@v6` + `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`).
-      - Explicit runner labels (`ubuntu-24.04`, `windows-2022`, `macos-15-intel`).
-      - Standalone `PyQt6` + `PyQt6-WebEngine` desktop window (never opens Microsoft Edge or any browser).
-      - Exact output filenames:
-          * Windows: `InstantServer-Windows.exe`
-          * macOS:   `InstantServer-macOS.dmg`
-          * Linux:   `InstantServer-Linux`
-    """
     return f"""name: Build Instant Server Executables (Windows, macOS, Linux)
 
 on:
@@ -413,14 +366,14 @@ jobs:
 
       - name: Run Deterministic Self-Tests Across All Modules
         run: |
-          python3 m1_host_probe.py --self-test
-          python3 m2_iso_manager.py --self-test
-          python3 m3_usb_engine.py --self-test
-          python3 m4_config_builder.py --self-test
-          python3 m5_payload_packager.py --self-test
-          python3 p1_early_hardware_adapter.py --self-test
-          bash p2_late_laptop_hardening.sh --self-test
-          python3 instant_server_cli.py --self-test
+          python3 host_probe.py --self-test
+          python3 iso_manager.py --self-test
+          python3 usb_engine.py --self-test
+          python3 config_builder.py --self-test
+          python3 payload_packager.py --self-test
+          python3 hardware_adapter.py --self-test
+          bash laptop_hardening.sh --self-test
+          python3 cli.py --self-test
           python3 vm_test_harness.py --self-test
           python3 build_executables.py --self-test
 
@@ -487,22 +440,17 @@ jobs:
           if-no-files-found: error
 """
 
-
-# ---------------------------------------------------------------------------
-# 6. Orchestrator & Built-In Self-Test (`--self-test`)
-# ---------------------------------------------------------------------------
 def emit_all_packaging_configs(
     output_dir: str,
     manifest: Optional[PackagingManifest] = None,
 ) -> Dict[str, str]:
-    """Write all cross-platform build specs, Photoshop-style IS icons (.ico/.icns/.png), and CI workflows."""
     m = manifest or PackagingManifest()
     os.makedirs(output_dir, exist_ok=True)
 
     ico_path = os.path.join(output_dir, m.icon_ico)
     png_path = os.path.join(output_dir, m.icon_png)
     icns_path = os.path.join(output_dir, m.icon_icns)
-    instant_server_cli.generate_photoshop_style_is_icon(ico_path, png_path, icns_path)
+    cli.generate_photoshop_style_is_icon(ico_path, png_path, icns_path)
 
     spec_text = generate_pyinstaller_spec(m)
     win_manifest = generate_windows_uac_manifest(m)
@@ -534,24 +482,23 @@ def emit_all_packaging_configs(
 
     return written_paths
 
-
 def _run_self_test() -> int:
-    print("[Phase 4 Bundler Self-Test] 1. Testing `resolve_bundled_resource` (`sys._MEIPASS` support)...")
-    gui_path = resolve_bundled_resource("lazarus_gui.html")
+    print("[Bundler Test] 1. Testing `resolve_bundled_resource` (`sys._MEIPASS` support)...")
+    gui_path = resolve_bundled_resource("app_ui.html")
     assert os.path.exists(gui_path), f"Expected bundled GUI at {gui_path}"
     with tempfile.TemporaryDirectory() as fake_meipass:
-        fake_asset = os.path.join(fake_meipass, "lazarus_gui.html")
+        fake_asset = os.path.join(fake_meipass, "app_ui.html")
         with open(fake_asset, "w", encoding="utf-8") as fh:
             fh.write("<html>Instant Server Frozen Bundle</html>")
         setattr(sys, "_MEIPASS", fake_meipass)
         try:
-            resolved = resolve_bundled_resource("lazarus_gui.html")
+            resolved = resolve_bundled_resource("app_ui.html")
             assert resolved == fake_asset
         finally:
             delattr(sys, "_MEIPASS")
     print("  -> PASS: `sys._MEIPASS` frozen resource resolver verified!")
 
-    print("[Phase 4 Bundler Self-Test] 2. Testing generation of .ico, .icns, .png, onedir macOS spec & CI...")
+    print("[Bundler Test] 2. Testing generation of .ico, .icns, .png, onedir macOS spec & CI...")
     with tempfile.TemporaryDirectory() as tmpdir:
         emitted = emit_all_packaging_configs(tmpdir)
         assert len(emitted) == 9
@@ -560,7 +507,7 @@ def _run_self_test() -> int:
         assert open(emitted["instant_server_icon.icns"], "rb").read(4) == b"icns"
 
         spec_content = open(emitted["InstantServer.spec"], "r", encoding="utf-8").read()
-        assert "uac_admin=False" in spec_content
+        assert "uac_admin=True" in spec_content
         assert "instant_server_icon.icns" in spec_content
         assert "COLLECT(" in spec_content
 
@@ -574,19 +521,21 @@ def _run_self_test() -> int:
     print("  -> PASS: macOS .icns icon, COLLECT+BUNDLE spec, and CI workflow verified!")
     return 0
 
-
 def main() -> int:
     parser = argparse.ArgumentParser(description="Instant Server — Phase 4 Cross-Platform Executable Bundler")
     parser.add_argument("--self-test", action="store_true", help="Run built-in packaging & manifest self-tests")
     parser.add_argument("--emit-configs", type=str, default="", help="Directory to write packaging specs and scripts")
+    parser.add_argument("--build", action="store_true", help="Emit packaging configs for CI build")
     args = parser.parse_args()
 
     if args.self_test:
         return _run_self_test()
 
+    if args.build and not args.emit_configs:
+        args.emit_configs = "./build_dist"
     if args.emit_configs:
         try:
-            import webview  # noqa: F401
+            importlib.import_module("webview")
         except ImportError:
             import subprocess
             try:
@@ -600,7 +549,6 @@ def main() -> int:
     manifest = PackagingManifest()
     print(json.dumps(asdict(manifest), indent=2))
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())
