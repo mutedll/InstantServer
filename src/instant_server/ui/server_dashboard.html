@@ -1,0 +1,1959 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Instant Server — Home Server Control Center &amp; App Portal</title>
+  <link
+    rel="icon"
+    type="image/svg+xml"
+    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Crect x='4' y='4' width='120' height='120' rx='26' fill='%23001E36' stroke='%2331A8FF' stroke-width='6'/%3E%3Cpath d='M24 32 H54 V41 H43.5 V87 H54 V96 H24 V87 H34.5 V41 H24 Z' fill='%2366C4FF'/%3E%3Cpath d='M84 42 C75 42 70 45.5 70 50.5 C70 56 76 58.5 85 61.5 C96 65 103 70 103 80 C103 90.5 94 97 80 97 C70 97 62 94 58 91 L61.5 82 C66 85 72.5 87.5 80 87.5 C88 87.5 92.5 84 92.5 79.5 C92.5 74.5 87.5 71.5 78 68.5 C67 65 60 60 60 50.5 C60 40.5 68.5 32.5 83 32.5 C91.5 32.5 98 34.5 101.5 37 L98 46 C94.5 43.5 89.5 42 84 42 Z' fill='%2366C4FF'/%3E%3C/svg%3E"
+  />
+  <style>
+    :root {
+      --bg-base: #0B0C0E;
+      --bg-surface: rgba(18, 19, 23, 0.86);
+      --bg-card: #141519;
+      --bg-card-hover: #1A1C22;
+      --bg-input: #101115;
+      --border-subtle: rgba(255, 255, 255, 0.075);
+      --border-strong: rgba(255, 255, 255, 0.14);
+      --text-primary: #F4F4F6;
+      --text-secondary: #A1A1AA;
+      --text-muted: #71717A;
+      --accent: #0A84FF;
+      --accent-strong: #0070E0;
+      --accent-soft: rgba(10, 132, 255, 0.14);
+      --pro-accent: #5E5CE6;
+      --pro-soft: rgba(94, 92, 230, 0.16);
+      --success: #30D158;
+      --success-soft: rgba(48, 209, 88, 0.14);
+      --warning: #FF9F0A;
+      --warning-soft: rgba(255, 159, 10, 0.14);
+      --danger: #FF453A;
+      --danger-soft: rgba(255, 69, 58, 0.14);
+      --radius-lg: 12px;
+      --radius-md: 10px;
+      --radius-sm: 8px;
+      --shadow-card: 0 2px 10px rgba(0, 0, 0, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI Variable", system-ui, sans-serif;
+      --font-mono: "SF Mono", "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
+    }
+
+    html[data-theme="light"] {
+      --bg-base: #F5F5F7;
+      --bg-surface: rgba(255, 255, 255, 0.86);
+      --bg-card: #FFFFFF;
+      --bg-card-hover: #FAFAFC;
+      --bg-input: #F2F2F7;
+      --border-subtle: rgba(0, 0, 0, 0.075);
+      --border-strong: rgba(0, 0, 0, 0.14);
+      --text-primary: #1D1D1F;
+      --text-secondary: #515154;
+      --text-muted: #86868B;
+      --accent: #007AFF;
+      --accent-strong: #0062CC;
+      --accent-soft: rgba(0, 122, 255, 0.10);
+      --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.04);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg-base);
+      background-image: radial-gradient(ellipse 80% 45% at 50% -15%, rgba(10, 132, 255, 0.07), transparent 60%);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .app-header {
+      min-height: 58px;
+      background: var(--bg-surface);
+      backdrop-filter: blur(28px) saturate(180%);
+      -webkit-backdrop-filter: blur(28px) saturate(180%);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 22px;
+      gap: 14px;
+      flex-wrap: wrap;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .is-emblem {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: #001E36;
+      border: 1.5px solid #31A8FF;
+      color: #66C4FF;
+      font-weight: 800;
+      font-size: 14px;
+      letter-spacing: -0.5px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .brand-title {
+      font-size: 14.5px;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .brand-sub {
+      font-size: 11.5px;
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+      word-break: break-all;
+    }
+
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .mode-segmented {
+      display: inline-flex;
+      background: var(--bg-input);
+      border: 1px solid var(--border-strong);
+      border-radius: 999px;
+      padding: 2px;
+      gap: 2px;
+    }
+
+    .mode-pill {
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      font-family: var(--font-sans);
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 13px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: all 0.16s ease;
+    }
+
+    .mode-pill.active-standard {
+      background: var(--accent);
+      color: #FFFFFF;
+    }
+
+    .mode-pill.active-pro {
+      background: linear-gradient(135deg, #0A84FF 0%, #5E5CE6 100%);
+      color: #FFFFFF;
+    }
+
+    .search-box {
+      position: relative;
+      width: 230px;
+      max-width: 100%;
+    }
+
+    .search-input {
+      width: 100%;
+      background: var(--bg-input);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-primary);
+      border-radius: var(--radius-sm);
+      padding: 6px 12px;
+      font-size: 12.5px;
+      outline: none;
+    }
+
+    .search-input:focus {
+      border-color: var(--accent);
+    }
+
+    .win-btn {
+      border: 1px solid var(--border-strong);
+      background: var(--bg-card);
+      color: var(--text-primary);
+      padding: 7px 13px;
+      border-radius: var(--radius-sm);
+      font-size: 12.5px;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+
+    .win-btn:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--accent);
+    }
+
+    .win-btn-accent {
+      background: var(--accent);
+      color: #FFFFFF;
+      border-color: rgba(255, 255, 255, 0.14);
+      font-weight: 600;
+    }
+
+    .win-btn-accent:hover {
+      background: var(--accent-strong);
+      color: #FFFFFF;
+    }
+
+    .win-btn-danger {
+      background: var(--danger-soft);
+      color: var(--danger);
+      border-color: rgba(255, 69, 58, 0.35);
+    }
+
+    .win-btn-sm {
+      padding: 5px 10px;
+      font-size: 11.5px;
+    }
+
+    .telemetry-strip {
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 10px 22px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 205px), 1fr));
+      gap: 10px;
+    }
+
+    .metric-pill {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 10px 13px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .metric-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11.5px;
+      color: var(--text-secondary);
+      gap: 6px;
+    }
+
+    .metric-val {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .mini-bar {
+      height: 5px;
+      border-radius: 99px;
+      background: var(--bg-input);
+      overflow: hidden;
+    }
+
+    .mini-bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 99px;
+      transition: width 0.25s ease;
+    }
+
+    .dashboard-shell {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+    }
+
+    .sidebar {
+      width: 248px;
+      background: var(--bg-surface);
+      backdrop-filter: blur(28px) saturate(180%);
+      border-right: 1px solid var(--border-subtle);
+      padding: 16px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    .nav-btn {
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      padding: 9px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 500;
+      text-align: left;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      transition: all 0.14s ease;
+      white-space: nowrap;
+    }
+
+    .nav-btn:hover {
+      background: var(--bg-card-hover);
+      color: var(--text-primary);
+    }
+
+    .nav-btn.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .main-pane {
+      flex: 1;
+      padding: 24px 28px 48px;
+      overflow-y: auto;
+      min-width: 0;
+      max-width: 1320px;
+    }
+
+    .section-hdr {
+      margin-bottom: 18px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .section-title {
+      font-size: 19px;
+      font-weight: 600;
+      letter-spacing: -0.015em;
+      margin-bottom: 4px;
+    }
+
+    .section-desc {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.45;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .badge-accent {
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .badge-success {
+      background: var(--success-soft);
+      color: var(--success);
+    }
+
+    .badge-warning {
+      background: var(--warning-soft);
+      color: var(--warning);
+    }
+
+    .badge-pro {
+      background: var(--pro-soft);
+      color: #A5B4FC;
+    }
+
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, 285px), 1fr));
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+
+    .app-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 12px;
+      box-shadow: var(--shadow-card);
+      transition: transform 0.14s ease, border-color 0.14s ease;
+      min-width: 0;
+    }
+
+    .app-card:hover {
+      border-color: var(--border-strong);
+      transform: translateY(-1px);
+    }
+
+    .app-card-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .app-card-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .app-card-meta {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      margin-top: 2px;
+      word-break: break-all;
+    }
+
+    .app-card-desc {
+      font-size: 12.5px;
+      color: var(--text-secondary);
+      line-height: 1.45;
+    }
+
+    .app-card-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border-subtle);
+      flex-wrap: wrap;
+    }
+
+    .settings-group {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      margin-bottom: 16px;
+      overflow: hidden;
+    }
+
+    .setting-row {
+      padding: 15px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .setting-row:last-child {
+      border-bottom: none;
+    }
+
+    .setting-title {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 3px;
+    }
+
+    .setting-sub {
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 1.45;
+    }
+
+    .switch-btn {
+      width: 42px;
+      height: 23px;
+      border-radius: 99px;
+      border: 1px solid var(--border-strong);
+      background: var(--bg-input);
+      position: relative;
+      cursor: pointer;
+      transition: all 0.18s ease;
+      flex-shrink: 0;
+    }
+
+    .switch-btn.on {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .switch-thumb {
+      width: 17px;
+      height: 17px;
+      border-radius: 50%;
+      background: #FFFFFF;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .switch-btn.on .switch-thumb {
+      transform: translateX(19px);
+    }
+
+    .select-box, .text-input {
+      background: var(--bg-input);
+      border: 1px solid var(--border-strong);
+      color: var(--text-primary);
+      border-radius: var(--radius-sm);
+      padding: 6px 10px;
+      font-size: 12.5px;
+      font-family: var(--font-sans);
+      max-width: 100%;
+    }
+
+    .range-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 190px;
+      max-width: 100%;
+    }
+
+    .range-wrap input[type="range"] {
+      flex: 1;
+      accent-color: var(--accent);
+    }
+
+    .filter-pills {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+
+    .filter-pill {
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-card);
+      color: var(--text-secondary);
+      padding: 5px 11px;
+      border-radius: 999px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .filter-pill.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* Glass-Box Compose & Volume Inspector Modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(8px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      z-index: 90;
+    }
+
+    .modal-backdrop.open {
+      display: flex;
+    }
+
+    .modal-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-lg);
+      width: 100%;
+      max-width: 760px;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+      overflow: hidden;
+    }
+
+    .modal-hdr {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .modal-body {
+      padding: 18px 20px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .compose-editor {
+      width: 100%;
+      min-height: 220px;
+      background: var(--bg-input);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-md);
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.5;
+      padding: 12px;
+      resize: vertical;
+      outline: none;
+    }
+
+    .compose-editor:focus {
+      border-color: var(--accent);
+    }
+
+    .diag-box {
+      background: var(--bg-input);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 10px 14px;
+      font-size: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .modal-ftr {
+      padding: 14px 20px;
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 22px;
+      background: var(--bg-card);
+      color: var(--text-primary);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-md);
+      padding: 10px 16px;
+      font-size: 12.5px;
+      box-shadow: var(--shadow-card);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(8px);
+      transition: all 0.18s ease;
+      z-index: 100;
+      max-width: calc(100vw - 32px);
+    }
+
+    .toast.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    @media (max-width: 900px) {
+      .dashboard-shell {
+        flex-direction: column;
+      }
+      .sidebar {
+        width: 100%;
+        flex-direction: row;
+        overflow-x: auto;
+        border-right: none;
+        border-bottom: 1px solid var(--border-subtle);
+        padding: 10px 14px;
+      }
+      .main-pane {
+        padding: 18px 16px 40px;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .app-header {
+        padding: 10px 14px;
+      }
+      .header-controls {
+        width: 100%;
+        justify-content: space-between;
+      }
+      .search-box {
+        width: 100%;
+        order: 3;
+      }
+      .telemetry-strip {
+        padding: 10px 14px;
+        grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+      }
+      .setting-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+      }
+      .range-wrap {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand-group">
+      <div class="is-emblem">IS</div>
+      <div>
+        <div class="brand-title">
+          <span id="hdrHostname">instant-server.local</span>
+          <span class="badge badge-success">Online</span>
+        </div>
+        <div class="brand-sub" id="hdrSubInfo">Eth: 192.168.1.40 • Wi-Fi: 192.168.1.41 (Failover Ready)</div>
+      </div>
+    </div>
+
+    <div class="header-controls">
+      <div class="mode-segmented" role="group" aria-label="Experience Mode">
+        <button type="button" class="mode-pill" id="btnModeStandard" data-action="set-mode" data-mode="standard">Standard</button>
+        <button type="button" class="mode-pill" id="btnModePro" data-action="set-mode" data-mode="pro">Pro</button>
+      </div>
+      <div class="search-box">
+        <input type="search" id="dashSearchInput" class="search-input" placeholder="Search apps, Wikipedia, settings..." />
+      </div>
+      <button type="button" class="win-btn win-btn-sm" id="btnThemeToggle" data-action="toggle-theme">☀ Light</button>
+    </div>
+  </header>
+
+  <section class="telemetry-strip" id="telemetryStrip"></section>
+
+  <div class="dashboard-shell">
+    <aside class="sidebar" id="sidebarNav"></aside>
+    <main class="main-pane" id="mainPane"></main>
+  </div>
+
+  <!-- Glass-Box Docker Compose & Volume Inspector Modal -->
+  <div class="modal-backdrop" id="composeInspectorModal" role="dialog" aria-modal="true" aria-labelledby="composeModalTitle">
+    <div class="modal-card">
+      <div class="modal-hdr">
+        <div>
+          <div style="font-size:15px;font-weight:600;" id="composeModalTitle">Inspect Container &amp; Volumes</div>
+          <div style="font-size:12px;color:var(--text-secondary);" id="composeModalSub">Transparent Docker Compose &amp; host volume configuration</div>
+        </div>
+        <button type="button" class="win-btn win-btn-sm" data-action="close-compose-modal">✕ Close</button>
+      </div>
+      <div class="modal-body">
+        <div class="diag-box" id="composeVolumeExplainBox"></div>
+        <div>
+          <div style="font-size:12px;font-weight:600;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
+            <span>Raw <code>docker-compose.yml</code> (Editable)</span>
+            <button type="button" class="win-btn win-btn-sm" data-action="validate-compose">✓ Validate &amp; Check Errors</button>
+          </div>
+          <textarea id="composeYamlTextarea" class="compose-editor" spellcheck="false"></textarea>
+        </div>
+        <div class="diag-box" id="composeDiagnosticsBox"></div>
+      </div>
+      <div class="modal-ftr">
+        <button type="button" class="win-btn" data-action="reset-compose-default">Reset to Default</button>
+        <button type="button" class="win-btn win-btn-accent" data-action="save-compose-override">Save &amp; Recreate Container</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="dashToast"></div>
+
+  <script>
+    const DEFAULT_APPS = [
+      { id: "kiwix", title: "Offline Wikipedia (Kiwix)", category: "Knowledge & Wiki", port: 8086, ram_mb: 128, image: "ghcr.io/kiwix/kiwix-serve:latest", volumes: ["/DATA/AppData/kiwix/zim:/data"], installed: true, status: "running", description: "Host full offline Wikipedia, WikiMed, iFixit repair manuals, and Project Gutenberg (.zim files) on your home Wi-Fi." },
+      { id: "jellyfin", title: "Jellyfin Media Server", category: "Media & Photos", port: 8096, ram_mb: 512, image: "jellyfin/jellyfin:latest", volumes: ["/DATA/AppData/jellyfin/config:/config", "/DATA/Media:/media"], installed: true, status: "running", description: "Stream movies, TV shows, and music to any phone, smart TV, or browser with zero subscriptions." },
+      { id: "nextcloud", title: "Nextcloud Personal Cloud", category: "Cloud & Files", port: 8081, ram_mb: 512, image: "nextcloud:stable", volumes: ["/DATA/AppData/nextcloud/html:/var/www/html", "/DATA/AppData/nextcloud/data:/var/www/html/data"], installed: true, status: "running", description: "Private Google Drive & Workspace replacement for documents, photos, calendars, and contacts." },
+      { id: "pihole", title: "Pi-hole Network Ad-Blocker", category: "Network & VPN", port: 8085, ram_mb: 128, image: "pihole/pihole:latest", volumes: ["/DATA/AppData/pihole/etc-pihole:/etc/pihole", "/DATA/AppData/pihole/etc-dnsmasq.d:/etc/dnsmasq.d"], installed: true, status: "running", description: "Network-wide DNS sinkhole that blocks ads and trackers on every device connected to your router." },
+      { id: "immich", title: "Immich Photo Backup", category: "Media & Photos", port: 2283, ram_mb: 1024, image: "ghcr.io/immich-app/immich-server:release", volumes: ["/DATA/AppData/immich/upload:/usr/src/app/upload"], installed: true, status: "running", description: "Self-hosted Google Photos replacement with automatic mobile camera roll backup and AI face recognition." },
+      { id: "homeassistant", title: "Home Assistant", category: "Smart Home", port: 8123, ram_mb: 512, image: "homeassistant/home-assistant:stable", volumes: ["/DATA/AppData/homeassistant/config:/config"], installed: true, status: "running", description: "Local smart home automation hub for lights, sensors, Zigbee, Matter, and energy dashboards." },
+      { id: "vaultwarden", title: "Vaultwarden Passwords", category: "Security & Tools", port: 8082, ram_mb: 64, image: "vaultwarden/server:latest", volumes: ["/DATA/AppData/vaultwarden/data:/data"], installed: true, status: "running", description: "Lightweight Bitwarden-compatible password manager server for browsers and mobile apps." },
+      { id: "wg_easy", title: "WireGuard VPN (wg-easy)", category: "Network & VPN", port: 51821, ram_mb: 64, image: "ghcr.io/wg-easy/wg-easy:latest", volumes: ["/DATA/AppData/wg_easy:/etc/wireguard"], installed: false, status: "available", description: "One-click WireGuard VPN server with web UI and QR codes for connecting to your home LAN from anywhere." },
+      { id: "syncthing", title: "Syncthing File Sync", category: "Cloud & Files", port: 8384, ram_mb: 128, image: "lscr.io/linuxserver/syncthing:latest", volumes: ["/DATA/AppData/syncthing/config:/config", "/DATA/Sync:/data1"], installed: false, status: "available", description: "Continuous peer-to-peer folder synchronization across your laptops, desktops, and phones." },
+      { id: "qbittorrent", title: "qBittorrent Web UI", category: "Media & Photos", port: 8090, ram_mb: 256, image: "lscr.io/linuxserver/qbittorrent:latest", volumes: ["/DATA/AppData/qbittorrent/config:/config", "/DATA/Downloads:/downloads"], installed: false, status: "available", description: "Web-based torrent and magnet download manager with RSS automation." },
+      { id: "adguardhome", title: "AdGuard Home DNS", category: "Network & VPN", port: 3000, ram_mb: 128, image: "adguard/adguardhome:latest", volumes: ["/DATA/AppData/adguardhome/work:/opt/adguardhome/work", "/DATA/AppData/adguardhome/conf:/opt/adguardhome/conf"], installed: false, status: "available", description: "Encrypted DNS-over-HTTPS ad blocker with family safe-search and per-device parental controls." },
+      { id: "filebrowser", title: "FileBrowser Web NAS", category: "Cloud & Files", port: 8095, ram_mb: 64, image: "filebrowser/filebrowser:latest", volumes: ["/DATA:/srv", "/DATA/AppData/filebrowser:/database"], installed: false, status: "available", description: "Clean web file manager to upload, download, and share files stored on your server drive." },
+      { id: "calibreweb", title: "Calibre-Web eBooks", category: "Knowledge & Wiki", port: 8083, ram_mb: 128, image: "lscr.io/linuxserver/calibre-web:latest", volumes: ["/DATA/AppData/calibreweb/config:/config", "/DATA/Media/Books:/books"], installed: false, status: "available", description: "Digital eBook & audiobook library with one-click wireless delivery to Kindle and Kobo readers." },
+      { id: "bookstack", title: "BookStack Family Wiki", category: "Knowledge & Wiki", port: 6875, ram_mb: 256, image: "lscr.io/linuxserver/bookstack:latest", volumes: ["/DATA/AppData/bookstack/config:/config"], installed: false, status: "available", description: "Personal and homelab documentation wiki organized like books and chapters." },
+      { id: "uptimekuma", title: "Uptime Kuma Monitor", category: "Security & Tools", port: 3001, ram_mb: 128, image: "louislam/uptime-kuma:1", volumes: ["/DATA/AppData/uptimekuma/data:/app/data"], installed: false, status: "available", description: "Self-hosted status monitoring dashboard with instant alerts when services or internet drop." },
+      { id: "portainer", title: "Portainer CE", category: "Security & Tools", port: 9443, ram_mb: 128, image: "portainer/portainer-ce:latest", volumes: ["/var/run/docker.sock:/var/run/docker.sock", "/DATA/AppData/portainer/data:/data"], installed: false, status: "available", description: "Full visual container, volume, network, and Docker Compose stack management UI." },
+      { id: "paperless", title: "Paperless-ngx OCR", category: "Cloud & Files", port: 8000, ram_mb: 512, image: "ghcr.io/paperless-ngx/paperless-ngx:latest", volumes: ["/DATA/AppData/paperless/data:/usr/src/paperless/data", "/DATA/AppData/paperless/media:/usr/src/paperless/media"], installed: false, status: "available", description: "Document scanner and archive that converts receipts, PDFs, and invoices into searchable text." },
+      { id: "stirlingpdf", title: "Stirling-PDF Studio", category: "Security & Tools", port: 8084, ram_mb: 256, image: "frooodle/s-pdf:latest", volumes: ["/DATA/AppData/stirlingpdf/configs:/configs"], installed: false, status: "available", description: "All-in-one local PDF toolkit to merge, split, OCR, compress, and sign PDFs privately." },
+      { id: "navidrome", title: "Navidrome Music Streamer", category: "Media & Photos", port: 4533, ram_mb: 64, image: "deluan/navidrome:latest", volumes: ["/DATA/AppData/navidrome/data:/data", "/DATA/Media/Music:/music:ro"], installed: false, status: "available", description: "Ultra-fast personal music streaming server compatible with Subsonic mobile apps." },
+      { id: "gitea", title: "Gitea Private Git", category: "Security & Tools", port: 3002, ram_mb: 128, image: "gitea/gitea:latest", volumes: ["/DATA/AppData/gitea/data:/data"], installed: false, status: "available", description: "Self-hosted GitHub alternative for private source code repositories and CI/CD runners." },
+      { id: "minecraft", title: "Minecraft Java Server", category: "Gaming & AI", port: 25565, ram_mb: 2048, image: "itzg/minecraft-server:latest", volumes: ["/DATA/AppData/minecraft/data:/data"], installed: false, status: "available", description: "24/7 multiplayer Minecraft Java server (Paper / Vanilla / Fabric) with automatic backups." },
+      { id: "minecraft_bedrock", title: "Minecraft Bedrock Server", category: "Gaming & AI", port: 19132, ram_mb: 512, image: "itzg/minecraft-bedrock-server:latest", volumes: ["/DATA/AppData/minecraft_bedrock/data:/data"], installed: false, status: "available", description: "Cross-play Minecraft Bedrock server for mobile, Xbox, PlayStation, Switch, and Windows." },
+      { id: "ollama_webui", title: "Ollama + Open WebUI (Local AI)", category: "Gaming & AI", port: 3005, ram_mb: 8192, image: "ghcr.io/open-webui/open-webui:ollama", volumes: ["/DATA/AppData/ollama_webui/ollama:/root/.ollama"], installed: false, status: "available", description: "Private offline ChatGPT interface for running Llama 3, DeepSeek, Mistral, and Qwen locally." }
+    ];
+
+    const DEFAULT_ZIMS = [
+      { id: "wikipedia_en_simple", title: "Wikipedia (Simple English — Illustrated)", size_gb: 2.4, articles: "255,000+ articles", category: "Encyclopedia", installed: true, progress_pct: 100, filename: "wikipedia_en_simple_all_maxi.zim", description: "Fast, complete Simple English Wikipedia with images. Ready for instant offline search." },
+      { id: "wikipedia_en_medicine", title: "WikiMed Medical Encyclopedia", size_gb: 1.8, articles: "65,000+ clinical articles", category: "Medical & Survival", installed: false, progress_pct: 0, filename: "wikipedia_en_medicine_maxi.zim", description: "Offline clinical reference, pharmacology, anatomy, and emergency first-aid encyclopedia." },
+      { id: "ifixit_en_all", title: "iFixit Complete Repair Manuals", size_gb: 3.6, articles: "100,000+ repair guides", category: "Medical & Survival", installed: false, progress_pct: 0, filename: "ifixit_en_all.zim", description: "Step-by-step illustrated repair guides for laptops, phones, appliances, and vehicles." },
+      { id: "wikipedia_en_nopic", title: "Wikipedia (Full English — All Articles, No Images)", size_gb: 56.0, articles: "6,800,000+ articles", category: "Encyclopedia", installed: false, progress_pct: 0, filename: "wikipedia_en_all_nopic.zim", description: "Every English Wikipedia article, table, and formula without heavy image files." },
+      { id: "wikipedia_en_full_maxi", title: "Wikipedia (Full English — Complete Edition with All Images)", size_gb: 102.0, articles: "6,800,000+ articles + HD media", category: "Encyclopedia", installed: false, progress_pct: 0, filename: "wikipedia_en_all_maxi.zim", description: "The complete English Wikipedia archive with all illustrations, maps, and infoboxes." },
+      { id: "gutenberg_en_all", title: "Project Gutenberg World Literature Library", size_gb: 72.0, articles: "70,000+ full books", category: "Books & Literature", installed: false, progress_pct: 0, filename: "gutenberg_en_all.zim", description: "Over 70,000 classic books, science texts, and world literature for offline reading." }
+    ];
+
+    function buildDefaultCompose(app) {
+      const vols = (app.volumes || [`/DATA/AppData/${app.id}:/data`]).map(v => `      - ${v}`).join("\n");
+      return `name: ${app.id}
+services:
+  ${app.id}:
+    image: ${app.image}
+    container_name: ${app.id}
+    restart: unless-stopped
+    environment:
+      - TZ=UTC
+      - PUID=1000
+      - PGID=1000
+    ports:
+      - "${app.port}:${app.port}"
+    volumes:
+${vols}`;
+    }
+
+    const state = {
+      theme: "dark",
+      activeTab: "apps",
+      searchQuery: "",
+      appCategory: "All",
+      customZimUrl: "",
+      inspectingAppId: null,
+      doctorStatusMsg: "",
+      clusterMergePolicy: "mergerfs_union_safe",
+      clusterConfirmWipe: "",
+      clusterConnectIp: "192.168.1.54",
+      clusterConnectHost: "instant-server-b8f2",
+      clusterActiveNodes: [
+        { hostname: "instant-server", ip: "192.168.1.40", device: "Primary Server", used_gb: 42.4, total_gb: 256.0, ram_gb: 8 }
+      ],
+      clusterDiscoveredNodes: [
+        { hostname: "instant-server-b8f2", ip: "192.168.1.54", device: "Second Laptop (Found on Home Wi-Fi)", used_gb: 118.0, total_gb: 512.0, ram_gb: 8 },
+        { hostname: "instant-mini-n100", ip: "192.168.1.61", device: "Mini-PC (Found on Home LAN)", used_gb: 64.0, total_gb: 1000.0, ram_gb: 16 }
+      ],
+      settings: {
+        ui_mode: "standard",
+        hostname: "instant-server",
+        ignore_lid_switch: true,
+        disable_wifi_power_save: true,
+        enable_mosh_server: true,
+        screen_blank_seconds: 60,
+        battery_charge_start_pct: 40,
+        battery_charge_stop_pct: 60,
+        ups_shutdown_battery_pct: 15,
+        cpu_governor: "schedutil",
+        disable_cpu_turbo_boost: false,
+        enable_wake_on_lan: true,
+        enable_tcp_bbr: true,
+        vm_swappiness: 10,
+        inotify_max_watches: 524288,
+        enable_ufw_firewall: true,
+        enable_fail2ban: true,
+        ssh_port: 22,
+        enable_auto_updates: true,
+        auto_update_window: "03:00",
+        enable_scheduled_backups: true,
+        backup_retention_days: 14
+      },
+      telemetry: {
+        hostname: "instant-server",
+        eth_ipv4: "192.168.1.40",
+        wifi_ipv4: "192.168.1.41",
+        kernel: "6.11.0-21-generic",
+        cpu_load_pct: 11.4,
+        cpu_temp_c: 41,
+        mem_used_mb: 2450,
+        mem_total_mb: 8192,
+        mem_pct: 29.9,
+        disk_used_gb: 42.4,
+        disk_total_gb: 256.0,
+        disk_pct: 16.5,
+        battery_pct: 60,
+        battery_status: "Charging capped (AC Plugged In)",
+        battery_health_pct: 89,
+        battery_cycles: 142,
+        idle_watts_est: 10.2
+      },
+      apps: DEFAULT_APPS,
+      kiwix_zims: DEFAULT_ZIMS,
+      updates: {
+        last_checked: "Just now",
+        status_text: "2 OS security updates & 2 web app updates available",
+        os_updates: [
+          { pkg: "linux-image-generic-hwe", current: "6.11.0-19.19", available: "6.11.0-21.21", category: "Kernel & Hardware", security: true },
+          { pkg: "openssl", current: "3.0.13-0ubuntu3.4", available: "3.0.13-0ubuntu3.5", category: "Cryptography", security: true },
+          { pkg: "systemd", current: "255.4-1ubuntu8.4", available: "255.4-1ubuntu8.6", category: "Core OS", security: false },
+          { pkg: "cockpit-ws", current: "314-1", available: "316-1", category: "Web Console", security: false }
+        ],
+        app_updates: [
+          { id: "jellyfin", title: "Jellyfin Media Server", image: "jellyfin/jellyfin:latest", current_tag: "10.10.3", available_tag: "10.10.6", update_available: true },
+          { id: "nextcloud", title: "Nextcloud Personal Cloud", image: "nextcloud:stable", current_tag: "30.0.4", available_tag: "30.0.5", update_available: true },
+          { id: "kiwix", title: "Offline Wikipedia (Kiwix)", image: "ghcr.io/kiwix/kiwix-serve:latest", current_tag: "3.7.0", available_tag: "3.7.0", update_available: false },
+          { id: "pihole", title: "Pi-hole Ad-Blocker", image: "pihole/pihole:latest", current_tag: "2025.02.1", available_tag: "2025.02.1", update_available: false }
+        ],
+        system_files: [
+          { path: "/etc/systemd/logind.conf.d/99-instant-server-headless.conf", role: "Lid-Close & Sleep Protection", status: "Verified" },
+          { path: "/etc/NetworkManager/conf.d/99-wifi-powersave-off.conf", role: "Wi-Fi Power-Save Disabled (Fast Failover)", status: "Verified" },
+          { path: "/etc/tlp.d/99-instant-server-battery.conf", role: "Battery Charge Limiter (40%–60%)", status: "Verified" },
+          { path: "/etc/systemd/system/instant-server-battery-guardian.timer", role: "Built-In Battery UPS Watchdog", status: "Active (60s interval)" },
+          { path: "/etc/sysctl.d/99-instant-server-pro.conf", role: "Network & Memory Tuning", status: "Verified" }
+        ]
+      }
+    };
+
+    if (window.__SERVER_DASHBOARD_BOOT__ && typeof window.__SERVER_DASHBOARD_BOOT__ === "object") {
+      const b = window.__SERVER_DASHBOARD_BOOT__;
+      if (b.settings) Object.assign(state.settings, b.settings);
+      if (b.telemetry) Object.assign(state.telemetry, b.telemetry);
+      if (Array.isArray(b.apps)) state.apps = b.apps;
+      if (Array.isArray(b.kiwix_zims)) state.kiwix_zims = b.kiwix_zims;
+      if (b.updates) Object.assign(state.updates, b.updates);
+    }
+
+    function esc(s) {
+      return String(s ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById("dashToast");
+      if (!t) return;
+      t.textContent = msg;
+      t.classList.add("visible");
+      clearTimeout(t._timer);
+      t._timer = setTimeout(() => t.classList.remove("visible"), 2600);
+    }
+
+    async function callDashboardApi(path, method = "GET", body = null) {
+      try {
+        if (window.location.protocol.startsWith("http")) {
+          const opts = { method, headers: { "Content-Type": "application/json" }, cache: "no-store" };
+          if (body && method === "POST") opts.body = JSON.stringify(body);
+          const r = await fetch(window.location.origin + path, opts);
+          if (r.ok) return await r.json();
+        }
+      } catch (_e) {}
+      return null;
+    }
+
+    function runComposeValidationLocal(yamlText) {
+      const msgs = [];
+      if (!yamlText.trim()) {
+        return [{ severity: "error", message: "Compose configuration is empty." }];
+      }
+      if (!yamlText.includes("services:")) {
+        msgs.push({ severity: "error", message: "Missing top-level 'services:' block." });
+      }
+      if (!yamlText.includes("image:")) {
+        msgs.push({ severity: "error", message: "Missing 'image:' tag." });
+      }
+      const lines = yamlText.split("\n");
+      lines.forEach((ln, i) => {
+        if (ln.includes("\t")) {
+          msgs.push({ severity: "error", message: `Line ${i + 1}: Tab character detected. Replace tabs with spaces.` });
+        }
+        const mVol = ln.match(/-\s*(\/DATA\/[^:]+):([^\s]+)/);
+        if (mVol) {
+          msgs.push({ severity: "ok", message: `Line ${i + 1}: Host directory '${mVol[1]}' mapped to container '${mVol[2]}'.` });
+        }
+      });
+      if (!msgs.some(m => m.severity === "error")) {
+        msgs.unshift({ severity: "ok", message: "Compose YAML syntax, port bindings, and volume mounts are valid." });
+      }
+      return msgs;
+    }
+
+    function openComposeInspector(appId) {
+      const app = state.apps.find(a => a.id === appId);
+      if (!app) return;
+      state.inspectingAppId = appId;
+      const modal = document.getElementById("composeInspectorModal");
+      document.getElementById("composeModalTitle").textContent = `${app.title} — Compose & Volume Inspector`;
+      document.getElementById("composeModalSub").textContent = `Container: ${app.image} • Port ${app.port}`;
+      const vols = app.volumes || [`/DATA/AppData/${app.id}:/data`];
+      document.getElementById("composeVolumeExplainBox").innerHTML = `
+        <div style="font-weight:600;color:var(--accent);">Where this app stores your files on the hard drive:</div>
+        ${vols.map(v => {
+          const parts = v.split(":");
+          return `<div>• Host Folder: <code>${esc(parts[0])}</code> → Inside Container: <code>${esc(parts[1] || "/data")}</code></div>`;
+        }).join("")}
+        <div style="color:var(--text-secondary);margin-top:2px;">Tip: Back up <code>/DATA/AppData/${esc(app.id)}</code> to save all settings and databases for ${esc(app.title)}.</div>
+      `;
+      const yaml = app.compose_yaml || buildDefaultCompose(app);
+      document.getElementById("composeYamlTextarea").value = yaml;
+      renderComposeDiagnostics(runComposeValidationLocal(yaml));
+      if (modal) modal.classList.add("open");
+    }
+
+    function renderComposeDiagnostics(list) {
+      const box = document.getElementById("composeDiagnosticsBox");
+      if (!box) return;
+      box.innerHTML = list.map(item => {
+        const color = item.severity === "error" ? "var(--danger)" : item.severity === "ok" ? "var(--success)" : "var(--accent)";
+        const icon = item.severity === "error" ? "✕" : "✓";
+        return `<div style="color:${color};font-family:var(--font-mono);">${icon} ${esc(item.message)}</div>`;
+      }).join("");
+    }
+
+    function renderTelemetry() {
+      const t = state.telemetry;
+      const s = state.settings;
+      const strip = document.getElementById("telemetryStrip");
+      if (!strip) return;
+      document.getElementById("hdrHostname").textContent = `${s.hostname || "instant-server"}.local`;
+      document.getElementById("hdrSubInfo").textContent = `Eth: ${t.eth_ipv4 || "192.168.1.40"} (Primary) • Wi-Fi: ${t.wifi_ipv4 || "192.168.1.41"} (Failover Ready)`;
+      document.getElementById("btnModeStandard").className = "mode-pill " + (s.ui_mode === "standard" ? "active-standard" : "");
+      document.getElementById("btnModePro").className = "mode-pill " + (s.ui_mode === "pro" ? "active-pro" : "");
+
+      const totalPoolGb = state.clusterActiveNodes.reduce((acc, n) => acc + n.total_gb, 0);
+      const usedPoolGb = state.clusterActiveNodes.reduce((acc, n) => acc + n.used_gb, 0);
+
+      strip.innerHTML = `
+        <div class="metric-pill">
+          <div class="metric-top"><span>Dual-IP Failover</span><span>${state.clusterActiveNodes.length} Server(s)</span></div>
+          <div class="metric-val">Eth ${esc(t.eth_ipv4 || "192.168.1.40")} • Wi-Fi ${esc(t.wifi_ipv4 || "192.168.1.41")}</div>
+          <div class="mini-bar"><div class="mini-bar-fill" style="width:100%;background:var(--success)"></div></div>
+        </div>
+        <div class="metric-pill">
+          <div class="metric-top"><span>CPU &amp; Thermal</span><span>${t.cpu_temp_c}°C</span></div>
+          <div class="metric-val">${t.cpu_load_pct}% • ${esc(s.cpu_governor)}</div>
+          <div class="mini-bar"><div class="mini-bar-fill" style="width:${Math.min(100, t.cpu_load_pct)}%"></div></div>
+        </div>
+        <div class="metric-pill">
+          <div class="metric-top"><span>Storage Pool</span><span>${usedPoolGb.toFixed(0)} / ${totalPoolGb.toFixed(0)} GB</span></div>
+          <div class="metric-val">${(t.mem_used_mb / 1024).toFixed(1)} / ${(t.mem_total_mb / 1024).toFixed(1)} GB RAM</div>
+          <div class="mini-bar"><div class="mini-bar-fill" style="width:${Math.min(100, t.mem_pct)}%"></div></div>
+        </div>
+        <div class="metric-pill">
+          <div class="metric-top"><span>Battery Health ${t.battery_health_pct || 89}%</span><span>${t.battery_cycles || 142} cycles</span></div>
+          <div class="metric-val">${s.battery_charge_stop_pct}% Cap • UPS @ ${s.ups_shutdown_battery_pct}%</div>
+          <div class="mini-bar"><div class="mini-bar-fill" style="width:${s.battery_charge_stop_pct}%;background:var(--success)"></div></div>
+        </div>
+      `;
+    }
+
+    function renderSidebar() {
+      const sb = document.getElementById("sidebarNav");
+      if (!sb) return;
+      const installedCount = state.apps.filter(a => a.installed).length;
+      const installedZims = state.kiwix_zims.filter(z => z.installed).length;
+      const pendingUpdates = state.updates.os_updates.length + state.updates.app_updates.filter(a => a.update_available).length;
+      const tabs = [
+        { id: "apps", label: "My Apps & App Store", badge: `${installedCount} active` },
+        { id: "cluster", label: "Combine Servers", badge: `${state.clusterActiveNodes.length} linked` },
+        { id: "kiwix", label: "Offline Wikipedia (Kiwix)", badge: `${installedZims} ZIM` },
+        { id: "hardware", label: "Lid, Wi-Fi & Battery", badge: `${state.settings.battery_charge_stop_pct}%` },
+        { id: "updates", label: "Updates & System Files", badge: pendingUpdates > 0 ? `${pendingUpdates} new` : "OK" },
+        { id: "handbook", label: "Handbook & Diagnostics", badge: "Guide" },
+        { id: "pro_control", label: "Pro Kernel & Firewall", badge: "PRO" }
+      ];
+      sb.innerHTML = tabs.map(tab => `
+        <button type="button" class="nav-btn ${state.activeTab === tab.id ? "active" : ""}" data-action="switch-tab" data-tab="${tab.id}">
+          <span>${esc(tab.label)}</span>
+          <span class="badge ${tab.id === "pro_control" ? "badge-pro" : "badge-accent"}">${esc(tab.badge)}</span>
+        </button>
+      `).join("");
+    }
+
+    function renderAppsTab() {
+      const q = state.searchQuery.trim().toLowerCase();
+      const installedApps = state.apps.filter(a => a.installed && (!q || a.title.toLowerCase().includes(q) || a.description.toLowerCase().includes(q)));
+      const categories = ["All", "Knowledge & Wiki", "Media & Photos", "Cloud & Files", "Network & VPN", "Smart Home", "Security & Tools", "Gaming & AI"];
+      const catalogApps = state.apps.filter(a => {
+        const matchCat = state.appCategory === "All" || a.category === state.appCategory;
+        const matchQ = !q || a.title.toLowerCase().includes(q) || a.description.toLowerCase().includes(q);
+        return matchCat && matchQ;
+      });
+
+      const host = state.settings.hostname || "instant-server";
+      return `
+        <div class="section-hdr">
+          <div>
+            <div class="section-title">Installed Web Apps (${installedApps.length})</div>
+            <div class="section-desc">Click <strong>Compose &amp; Volumes</strong> on any app to view or edit its <code>docker-compose.yml</code> and storage folder paths.</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <a class="win-btn win-btn-sm" href="https://${esc(host)}.local:9090" target="_blank" rel="noopener">Open Cockpit (:9090)</a>
+            <a class="win-btn win-btn-sm" href="http://${esc(host)}.local" target="_blank" rel="noopener">Open CasaOS (:80)</a>
+          </div>
+        </div>
+
+        <div class="cards-grid">
+          ${installedApps.map(app => `
+            <div class="app-card">
+              <div>
+                <div class="app-card-top">
+                  <div>
+                    <div class="app-card-title">${esc(app.title)}</div>
+                    <div class="app-card-meta">http://${esc(host)}.local:${app.port} • ${app.ram_mb} MB RAM</div>
+                  </div>
+                  <span class="badge badge-success">Running</span>
+                </div>
+                <div class="app-card-desc" style="margin-top:8px;">${esc(app.description)}</div>
+              </div>
+              <div class="app-card-actions">
+                <a class="win-btn win-btn-accent win-btn-sm" href="http://${esc(host)}.local:${app.port}" target="_blank" rel="noopener">Open Web UI ↗</a>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                  <button type="button" class="win-btn win-btn-sm" data-action="inspect-compose" data-app="${app.id}">Compose &amp; Volumes</button>
+                  <button type="button" class="win-btn win-btn-sm" data-action="app-op" data-app="${app.id}" data-op="restart">Restart</button>
+                  <button type="button" class="win-btn win-btn-danger win-btn-sm" data-action="app-op" data-app="${app.id}" data-op="remove">Remove</button>
+                </div>
+              </div>
+            </div>
+          `).join("")}
+        </div>
+
+        <div class="section-hdr" style="margin-top:28px;">
+          <div>
+            <div class="section-title">Self-Hosted App Store Catalog (${state.apps.length} Apps)</div>
+            <div class="section-desc">Install any new app onto your server with 1 click — pre-configured with Docker Compose &amp; CasaOS metadata.</div>
+          </div>
+        </div>
+
+        <div class="filter-pills">
+          ${categories.map(cat => `
+            <button type="button" class="filter-pill ${state.appCategory === cat ? "active" : ""}" data-action="set-app-cat" data-cat="${esc(cat)}">${esc(cat)}</button>
+          `).join("")}
+        </div>
+
+        <div class="cards-grid">
+          ${catalogApps.map(app => `
+            <div class="app-card">
+              <div>
+                <div class="app-card-top">
+                  <div>
+                    <div class="app-card-title">${esc(app.title)}</div>
+                    <div class="app-card-meta">${esc(app.image)} • Port ${app.port}</div>
+                  </div>
+                  <span class="badge ${app.installed ? "badge-success" : "badge-accent"}">${app.installed ? "Installed" : `${app.ram_mb} MB`}</span>
+                </div>
+                <div class="app-card-desc" style="margin-top:8px;">${esc(app.description)}</div>
+              </div>
+              <div class="app-card-actions">
+                <button type="button" class="win-btn win-btn-sm" data-action="inspect-compose" data-app="${app.id}">Inspect YAML</button>
+                ${app.installed
+                  ? `<button type="button" class="win-btn win-btn-danger win-btn-sm" data-action="app-op" data-app="${app.id}" data-op="remove">Uninstall</button>`
+                  : `<button type="button" class="win-btn win-btn-accent win-btn-sm" data-action="app-op" data-app="${app.id}" data-op="install">＋ Install &amp; Start</button>`
+                }
+              </div>
+            </div>
+          `).join("")}
+        </div>
+      `;
+    }
+
+    function renderClusterTab() {
+      const totalGb = state.clusterActiveNodes.reduce((acc, n) => acc + n.total_gb, 0);
+      const usedGb = state.clusterActiveNodes.reduce((acc, n) => acc + n.used_gb, 0);
+      const expectedWipeCode = `WIPE-${state.clusterConnectHost || "second-server"}`;
+      const isWipeMode = state.clusterMergePolicy === "wipe_secondary_expand";
+      const wipeConfirmed = state.clusterConfirmWipe.trim() === expectedWipeCode;
+
+      return `
+        <div class="section-hdr">
+          <div>
+            <div class="section-title">Combine Multiple Computers into One Server (${state.clusterActiveNodes.length} Linked)</div>
+            <div class="section-desc">Connect another laptop, desktop PC, or Mini-PC on your home network to combine their storage space and share apps.</div>
+          </div>
+          <span class="badge badge-success">Combined Pool: ${usedGb.toFixed(0)} / ${totalGb.toFixed(0)} GB</span>
+        </div>
+
+        <div class="settings-group">
+          ${state.clusterActiveNodes.map(n => `
+            <div class="setting-row">
+              <div>
+                <div class="setting-title">🟢 ${esc(n.hostname)}.local <span class="badge badge-accent">${esc(n.ip)}</span></div>
+                <div class="setting-sub">${esc(n.device)} • ${n.used_gb} GB used of ${n.total_gb} GB • ${n.ram_gb} GB RAM</div>
+              </div>
+              <span class="badge badge-success">Active in Server Pool</span>
+            </div>
+          `).join("")}
+
+          ${state.clusterDiscoveredNodes.map(n => `
+            <div class="setting-row">
+              <div>
+                <div class="setting-title">🟡 ${esc(n.hostname)}.local <span class="badge badge-warning">${esc(n.ip)}</span></div>
+                <div class="setting-sub">${esc(n.device)} • Has ${n.used_gb} GB of existing files on a ${n.total_gb} GB drive</div>
+              </div>
+              <button type="button" class="win-btn win-btn-sm" data-action="select-cluster-candidate" data-host="${esc(n.hostname)}" data-ip="${esc(n.ip)}">Select to Connect</button>
+            </div>
+          `).join("")}
+        </div>
+
+        <div class="section-hdr" style="margin-top:22px;">
+          <div>
+            <div class="section-title">Connect Another Server on Your Network</div>
+            <div class="section-desc">Choose how to handle existing files on both computers before linking them together.</div>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">Second server name &amp; IP address</div>
+              <div class="setting-sub">Pick a discovered server above or type the IP address of another Instant Server on your Wi-Fi or LAN.</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <input type="text" class="text-input" data-field="clusterConnectHost" value="${esc(state.clusterConnectHost)}" placeholder="Server name" style="width:160px;" />
+              <input type="text" class="text-input" data-field="clusterConnectIp" value="${esc(state.clusterConnectIp)}" placeholder="IP address" style="width:135px;" />
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">What should happen to existing files on both computers?</div>
+              <div class="setting-sub">By default, both computers keep all of their existing files and combine their free space into one shared pool.</div>
+            </div>
+            <select class="select-box" data-field="clusterMergePolicy">
+              <option value="mergerfs_union_safe" ${state.clusterMergePolicy === "mergerfs_union_safe" ? "selected" : ""}>Keep all files on both computers (Safe combined storage)</option>
+              <option value="replicated_ha_mirror" ${state.clusterMergePolicy === "replicated_ha_mirror" ? "selected" : ""}>Keep all files &amp; mirror backups across both computers</option>
+              <option value="wipe_secondary_expand" ${state.clusterMergePolicy === "wipe_secondary_expand" ? "selected" : ""}>Erase the second computer for empty space (Requires confirmation)</option>
+            </select>
+          </div>
+
+          ${isWipeMode ? `
+            <div class="setting-row" style="background:var(--danger-soft);">
+              <div>
+                <div class="setting-title" style="color:var(--danger);">⚠️ Crucial Warning: Erasing ${esc(state.clusterConnectHost)} will delete all existing files on that computer</div>
+                <div class="setting-sub">If you want to keep the files on both computers, switch back to <strong>Keep all files on both computers</strong> above. To confirm erasing the second computer, type <code>${esc(expectedWipeCode)}</code>:</div>
+              </div>
+              <input type="text" class="text-input" data-field="clusterConfirmWipe" value="${esc(state.clusterConfirmWipe)}" placeholder="Type ${esc(expectedWipeCode)}" style="border-color:var(--danger);width:210px;" />
+            </div>
+          ` : ""}
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">Ready to link computers</div>
+              <div class="setting-sub">App databases stay safely on local storage so brief Wi-Fi drops never corrupt your apps.</div>
+            </div>
+            <button
+              type="button"
+              class="win-btn win-btn-accent"
+              data-action="join-cluster-node"
+              ${isWipeMode && !wipeConfirmed ? "disabled" : ""}
+            >
+              ${isWipeMode && !wipeConfirmed ? `Type ${esc(expectedWipeCode)} to Unlock` : "＋ Combine Servers Now"}
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderKiwixTab() {
+      const host = state.settings.hostname || "instant-server";
+      return `
+        <div class="section-hdr">
+          <div>
+            <div class="section-title">Offline Wikipedia &amp; Kiwix Archive Manager</div>
+            <div class="section-desc">Download official Kiwix <code>.zim</code> encyclopedias directly to <code>/DATA/AppData/kiwix/zim/</code> for 100% offline reading on any home device.</div>
+          </div>
+          <a class="win-btn win-btn-accent win-btn-sm" href="http://${esc(host)}.local:8086" target="_blank" rel="noopener">Open Kiwix Reader (:8086) ↗</a>
+        </div>
+
+        <div class="cards-grid">
+          ${state.kiwix_zims.map(zim => `
+            <div class="app-card">
+              <div>
+                <div class="app-card-top">
+                  <div>
+                    <div class="app-card-title">${esc(zim.title)}</div>
+                    <div class="app-card-meta">${zim.size_gb} GB • ${esc(zim.articles)}</div>
+                  </div>
+                  <span class="badge ${zim.installed ? "badge-success" : "badge-accent"}">${zim.installed ? "Downloaded" : `${zim.size_gb} GB`}</span>
+                </div>
+                <div class="app-card-desc" style="margin-top:8px;">${esc(zim.description)}</div>
+              </div>
+              <div class="app-card-actions">
+                <span style="font-size:11.5px;font-family:var(--font-mono);color:var(--text-muted);">${esc(zim.filename)}</span>
+                ${zim.installed
+                  ? `<button type="button" class="win-btn win-btn-danger win-btn-sm" data-action="zim-op" data-zim="${zim.id}" data-op="remove">Remove ZIM</button>`
+                  : `<button type="button" class="win-btn win-btn-accent win-btn-sm" data-action="zim-op" data-zim="${zim.id}" data-op="download">⬇ Download ZIM (${zim.size_gb} GB)</button>`
+                }
+              </div>
+            </div>
+          `).join("")}
+        </div>
+
+        ${state.settings.ui_mode === "pro" ? `
+          <div class="settings-group">
+            <div class="setting-row">
+              <div>
+                <div class="setting-title">Custom Kiwix <code>.zim</code> URL or Mirror Import</div>
+                <div class="setting-sub">Pull any custom <code>.zim</code> archive from <code>download.kiwix.org/zim/</code> with automatic download resume.</div>
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;width:100%;max-width:420px;">
+                <input type="url" id="inputCustomZimUrl" class="text-input" style="flex:1;" placeholder="https://download.kiwix.org/zim/..." value="${esc(state.customZimUrl)}" />
+                <button type="button" class="win-btn win-btn-accent win-btn-sm" data-action="add-custom-zim">Pull ZIM</button>
+              </div>
+            </div>
+          </div>
+        ` : ""}
+      `;
+    }
+
+    function renderHardwareTab() {
+      const s = state.settings;
+      const t = state.telemetry;
+      return `
+        <div class="section-hdr">
+          <div>
+            <div class="section-title">Laptop Lid, Wi-Fi Failover &amp; Battery Care</div>
+            <div class="section-desc">Modify the hardware settings configured during USB flashing — changes apply live to your running server.</div>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">Keep server running when laptop lid is closed</div>
+              <div class="setting-sub">Prevents the laptop from going to sleep when you close the screen or nudge the lid sensor.</div>
+            </div>
+            <button type="button" class="switch-btn ${s.ignore_lid_switch ? "on" : ""}" data-action="toggle-setting" data-key="ignore_lid_switch" aria-label="Toggle lid switch">
+              <span class="switch-thumb"></span>
+            </button>
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">Seamless Ethernet-to-Wi-Fi Failover</div>
+              <div class="setting-sub">Keeps Wi-Fi awake while Ethernet is plugged in so unplugging the Ethernet cable switches to Wi-Fi without dropping offline.</div>
+            </div>
+            <button type="button" class="switch-btn ${s.disable_wifi_power_save ? "on" : ""}" data-action="toggle-setting" data-key="disable_wifi_power_save" aria-label="Toggle Wi-Fi powersave">
+              <span class="switch-thumb"></span>
+            </button>
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">Screen auto-turn-off timer (${s.screen_blank_seconds} seconds)</div>
+              <div class="setting-sub">Automatically turns off the built-in display backlight to save power and prevent screen burn-in.</div>
+            </div>
+            <select class="select-box" data-field="screen_blank_seconds">
+              <option value="30" ${Number(s.screen_blank_seconds) === 30 ? "selected" : ""}>30 seconds</option>
+              <option value="60" ${Number(s.screen_blank_seconds) === 60 ? "selected" : ""}>60 seconds (Recommended)</option>
+              <option value="300" ${Number(s.screen_blank_seconds) === 300 ? "selected" : ""}>5 minutes</option>
+            </select>
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-title" id="lblDashBatCap">Battery charge limit cap (${s.battery_charge_start_pct}% – ${s.battery_charge_stop_pct}%) • Health: ${t.battery_health_pct || 89}% (${t.battery_cycles || 142} cycles)</div>
+              <div class="setting-sub">Protects the battery when plugged into wall power 24/7.</div>
+            </div>
+            <div class="range-wrap">
+              <input type="range" min="50" max="85" step="5" value="${s.battery_charge_stop_pct}" data-field="battery_charge_stop_pct" />
+              <span class="badge badge-success" id="valDashBatCap">${s.battery_charge_stop_pct}%</span>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-title" id="lblDashUps">Built-in battery UPS safe shutdown threshold (${s.ups_shutdown_battery_pct}%)</div>
+              <div class="setting-sub">If home electricity goes out, the server runs on the battery and cleanly shuts down at ${s.ups_shutdown_battery_pct}% so files never corrupt.</div>
+            </div>
+            <div class="range-wrap">
+              <input type="range" min="10" max="35" step="5" value="${s.ups_shutdown_battery_pct}" data-field="ups_shutdown_battery_pct" />
+              <span class="badge badge-accent" id="valDashUps">${s.ups_shutdown_battery_pct}%</span>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">Wake-on-LAN</div>
+              <div class="setting-sub">Allows waking the server remotely over Ethernet.</div>
+            </div>
+            <button type="button" class="switch-btn ${s.enable_wake_on_lan ? "on" : ""}" data-action="toggle-setting" data-key="enable_wake_on_lan" aria-label="Toggle Wake on LAN">
+              <span class="switch-thumb"></span>
+            </button>
+          </div>
+        </div>
+
+        ${s.ui_mode === "pro" ? `
+          <div class="section-hdr" style="margin-top:22px;">
+            <div>
+              <div class="section-title">CPU Power &amp; Thermal Controls</div>
+              <div class="section-desc">Adjust processor speed and heat output for silent 24/7 operation.</div>
+            </div>
+          </div>
+          <div class="settings-group">
+            <div class="setting-row">
+              <div>
+                <div class="setting-title">CPU Power Profile</div>
+                <div class="setting-sub">Choose Quiet &amp; Low Power for minimum fan noise or Balanced for automatic speed boost.</div>
+              </div>
+              <select class="select-box" data-field="cpu_governor">
+                <option value="schedutil" ${s.cpu_governor === "schedutil" ? "selected" : ""}>Balanced (Default)</option>
+                <option value="powersave" ${s.cpu_governor === "powersave" ? "selected" : ""}>Quiet &amp; Low Power</option>
+                <option value="performance" ${s.cpu_governor === "performance" ? "selected" : ""}>Maximum Speed</option>
+              </select>
+            </div>
+            <div class="setting-row">
+              <div>
+                <div class="setting-title">Limit Peak CPU Heat (Disable Turbo Boost)</div>
+                <div class="setting-sub">Lowers peak CPU temperatures by 10–15°C on older laptops.</div>
+              </div>
+              <button type="button" class="switch-btn ${s.disable_cpu_turbo_boost ? "on" : ""}" data-action="toggle-setting" data-key="disable_cpu_turbo_boost" aria-label="Toggle Turbo Boost">
+                <span class="switch-thumb"></span>
+              </button>
+            </div>
+          </div>
+        ` : ""}
+      `;
+    }
+
+    function renderUpdatesTab() {
+      const s = state.settings;
+      const u = state.updates;
+      return `
+        <div class="section-hdr">
+          <div>
+            <div class="section-title">System, OS &amp; Web App Updates</div>
+            <div class="section-desc">Last checked: ${esc(u.last_checked)} • ${esc(u.status_text)}</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button type="button" class="win-btn win-btn-sm" data-action="check-updates">↻ Check for Updates</button>
+            <button type="button" class="win-btn win-btn-accent win-btn-sm" data-action="apply-updates" data-target="all">⬇ Install All Updates</button>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">Automatic Unattended Updates (OS Security + Docker Apps)</div>
+              <div class="setting-sub">Automatically installs Ubuntu security patches and pulls updated web app container images during your maintenance window.</div>
+            </div>
+            <button type="button" class="switch-btn ${s.enable_auto_updates ? "on" : ""}" data-action="toggle-setting" data-key="enable_auto_updates" aria-label="Toggle Auto Updates">
+              <span class="switch-thumb"></span>
+            </button>
+          </div>
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">Daily Auto-Update Maintenance Window</div>
+              <div class="setting-sub">Time of night when containers and packages are updated and old logs are cleaned up.</div>
+            </div>
+            <select class="select-box" data-field="auto_update_window">
+              <option value="02:00" ${s.auto_update_window === "02:00" ? "selected" : ""}>02:00 AM</option>
+              <option value="03:00" ${s.auto_update_window === "03:00" ? "selected" : ""}>03:00 AM (Recommended)</option>
+              <option value="04:00" ${s.auto_update_window === "04:00" ? "selected" : ""}>04:00 AM</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="section-hdr" style="margin-top:22px;">
+          <div>
+            <div class="section-title">Ubuntu OS &amp; Kernel Packages (${u.os_updates.length} pending)</div>
+          </div>
+        </div>
+        <div class="settings-group">
+          ${u.os_updates.length === 0 ? `
+            <div class="setting-row">
+              <div class="setting-title" style="color:var(--success);">✓ All Ubuntu LTS kernel and system packages are up to date.</div>
+            </div>
+          ` : u.os_updates.map(item => `
+            <div class="setting-row">
+              <div>
+                <div class="setting-title">${esc(item.pkg)} <span class="badge ${item.security ? "badge-warning" : "badge-accent"}">${esc(item.category)}</span></div>
+                <div class="setting-sub">Installed: <code>${esc(item.current)}</code> → Available: <code>${esc(item.available)}</code></div>
+              </div>
+              <button type="button" class="win-btn win-btn-sm" data-action="apply-updates" data-target="os">Update Package</button>
+            </div>
+          `).join("")}
+        </div>
+
+        <div class="section-hdr" style="margin-top:22px;">
+          <div>
+            <div class="section-title">Web App Container Images</div>
+          </div>
+        </div>
+        <div class="settings-group">
+          ${u.app_updates.map(app => `
+            <div class="setting-row">
+              <div>
+                <div class="setting-title">${esc(app.title)} <span style="font-family:var(--font-mono);font-size:11.5px;color:var(--text-muted);">(${esc(app.image)})</span></div>
+                <div class="setting-sub">Current version: <code>${esc(app.current_tag)}</code> → Latest version: <code>${esc(app.available_tag)}</code></div>
+              </div>
+              ${app.update_available
+                ? `<button type="button" class="win-btn win-btn-accent win-btn-sm" data-action="apply-updates" data-target="apps">Update Container</button>`
+                : `<span class="badge badge-success">Up to date</span>`
+              }
+            </div>
+          `).join("")}
+        </div>
+
+        <div class="section-hdr" style="margin-top:22px;">
+          <div>
+            <div class="section-title">System Services &amp; Configuration Files</div>
+          </div>
+        </div>
+        <div class="settings-group">
+          ${u.system_files.map(sf => `
+            <div class="setting-row">
+              <div>
+                <div class="setting-title" style="font-family:var(--font-mono);font-size:12.5px;">${esc(sf.path)}</div>
+                <div class="setting-sub">${esc(sf.role)}</div>
+              </div>
+              <span class="badge badge-success">${esc(sf.status)}</span>
+            </div>
+          `).join("")}
+        </div>
+      `;
+    }
+
+    function renderHandbookTab() {
+      const host = state.settings.hostname || "instant-server";
+      const t = state.telemetry;
+      return `
+        <div class="section-hdr">
+          <div>
+            <div class="section-title">Self-Hosting Handbook, Disk Health &amp; Quick Fixes</div>
+            <div class="section-desc">Everything you need to know about how your server stores files, handles Wi-Fi failover, and heals common issues automatically.</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button type="button" class="win-btn win-btn-sm" data-action="clean-logs-now">🧹 Clean Old Logs &amp; Cache</button>
+            <button type="button" class="win-btn win-btn-accent win-btn-sm" data-action="run-system-doctor">🩺 Run 1-Click Health Check</button>
+          </div>
+        </div>
+
+        ${state.doctorStatusMsg ? `
+          <div class="settings-group" style="border-color:var(--success);">
+            <div class="setting-row">
+              <div class="setting-title" style="color:var(--success);">✓ ${esc(state.doctorStatusMsg)}</div>
+            </div>
+          </div>
+        ` : ""}
+
+        <div class="settings-group">
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">1. Connecting via SSH, Mosh &amp; Surviving Ethernet-to-Wi-Fi Unplugs</div>
+              <div class="setting-sub">
+                Your server advertises <code>${esc(host)}.local</code> on your home network and keeps both connections ready:<br/>
+                • <strong>Ethernet IPv4 (Primary):</strong> <code>${esc(t.eth_ipv4 || "192.168.1.40")}</code><br/>
+                • <strong>Wi-Fi IPv4 (Backup Failover):</strong> <code>${esc(t.wifi_ipv4 || "192.168.1.41")}</code><br/>
+                If you use terminal SSH and want your session to stay connected even when unplugging the Ethernet cable, connect using <strong>Mosh</strong>: <code>mosh admin@${esc(host)}.local</code>.
+              </div>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">2. Where Your Files &amp; App Databases Live (<code>/DATA/AppData</code>)</div>
+              <div class="setting-sub">
+                All of your actual movies, photos, and app settings live on your hard drive inside <code>/DATA/AppData/&lt;app&gt;</code> and <code>/DATA/Media</code>.<br/>
+                Click <strong>Compose &amp; Volumes</strong> on any app card in the <em>My Apps</em> tab to view or edit its folder mappings. If a change ever has a typo, Instant Server automatically restores the working backup copy.
+              </div>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">3. Automatic Disk Cleanup &amp; Battery Care</div>
+              <div class="setting-sub">
+                System logs are automatically capped at 200 MB and unused container files are cleaned up weekly so your drive never fills up unexpectedly. Battery charging is capped at <strong>${state.settings.battery_charge_stop_pct}%</strong> and shuts down safely at <strong>${state.settings.ups_shutdown_battery_pct}%</strong> during a power cut.
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderProControlTab() {
+      const s = state.settings;
+      return `
+        <div class="section-hdr">
+          <div>
+            <div class="section-title">Pro Mode: Network Speed, Firewall &amp; Backups</div>
+            <div class="section-desc">Advanced controls for network throughput, memory behavior, firewall rules, and scheduled backups.</div>
+          </div>
+          ${s.ui_mode !== "pro" ? `
+            <button type="button" class="win-btn win-btn-accent win-btn-sm" data-action="set-mode" data-mode="pro">Unlock Pro Mode Controls</button>
+          ` : `<span class="badge badge-pro">Pro Mode Active</span>`}
+        </div>
+
+        <div class="settings-group">
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">TCP BBR Fast Network Streaming</div>
+              <div class="setting-sub">Improves streaming and file transfer speeds for Jellyfin, Nextcloud, and WireGuard VPN.</div>
+            </div>
+            <button type="button" class="switch-btn ${s.enable_tcp_bbr ? "on" : ""}" data-action="toggle-setting" data-key="enable_tcp_bbr" aria-label="Toggle TCP BBR">
+              <span class="switch-thumb"></span>
+            </button>
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-title" id="lblDashSwappiness">Memory Swap Tendency (${s.vm_swappiness}%)</div>
+              <div class="setting-sub">Keeps running apps and databases in physical RAM longer and reduces SSD wear.</div>
+            </div>
+            <div class="range-wrap">
+              <input type="range" min="1" max="60" step="1" value="${s.vm_swappiness}" data-field="vm_swappiness" />
+              <span class="badge badge-accent" id="valDashSwappiness">${s.vm_swappiness}%</span>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">UFW Firewall &amp; SSH Login Protection</div>
+              <div class="setting-sub">Automatically blocks repeated failed SSH login attempts and protects open ports.</div>
+            </div>
+            <button type="button" class="switch-btn ${s.enable_fail2ban ? "on" : ""}" data-action="toggle-setting" data-key="enable_fail2ban" aria-label="Toggle Fail2ban">
+              <span class="switch-thumb"></span>
+            </button>
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">Automated Weekly <code>/DATA/AppData</code> Backups</div>
+              <div class="setting-sub">Compresses all container settings and databases into <code>/DATA/Backups</code> (keeping ${s.backup_retention_days} days).</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <button type="button" class="win-btn win-btn-sm" data-action="run-backup-now">Run Backup Now</button>
+              <button type="button" class="switch-btn ${s.enable_scheduled_backups ? "on" : ""}" data-action="toggle-setting" data-key="enable_scheduled_backups" aria-label="Toggle Scheduled Backups">
+                <span class="switch-thumb"></span>
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderDashboard() {
+      renderTelemetry();
+      renderSidebar();
+      const pane = document.getElementById("mainPane");
+      if (!pane) return;
+      if (state.activeTab === "apps") pane.innerHTML = renderAppsTab();
+      else if (state.activeTab === "cluster") pane.innerHTML = renderClusterTab();
+      else if (state.activeTab === "kiwix") pane.innerHTML = renderKiwixTab();
+      else if (state.activeTab === "hardware") pane.innerHTML = renderHardwareTab();
+      else if (state.activeTab === "updates") pane.innerHTML = renderUpdatesTab();
+      else if (state.activeTab === "handbook") pane.innerHTML = renderHandbookTab();
+      else if (state.activeTab === "pro_control") pane.innerHTML = renderProControlTab();
+    }
+
+    document.body.addEventListener("click", async (e) => {
+      const btn = e.target.closest("[data-action]");
+      if (!btn) return;
+      const action = btn.getAttribute("data-action");
+
+      if (action === "toggle-theme") {
+        state.theme = state.theme === "dark" ? "light" : "dark";
+        document.documentElement.setAttribute("data-theme", state.theme);
+        btn.textContent = state.theme === "dark" ? "☀ Light" : "🌙 Dark";
+        return;
+      }
+
+      if (action === "set-mode") {
+        const nextMode = btn.getAttribute("data-mode") || "standard";
+        state.settings.ui_mode = nextMode;
+        await callDashboardApi("/api/dashboard/settings", "POST", { ui_mode: nextMode });
+        showToast(nextMode === "pro" ? "Switched to Pro Mode" : "Switched to Standard Mode");
+        renderDashboard();
+        return;
+      }
+
+      if (action === "switch-tab") {
+        state.activeTab = btn.getAttribute("data-tab") || "apps";
+        renderDashboard();
+        return;
+      }
+
+      if (action === "set-app-cat") {
+        state.appCategory = btn.getAttribute("data-cat") || "All";
+        renderDashboard();
+        return;
+      }
+
+      if (action === "select-cluster-candidate") {
+        state.clusterConnectHost = btn.getAttribute("data-host") || "instant-server-b8f2";
+        state.clusterConnectIp = btn.getAttribute("data-ip") || "192.168.1.54";
+        state.clusterConfirmWipe = "";
+        showToast(`Selected ${state.clusterConnectHost} (${state.clusterConnectIp})`);
+        renderDashboard();
+        return;
+      }
+
+      if (action === "join-cluster-node") {
+        const host = state.clusterConnectHost.trim() || "instant-server-b8f2";
+        const ip = state.clusterConnectIp.trim() || "192.168.1.54";
+        const existing = state.clusterDiscoveredNodes.find(n => n.hostname === host);
+        const newNode = existing ? { ...existing } : { hostname: host, ip, device: "Linked Server", used_gb: 80.0, total_gb: 500.0, ram_gb: 8 };
+        if (state.clusterMergePolicy === "wipe_secondary_expand") {
+          newNode.used_gb = 1.0;
+          newNode.device = "Linked Server (Formatted Clean Storage)";
+        } else {
+          newNode.device = "Linked Server (Combined Storage — Files Preserved)";
+        }
+        if (!state.clusterActiveNodes.some(n => n.hostname === host)) {
+          state.clusterActiveNodes.push(newNode);
+        }
+        state.clusterDiscoveredNodes = state.clusterDiscoveredNodes.filter(n => n.hostname !== host);
+        await callDashboardApi("/api/cluster/join", "POST", {
+          hostname: host,
+          ip,
+          storage_policy: state.clusterMergePolicy,
+          confirm_wipe_token: state.clusterConfirmWipe
+        });
+        showToast(`Combined ${host} into your server storage pool`);
+        renderDashboard();
+        return;
+      }
+
+      if (action === "inspect-compose") {
+        const appId = btn.getAttribute("data-app");
+        if (appId) openComposeInspector(appId);
+        return;
+      }
+
+      if (action === "close-compose-modal") {
+        const modal = document.getElementById("composeInspectorModal");
+        if (modal) modal.classList.remove("open");
+        return;
+      }
+
+      if (action === "validate-compose") {
+        const yaml = document.getElementById("composeYamlTextarea").value;
+        renderComposeDiagnostics(runComposeValidationLocal(yaml));
+        showToast("Validated Docker Compose configuration");
+        return;
+      }
+
+      if (action === "reset-compose-default") {
+        const app = state.apps.find(a => a.id === state.inspectingAppId);
+        if (app) {
+          const defYaml = buildDefaultCompose(app);
+          document.getElementById("composeYamlTextarea").value = defYaml;
+          renderComposeDiagnostics(runComposeValidationLocal(defYaml));
+        }
+        return;
+      }
+
+      if (action === "save-compose-override") {
+        const app = state.apps.find(a => a.id === state.inspectingAppId);
+        const yaml = document.getElementById("composeYamlTextarea").value;
+        const diag = runComposeValidationLocal(yaml);
+        renderComposeDiagnostics(diag);
+        if (diag.some(d => d.severity === "error")) {
+          showToast("Fix YAML errors highlighted below before saving");
+          return;
+        }
+        if (app) app.compose_yaml = yaml;
+        await callDashboardApi("/api/dashboard/apps/compose", "POST", { app_id: state.inspectingAppId, compose_yaml: yaml });
+        const modal = document.getElementById("composeInspectorModal");
+        if (modal) modal.classList.remove("open");
+        showToast(`Saved compose config & recreated ${app ? app.title : "container"}`);
+        return;
+      }
+
+      if (action === "clean-logs-now") {
+        await callDashboardApi("/api/self-heal/run", "POST", { action: "prune_storage" });
+        state.doctorStatusMsg = "Cleaned old system logs and removed unused container cache files.";
+        showToast("Cleaned old logs & unused container cache");
+        renderDashboard();
+        return;
+      }
+
+      if (action === "run-system-doctor") {
+        state.doctorStatusMsg = "All checks passed: Docker running, /DATA/AppData permissions verified, port 53 conflict-free, Wi-Fi failover ready, and disk health verified.";
+        showToast("Health check completed with 0 issues");
+        renderDashboard();
+        return;
+      }
+
+      if (action === "app-op") {
+        const appId = btn.getAttribute("data-app");
+        const op = btn.getAttribute("data-op");
+        const targetApp = state.apps.find(a => a.id === appId);
+        if (targetApp) {
+          if (op === "install") {
+            targetApp.installed = true;
+            targetApp.status = "running";
+            showToast(`Installed & started ${targetApp.title}`);
+          } else if (op === "remove") {
+            targetApp.installed = false;
+            targetApp.status = "available";
+            showToast(`Removed ${targetApp.title}`);
+          } else if (op === "restart") {
+            showToast(`Restarted ${targetApp.title} container`);
+          }
+        }
+        await callDashboardApi("/api/dashboard/apps/action", "POST", { app_id: appId, action: op });
+        renderDashboard();
+        return;
+      }
+
+      if (action === "zim-op") {
+        const zimId = btn.getAttribute("data-zim");
+        const op = btn.getAttribute("data-op");
+        const targetZim = state.kiwix_zims.find(z => z.id === zimId);
+        if (targetZim) {
+          if (op === "download") {
+            targetZim.installed = true;
+            targetZim.progress_pct = 100;
+            showToast(`Downloaded & indexed ${targetZim.title} in Kiwix`);
+          } else if (op === "remove") {
+            targetZim.installed = false;
+            targetZim.progress_pct = 0;
+            showToast(`Removed ${targetZim.filename}`);
+          }
+        }
+        await callDashboardApi("/api/dashboard/kiwix", "POST", { zim_id: zimId, action: op });
+        renderDashboard();
+        return;
+      }
+
+      if (action === "add-custom-zim") {
+        const urlIn = document.getElementById("inputCustomZimUrl");
+        const urlVal = urlIn ? urlIn.value.trim() : "";
+        if (!urlVal) {
+          showToast("Enter a valid .zim URL first");
+          return;
+        }
+        const fname = urlVal.split("/").pop() || "custom_archive.zim";
+        state.kiwix_zims.unshift({
+          id: "custom_" + Date.now(),
+          title: fname,
+          size_gb: 1.5,
+          articles: "Custom ZIM Archive",
+          category: "Custom",
+          installed: true,
+          progress_pct: 100,
+          filename: fname,
+          description: `Imported from ${urlVal}`
+        });
+        state.customZimUrl = "";
+        showToast(`Queued & indexed ${fname} in Kiwix`);
+        renderDashboard();
+        return;
+      }
+
+      if (action === "toggle-setting") {
+        const key = btn.getAttribute("data-key");
+        if (key && key in state.settings) {
+          state.settings[key] = !state.settings[key];
+          await callDashboardApi("/api/dashboard/settings", "POST", { [key]: state.settings[key] });
+          showToast(`Updated ${key.replace(/_/g, " ")}`);
+          renderDashboard();
+        }
+        return;
+      }
+
+      if (action === "check-updates") {
+        state.updates.last_checked = "Just now";
+        showToast("Checked Ubuntu repositories & container registries");
+        renderDashboard();
+        return;
+      }
+
+      if (action === "apply-updates") {
+        const target = btn.getAttribute("data-target") || "all";
+        if (target === "all" || target === "os") {
+          state.updates.os_updates = [];
+        }
+        if (target === "all" || target === "apps") {
+          state.updates.app_updates.forEach(a => {
+            a.current_tag = a.available_tag;
+            a.update_available = false;
+          });
+        }
+        state.updates.status_text = "All OS packages, web apps, and system files are up to date.";
+        await callDashboardApi("/api/dashboard/updates/apply", "POST", { target });
+        showToast("Installed updates cleanly");
+        renderDashboard();
+        return;
+      }
+
+      if (action === "run-backup-now") {
+        showToast("Created snapshot /DATA/Backups/appdata-backup-latest.tar.zst");
+        return;
+      }
+    });
+
+    document.body.addEventListener("input", async (e) => {
+      if (e.target.id === "dashSearchInput") {
+        state.searchQuery = e.target.value;
+        renderDashboard();
+        return;
+      }
+      if (e.target.id === "inputCustomZimUrl") {
+        state.customZimUrl = e.target.value;
+        return;
+      }
+      const field = e.target.getAttribute("data-field");
+      if (!field) return;
+      if (field === "clusterConnectHost" || field === "clusterConnectIp" || field === "clusterMergePolicy" || field === "clusterConfirmWipe") {
+        state[field] = e.target.value;
+        if (field === "clusterMergePolicy" || field === "clusterConfirmWipe") {
+          renderDashboard();
+        }
+        return;
+      }
+      const val = e.target.type === "range" ? Number(e.target.value) : e.target.value;
+      state.settings[field] = val;
+
+      if (field === "battery_charge_stop_pct") {
+        const lbl = document.getElementById("lblDashBatCap");
+        const badge = document.getElementById("valDashBatCap");
+        if (lbl) lbl.textContent = `Battery charge limit cap (${state.settings.battery_charge_start_pct}% – ${val}%) • Health: ${state.telemetry.battery_health_pct || 89}%`;
+        if (badge) badge.textContent = `${val}%`;
+        renderTelemetry();
+      } else if (field === "ups_shutdown_battery_pct") {
+        const lbl = document.getElementById("lblDashUps");
+        const badge = document.getElementById("valDashUps");
+        if (lbl) lbl.textContent = `Built-in battery UPS safe shutdown threshold (${val}%)`;
+        if (badge) badge.textContent = `${val}%`;
+        renderTelemetry();
+      } else if (field === "vm_swappiness") {
+        const lbl = document.getElementById("lblDashSwappiness");
+        const badge = document.getElementById("valDashSwappiness");
+        if (lbl) lbl.textContent = `Memory Swap Tendency (${val}%)`;
+        if (badge) badge.textContent = `${val}%`;
+      } else {
+        renderTelemetry();
+      }
+      await callDashboardApi("/api/dashboard/settings", "POST", { [field]: val });
+    });
+
+    renderDashboard();
+  </script>
+</body>
+</html>

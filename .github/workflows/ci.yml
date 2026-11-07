@@ -1,0 +1,38 @@
+# .github/workflows/ci.yml
+name: CI
+
+on:
+  push:
+    branches: [main, develop, "feat/**", "fix/**"]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Compile Native C USB Flasher (win_usb_flasher.c)
+        shell: bash
+        run: |
+          SRC_C="win_usb_flasher.c"
+          [ -f "src/instant_server/native/win_usb_flasher.c" ] && SRC_C="src/instant_server/native/win_usb_flasher.c"
+          gcc -O3 -Wall -Wextra "$SRC_C" -o win_usb_flasher
+          ./win_usb_flasher --self-test
+
+      - name: Verify Syntax & Imports Across All Modules
+        run: |
+          python -m py_compile instant_server.py
+          python test_suite.py
