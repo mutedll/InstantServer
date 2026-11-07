@@ -1537,33 +1537,1675 @@
 
   <script>
     const APP_STORE_CATALOG = [
-      { id: "jellyfin", title: "Jellyfin", category: "Media & Photos", recommended: true, tag: "Movies & TV", ram: "512 MB", hardware_tier: "old_friendly", desc: "Stream your movies, TV shows, and music to any phone, smart TV, or browser with zero subscriptions." },
-      { id: "nextcloud", title: "Nextcloud", category: "Cloud & Files", recommended: true, tag: "Personal Cloud", ram: "512 MB", hardware_tier: "old_friendly", desc: "Private Google Drive & Google Workspace replacement for files, calendars, contacts, and phone backups." },
-      { id: "pihole", title: "Pi-hole", category: "Network & Ad-Block", recommended: true, tag: "Ad Blocker", ram: "128 MB", hardware_tier: "old_friendly", desc: "Network-wide DNS ad-blocker that blocks ads and trackers on every device connected to your Wi-Fi." },
-      { id: "kiwix", title: "Offline Wikipedia (Kiwix)", category: "Knowledge & Wiki", recommended: true, tag: "Offline Wiki", ram: "128 MB", hardware_tier: "old_friendly", desc: "Host the entire Wikipedia, Wiktionary, medical guides, and Project Gutenberg (.zim files) completely offline on your home Wi-Fi." },
-      { id: "immich", title: "Immich", category: "Media & Photos", recommended: true, tag: "Photo Backup", ram: "1 GB", hardware_tier: "old_friendly", desc: "Fast self-hosted Google Photos alternative with automatic mobile camera backup and album sharing." },
-      { id: "homeassistant", title: "Home Assistant", category: "Smart Home", recommended: true, tag: "Smart Home", ram: "512 MB", hardware_tier: "old_friendly", desc: "Control and automate smart lights, plugs, sensors, and Zigbee/Matter devices locally in your home." },
-      { id: "vaultwarden", title: "Vaultwarden", category: "Security & Tools", recommended: true, tag: "Passwords", ram: "64 MB", hardware_tier: "old_friendly", desc: "Lightweight Bitwarden-compatible password manager server for browser extensions and mobile apps." },
-      { id: "minecraft", title: "Minecraft Dedicated Server (Java)", category: "Gaming Servers", recommended: false, tag: "Port 25565", ram: "2 GB+", hardware_tier: "high_end", hardware_note: "4GB+ RAM Recommended", desc: "24/7 multiplayer Minecraft Java server (Paper / Vanilla / Forge / Fabric) on port 25565 with automatic EULA acceptance." },
-      { id: "minecraft_bedrock", title: "Minecraft Bedrock Server", category: "Gaming Servers", recommended: false, tag: "Cross-Play", ram: "512 MB", hardware_tier: "old_friendly", desc: "Official C++ Minecraft Bedrock server (UDP 19132) for phones, tablets, Xbox, PlayStation, Switch, and Windows PCs — runs smoothly even on older laptops." },
-      { id: "ollama_webui", title: "Local AI Server (Ollama + Open WebUI)", category: "AI & Machine Learning", recommended: false, tag: "Local ChatGPT", ram: "8 GB+", hardware_tier: "high_end", hardware_note: "Higher-End Only • 8GB+ RAM", desc: "Private offline ChatGPT interface powered by Ollama for running Llama 3, DeepSeek, Mistral, and coding models locally. Requires 8GB–16GB+ RAM or GPU." },
-      { id: "localai", title: "LocalAI Multi-Modal Engine", category: "AI & Machine Learning", recommended: false, tag: "OpenAI API", ram: "8 GB+", hardware_tier: "high_end", hardware_note: "Higher-End Only • 8GB+ RAM", desc: "Drop-in OpenAI-compatible local AI server for LLMs, Whisper voice transcription, and image generation on higher-end computers." },
-      { id: "bookstack", title: "BookStack Wiki", category: "Knowledge & Wiki", recommended: false, tag: "Home Wiki", ram: "256 MB", hardware_tier: "old_friendly", desc: "Easy-to-use personal and family wiki that organizes notes, manuals, and recipes like chapters in a book." },
-      { id: "calibreweb", title: "Calibre-Web eBooks", category: "Knowledge & Wiki", recommended: false, tag: "eBook Library", ram: "128 MB", hardware_tier: "old_friendly", desc: "Clean web interface for browsing, reading, and wireless sending of eBooks and audiobooks to Kindle and Kobo readers." },
-      { id: "wg_easy", title: "WireGuard VPN (wg-easy)", category: "Network & Ad-Block", recommended: false, tag: "VPN Server", ram: "64 MB", hardware_tier: "old_friendly", desc: "One-click WireGuard VPN server with a web dashboard and instant QR codes for connecting your phone and laptop from anywhere." },
-      { id: "adguardhome", title: "AdGuard Home", category: "Network & Ad-Block", recommended: false, tag: "Family DNS", ram: "128 MB", hardware_tier: "old_friendly", desc: "DNS ad-blocker, family parental control filter, and encrypted DNS-over-HTTPS dashboard." },
-      { id: "plex", title: "Plex Media Server", category: "Media & Photos", recommended: false, tag: "Movies & TV", ram: "512 MB", hardware_tier: "old_friendly", desc: "Organize and stream personal movies, TV shows, and music to Plex apps on any smart TV or console." },
-      { id: "syncthing", title: "Syncthing", category: "Cloud & Files", recommended: false, tag: "File Sync", ram: "128 MB", hardware_tier: "old_friendly", desc: "Continuous peer-to-peer folder synchronization across your computers and phones." },
-      { id: "filebrowser", title: "FileBrowser", category: "Cloud & Files", recommended: false, tag: "Web Files", ram: "64 MB", hardware_tier: "old_friendly", desc: "Simple web file manager to browse, upload, download, and share files stored on your server." },
-      { id: "qbittorrent", title: "qBittorrent", category: "Media & Photos", recommended: false, tag: "Downloads", ram: "256 MB", hardware_tier: "old_friendly", desc: "Web-based torrent download client with magnet link and RSS feed automation." },
-      { id: "uptimekuma", title: "Uptime Kuma", category: "Security & Tools", recommended: false, tag: "Monitoring", ram: "128 MB", hardware_tier: "old_friendly", desc: "Self-hosted status monitor that alerts you if your websites, home services, or internet go down." },
-      { id: "portainer", title: "Portainer CE", category: "Security & Tools", recommended: false, tag: "Containers", ram: "128 MB", hardware_tier: "old_friendly", desc: "Visual management UI for Docker containers, images, volumes, and Compose stacks." },
-      { id: "nginxproxymanager", title: "Nginx Proxy Manager", category: "Network & Ad-Block", recommended: false, tag: "Reverse Proxy", ram: "128 MB", hardware_tier: "old_friendly", desc: "Route custom domain names to your home apps with free Let's Encrypt HTTPS certificates." },
-      { id: "paperless", title: "Paperless-ngx", category: "Cloud & Files", recommended: false, tag: "Document OCR", ram: "512 MB", hardware_tier: "old_friendly", desc: "Document scanner and archive that turns PDFs, receipts, and bills into searchable text." },
-      { id: "stirlingpdf", title: "Stirling-PDF", category: "Security & Tools", recommended: false, tag: "PDF Toolkit", ram: "256 MB", hardware_tier: "old_friendly", desc: "All-in-one local web toolkit to merge, split, compress, convert, and sign PDF files privately." },
-      { id: "navidrome", title: "Navidrome", category: "Media & Photos", recommended: false, tag: "Music Server", ram: "64 MB", hardware_tier: "old_friendly", desc: "Fast, lightweight personal music streaming server compatible with Subsonic mobile apps." },
-      { id: "gitea", title: "Gitea", category: "Security & Tools", recommended: false, tag: "Git Server", ram: "128 MB", hardware_tier: "old_friendly", desc: "Lightweight self-hosted GitHub alternative for private code repositories and issues." }
-    ];
+  {
+    "id": "kiwix",
+    "title": "Offline Wikipedia (Kiwix)",
+    "category": "Security & Tools",
+    "recommended": true,
+    "tag": "Port 8086",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "ghcr.io/kiwix/kiwix-serve:latest",
+    "port": 8086,
+    "desc": "Host full offline Wikipedia, Wiktionary, medical guides, and Project Gutenberg (.zim files) on any old..."
+  },
+  {
+    "id": "jellyfin",
+    "title": "Jellyfin",
+    "category": "Security & Tools",
+    "recommended": true,
+    "tag": "Port 8096",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "jellyfin/jellyfin:latest",
+    "port": 8096,
+    "desc": "Stream your movies, TV shows, and music to phones, smart TVs, and browsers with zero subscriptions."
+  },
+  {
+    "id": "nextcloud",
+    "title": "Nextcloud",
+    "category": "Security & Tools",
+    "recommended": true,
+    "tag": "Port 8081",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "nextcloud:stable",
+    "port": 8081,
+    "desc": "Private Google Drive & Google Workspace replacement for your files, calendars, contacts, and phone bac..."
+  },
+  {
+    "id": "pihole",
+    "title": "Pi-hole",
+    "category": "Security & Tools",
+    "recommended": true,
+    "tag": "Port 8085",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "pihole/pihole:latest",
+    "port": 8085,
+    "desc": "Network-wide DNS ad-blocker and tracker shield that blocks ads on every phone, TV, and laptop on your..."
+  },
+  {
+    "id": "immich",
+    "title": "Immich",
+    "category": "Security & Tools",
+    "recommended": true,
+    "tag": "Port 2283",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "ghcr.io/immich-app/immich-server:release",
+    "port": 2283,
+    "desc": "Fast self-hosted Google Photos alternative with automatic iOS/Android camera backup and album sharing."
+  },
+  {
+    "id": "homeassistant",
+    "title": "Home Assistant",
+    "category": "Smart Home",
+    "recommended": true,
+    "tag": "Port 8123",
+    "ram": "512 MB",
+    "hardware_tier": "old_friendly",
+    "image": "homeassistant/home-assistant:stable",
+    "port": 8123,
+    "desc": "Automate smart lights, plugs, cameras, and Zigbee/Matter devices locally inside your home."
+  },
+  {
+    "id": "vaultwarden",
+    "title": "Vaultwarden",
+    "category": "Security & Tools",
+    "recommended": true,
+    "tag": "Port 8082",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "vaultwarden/server:latest",
+    "port": 8082,
+    "desc": "Ultra-lightweight Bitwarden-compatible password manager server for your browser extensions and mobile..."
+  },
+  {
+    "id": "minecraft",
+    "title": "Minecraft Dedicated Server (Java)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 25565",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "itzg/minecraft-server:latest",
+    "port": 25565,
+    "desc": "24/7 dedicated Minecraft Java server (Vanilla, Paper, Spigot, Fabric, or Forge) with automatic world b..."
+  },
+  {
+    "id": "minecraft_bedrock",
+    "title": "Minecraft Bedrock Server (Mobile / Console)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 19132",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "itzg/minecraft-bedrock-server:latest",
+    "port": 19132,
+    "desc": "Lightweight C++ Minecraft Bedrock server for Phones (iOS/Android), Xbox, PlayStation, Switch, and Wind..."
+  },
+  {
+    "id": "ollama_webui",
+    "title": "Local AI Server (Ollama + Open WebUI)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 3005",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "ghcr.io/open-webui/open-webui:ollama",
+    "port": 3005,
+    "desc": "Run private local AI models (Llama 3, DeepSeek, Mistral, Qwen) with a ChatGPT web UI. Not for old low-..."
+  },
+  {
+    "id": "localai",
+    "title": "LocalAI (Private AI Voice, Vision & Text)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8088",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "localai/localai:latest",
+    "port": 8088,
+    "desc": "Self-hosted OpenAI-compatible API for local text generation, Whisper speech-to-text, and voice synthesis."
+  },
+  {
+    "id": "bookstack",
+    "title": "BookStack (Personal Wiki & Notes)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 6875",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "lscr.io/linuxserver/bookstack:latest",
+    "port": 6875,
+    "desc": "Build your own Wikipedia-style knowledge base, family handbook, and study notes organized into books a..."
+  },
+  {
+    "id": "calibreweb",
+    "title": "Calibre-Web (E-Book Library)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8083",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "lscr.io/linuxserver/calibre-web:latest",
+    "port": 8083,
+    "desc": "Browse, read in browser, and wireless-send EPUB/PDF e-books to your Kindle, Kobo, or phone."
+  },
+  {
+    "id": "wg_easy",
+    "title": "WireGuard VPN (wg-easy)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 51821",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "ghcr.io/wg-easy/wg-easy:latest",
+    "port": 51821,
+    "desc": "Fast WireGuard VPN server with a web dashboard and instant QR-code setup for phones and laptops."
+  },
+  {
+    "id": "adguardhome",
+    "title": "AdGuard Home",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 3000",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "adguard/adguardhome:latest",
+    "port": 3000,
+    "desc": "All-in-one DNS ad-blocker, parental control filter, and encrypted DNS-over-HTTPS server."
+  },
+  {
+    "id": "plex",
+    "title": "Plex Media Server",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 32400",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "lscr.io/linuxserver/plex:latest",
+    "port": 32400,
+    "desc": "Organize and stream personal movies, shows, and music to Plex apps on any smart TV, console, or phone."
+  },
+  {
+    "id": "syncthing",
+    "title": "Syncthing",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8384",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "lscr.io/linuxserver/syncthing:latest",
+    "port": 8384,
+    "desc": "Real-time peer-to-peer folder sync across your laptops, desktops, and Android devices."
+  },
+  {
+    "id": "filebrowser",
+    "title": "FileBrowser",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8087",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "filebrowser/filebrowser:latest",
+    "port": 8087,
+    "desc": "Simple web interface to browse, upload, download, and share files stored on your server."
+  },
+  {
+    "id": "qbittorrent",
+    "title": "qBittorrent",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8080",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "lscr.io/linuxserver/qbittorrent:latest",
+    "port": 8080,
+    "desc": "Web-based torrent downloader with magnet link, sequential download, and RSS auto-download support."
+  },
+  {
+    "id": "uptimekuma",
+    "title": "Uptime Kuma",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 3001",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "louislam/uptime-kuma:1",
+    "port": 3001,
+    "desc": "Self-hosted status page and uptime monitor that sends alerts if your home apps or internet go offline."
+  },
+  {
+    "id": "portainer",
+    "title": "Portainer CE",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 9443",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "portainer/portainer-ce:latest",
+    "port": 9443,
+    "desc": "Advanced web dashboard for managing Docker containers, images, networks, and Compose stacks."
+  },
+  {
+    "id": "nginxproxymanager",
+    "title": "Nginx Proxy Manager",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 81",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "jc21/nginx-proxy-manager:latest",
+    "port": 81,
+    "desc": "Route custom domain names to your self-hosted apps with automatic Let's Encrypt SSL certificates."
+  },
+  {
+    "id": "paperless",
+    "title": "Paperless-ngx",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8000",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "ghcr.io/paperless-ngx/paperless-ngx:latest",
+    "port": 8000,
+    "desc": "Organize scanned receipts, PDFs, and invoices with automatic OCR full-text search."
+  },
+  {
+    "id": "stirlingpdf",
+    "title": "Stirling-PDF",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8084",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "frooodle/s-pdf:latest",
+    "port": 8084,
+    "desc": "Private local web toolkit to merge, split, rotate, compress, and convert PDF documents."
+  },
+  {
+    "id": "navidrome",
+    "title": "Navidrome",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 4533",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "deluan/navidrome:latest",
+    "port": 4533,
+    "desc": "Fast, lightweight personal music streaming server compatible with Subsonic mobile apps."
+  },
+  {
+    "id": "gitea",
+    "title": "Gitea",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 3002",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "gitea/gitea:latest",
+    "port": 3002,
+    "desc": "Lightweight self-hosted Git service for hosting your private code repositories, issues, and actions."
+  },
+  {
+    "id": "audiobookshelf",
+    "title": "Audiobookshelf",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 13378",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "ghcr.io/advplyr/audiobookshelf:latest",
+    "port": 13378,
+    "desc": "Stream audiobooks and podcasts with progress sync across iOS and Android."
+  },
+  {
+    "id": "kavita",
+    "title": "Kavita",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 5000",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "jvmilazz0/kavita:latest",
+    "port": 5000,
+    "desc": "Fast digital reader for manga, comics, EPUBs, and PDFs."
+  },
+  {
+    "id": "komga",
+    "title": "Komga",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 25600",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "gotson/komga:latest",
+    "port": 25600,
+    "desc": "Media server for comics, mangas, BDs, and magazines with OPDS support."
+  },
+  {
+    "id": "photoprism",
+    "title": "PhotoPrism",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 2342",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "photoprism/photoprism:latest",
+    "port": 2342,
+    "desc": "Browse, tag, and organize family photos with map view and face recognition."
+  },
+  {
+    "id": "photoview",
+    "title": "Photoview",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8089",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "viktorstrate/photoview:2",
+    "port": 8089,
+    "desc": "Fast photo gallery built for browsing existing folder hierarchies on disk."
+  },
+  {
+    "id": "swingmusic",
+    "title": "Swing Music",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 1970",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "ghcr.io/swingmx/swingmusic:latest",
+    "port": 1970,
+    "desc": "Modern self-hosted music player with gapless playback and lyrics."
+  },
+  {
+    "id": "airsonic",
+    "title": "Airsonic-Advanced",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 4040",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "airsonicadvanced/airsonic-advanced:latest",
+    "port": 4040,
+    "desc": "Full-featured Subsonic music and podcast server with transcoding."
+  },
+  {
+    "id": "jellyseerr",
+    "title": "Jellyseerr",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 5055",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "fallenbagel/jellyseerr:latest",
+    "port": 5055,
+    "desc": "Request and discover movies and TV shows for Jellyfin and Plex."
+  },
+  {
+    "id": "overseerr",
+    "title": "Overseerr",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 5056",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "lscr.io/linuxserver/overseerr:latest",
+    "port": 5056,
+    "desc": "Request management and media discovery portal for Plex libraries."
+  },
+  {
+    "id": "tautulli",
+    "title": "Tautulli",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8181",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "lscr.io/linuxserver/tautulli:latest",
+    "port": 8181,
+    "desc": "Monitor stream history, bandwidth, and playback stats on your media server."
+  },
+  {
+    "id": "ersatztv",
+    "title": "ErsatzTV",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8409",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "jasongdove/ersatztv:latest",
+    "port": 8409,
+    "desc": "Turn your personal movie and show files into live IPTV channels with EPG."
+  },
+  {
+    "id": "owncast",
+    "title": "Owncast",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8097",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "owncast/owncast:latest",
+    "port": 8097,
+    "desc": "Self-hosted live video streaming and chat server compatible with OBS."
+  },
+  {
+    "id": "transmission",
+    "title": "Transmission",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 9091",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "lscr.io/linuxserver/transmission:latest",
+    "port": 9091,
+    "desc": "Ultra-lightweight torrent client with a clean web UI for low-RAM laptops."
+  },
+  {
+    "id": "deluge",
+    "title": "Deluge",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8112",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "lscr.io/linuxserver/deluge:latest",
+    "port": 8112,
+    "desc": "Plugin-extensible BitTorrent client with web and thin-client support."
+  },
+  {
+    "id": "sabnzbd",
+    "title": "SABnzbd",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8090",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "lscr.io/linuxserver/sabnzbd:latest",
+    "port": 8090,
+    "desc": "Automated Usenet binary newsreader with PAR2 repair and unpacking."
+  },
+  {
+    "id": "nzbget",
+    "title": "NZBGet",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 6789",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "lscr.io/linuxserver/nzbget:latest",
+    "port": 6789,
+    "desc": "Low-memory C++ Usenet downloader ideal for older laptops and mini-PCs."
+  },
+  {
+    "id": "sonarr",
+    "title": "Sonarr",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8989",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "lscr.io/linuxserver/sonarr:latest",
+    "port": 8989,
+    "desc": "Automatically track, organize, and rename TV series episodes."
+  },
+  {
+    "id": "radarr",
+    "title": "Radarr",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 7878",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "lscr.io/linuxserver/radarr:latest",
+    "port": 7878,
+    "desc": "Automated movie collection manager and organizer for your home cinema."
+  },
+  {
+    "id": "prowlarr",
+    "title": "Prowlarr",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 9696",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "lscr.io/linuxserver/prowlarr:latest",
+    "port": 9696,
+    "desc": "Centralized indexer manager that syncs across Sonarr, Radarr, and Lidarr."
+  },
+  {
+    "id": "lidarr",
+    "title": "Lidarr",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8686",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "lscr.io/linuxserver/lidarr:latest",
+    "port": 8686,
+    "desc": "Music collection manager that organizes albums, tracks, and metadata."
+  },
+  {
+    "id": "readarr",
+    "title": "Readarr",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8787",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "lscr.io/linuxserver/readarr:develop",
+    "port": 8787,
+    "desc": "E-book and audiobook library organizer with automatic metadata tagging."
+  },
+  {
+    "id": "bazarr",
+    "title": "Bazarr",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 6767",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "lscr.io/linuxserver/bazarr:latest",
+    "port": 6767,
+    "desc": "Automatically downloads and syncs multi-language subtitles for movies and TV."
+  },
+  {
+    "id": "metube",
+    "title": "MeTube (yt-dlp Web UI)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8091",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "ghcr.io/alexta69/metube:latest",
+    "port": 8091,
+    "desc": "Save lectures, tutorials, and playlists for offline viewing via yt-dlp."
+  },
+  {
+    "id": "owncloud",
+    "title": "ownCloud Infinite Scale (oCIS)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 9200",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "owncloud/ocis:latest",
+    "port": 9200,
+    "desc": "Single-binary Go file sync and share cloud with low memory footprint."
+  },
+  {
+    "id": "seafile",
+    "title": "Seafile",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8092",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "seafileltd/seafile-mc:latest",
+    "port": 8092,
+    "desc": "High-speed C-based cloud drive with block-level deduplication and sync."
+  },
+  {
+    "id": "pairdrop",
+    "title": "PairDrop (Local AirDrop)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 3003",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "lscr.io/linuxserver/pairdrop:latest",
+    "port": 3003,
+    "desc": "Instant AirDrop-style file sharing between iPhones, Androids, Macs, and PCs."
+  },
+  {
+    "id": "pingvinshare",
+    "title": "Pingvin Share",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 3004",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "stonith404/pingvin-share:latest",
+    "port": 3004,
+    "desc": "Self-hosted file sharing portal with expiring links and password protection."
+  },
+  {
+    "id": "sftpgo",
+    "title": "SFTPGo",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8093",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "drakkan/sftpgo:latest",
+    "port": 8093,
+    "desc": "Full-featured SFTP, HTTP, and WebDAV file server with web administration."
+  },
+  {
+    "id": "bentopdf",
+    "title": "BentoPDF",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8094",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "ghcr.io/alam00000/bentopdf:latest",
+    "port": 8094,
+    "desc": "Clean browser-based PDF editor, merger, compressor, and converter."
+  },
+  {
+    "id": "onlyoffice",
+    "title": "ONLYOFFICE Document Server",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8095",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "onlyoffice/documentserver:latest",
+    "port": 8095,
+    "desc": "Collaborative online editor for Word, Excel, and PowerPoint files."
+  },
+  {
+    "id": "collabora",
+    "title": "Collabora Online (LibreOffice Web)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 9980",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "collabora/code:latest",
+    "port": 9980,
+    "desc": "LibreOffice-powered collaborative document editing for Nextcloud and web."
+  },
+  {
+    "id": "duplicati",
+    "title": "Duplicati Backup",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8200",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "lscr.io/linuxserver/duplicati:latest",
+    "port": 8200,
+    "desc": "Scheduled AES-256 encrypted backups to USB drives, S3, SFTP, or NAS."
+  },
+  {
+    "id": "kopia",
+    "title": "Kopia Backup Server",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 51515",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "kopia/kopia:latest",
+    "port": 51515,
+    "desc": "Fast, encrypted, deduplicated snapshot backup tool with web UI."
+  },
+  {
+    "id": "outline",
+    "title": "Outline Wiki",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 3006",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "docker.getoutline.com/outlinewiki/outline:latest",
+    "port": 3006,
+    "desc": "Fast, markdown-first knowledge base and documentation workspace."
+  },
+  {
+    "id": "affine",
+    "title": "AFFiNE",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 3010",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "ghcr.io/toeverything/affine:stable",
+    "port": 3010,
+    "desc": "Privacy-focused workspace blending Notion-style docs and Miro whiteboards."
+  },
+  {
+    "id": "blinko",
+    "title": "Blinko",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 1111",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "blinkospace/blinko:latest",
+    "port": 1111,
+    "desc": "Self-hosted fleeting notes and knowledge base with local AI search."
+  },
+  {
+    "id": "memos",
+    "title": "Memos",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 5230",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "neosmemo/memos:stable",
+    "port": 5230,
+    "desc": "Ultra-fast, lightweight markdown note-taking hub that runs in 40 MB RAM."
+  },
+  {
+    "id": "trilium",
+    "title": "TriliumNext Notes",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8098",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "triliumnext/notes:latest",
+    "port": 8098,
+    "desc": "Build deep personal knowledge graphs, journals, and encrypted note trees."
+  },
+  {
+    "id": "silverbullet",
+    "title": "SilverBullet",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 3007",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "zefhemel/silverbullet:latest",
+    "port": 3007,
+    "desc": "Offline-capable plain-markdown note app with live queries and backlinks."
+  },
+  {
+    "id": "docmost",
+    "title": "Docmost",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 3008",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "docmost/docmost:latest",
+    "port": 3008,
+    "desc": "Clean open-source Confluence and Notion alternative for documentation."
+  },
+  {
+    "id": "karakeep",
+    "title": "Karakeep (Hoarder Bookmarks)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 3009",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "ghcr.io/karakeep-app/karakeep:release",
+    "port": 3009,
+    "desc": "Save links, articles, notes, and full-page snapshots with auto-tagging."
+  },
+  {
+    "id": "linkwarden",
+    "title": "Linkwarden",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 3011",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "ghcr.io/linkwarden/linkwarden:latest",
+    "port": 3011,
+    "desc": "Preserve web pages asoffline HTML/PDFs so saved links never succumb to link rot."
+  },
+  {
+    "id": "freshrss",
+    "title": "FreshRSS",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8099",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "lscr.io/linuxserver/freshrss:latest",
+    "port": 8099,
+    "desc": "Fast, self-hosted RSS and Atom news aggregator capable of 100,000+ articles."
+  },
+  {
+    "id": "miniflux",
+    "title": "Miniflux",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8101",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "miniflux/miniflux:latest",
+    "port": 8101,
+    "desc": "Opinionated, keyboard-driven minimalist feed reader written in Go."
+  },
+  {
+    "id": "wallabag",
+    "title": "Wallabag (Read-It-Later)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8102",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "wallabag/wallabag:latest",
+    "port": 8102,
+    "desc": "Save web articles cleanly without ads for offline reading on phone or e-reader."
+  },
+  {
+    "id": "technitium",
+    "title": "Technitium DNS Server",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 5380",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "technitium/dns-server:latest",
+    "port": 5380,
+    "desc": "Full authoritative and recursive DNS server with blocklists and DNS-over-HTTPS."
+  },
+  {
+    "id": "unbound",
+    "title": "Unbound Recursive DNS",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 5335",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "mvance/unbound:latest",
+    "port": 5335,
+    "desc": "Validating, recursive, caching DNS resolver that queries root servers directly."
+  },
+  {
+    "id": "headscale",
+    "title": "Headscale (Self-Hosted Tailscale Control)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8103",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "headscale/headscale:latest",
+    "port": 8103,
+    "desc": "Open-source implementation of the Tailscale mesh VPN control server."
+  },
+  {
+    "id": "netbird",
+    "title": "NetBird Mesh VPN",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8104",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "netbirdio/dashboard:latest",
+    "port": 8104,
+    "desc": "Peer-to-peer WireGuard overlay network connecting all your devices securely."
+  },
+  {
+    "id": "traefik",
+    "title": "Traefik Proxy",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8105",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "traefik:v3.1",
+    "port": 8105,
+    "desc": "Cloud-native edge router that automatically discovers running Docker apps."
+  },
+  {
+    "id": "caddy",
+    "title": "Caddy Web & Reverse Proxy",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8106",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "caddy:latest",
+    "port": 8106,
+    "desc": "Fast, automatic-HTTPS reverse proxy and static file server."
+  },
+  {
+    "id": "cloudflared",
+    "title": "Cloudflare Tunnel (cloudflared)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8107",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "cloudflare/cloudflared:latest",
+    "port": 8107,
+    "desc": "Expose self-hosted web apps securely to your domain without opening router ports."
+  },
+  {
+    "id": "librespeed",
+    "title": "LibreSpeed (LAN Speedtest)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8108",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "lscr.io/linuxserver/librespeed:latest",
+    "port": 8108,
+    "desc": "Test real Wi-Fi and Ethernet throughput between your phones/laptops and server."
+  },
+  {
+    "id": "openspeedtest",
+    "title": "OpenSpeedTest",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 3012",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "openspeedtest/latest:latest",
+    "port": 3012,
+    "desc": "Zero-plugin HTML5 network speed test for diagnosing home Wi-Fi dead zones."
+  },
+  {
+    "id": "speedtest_tracker",
+    "title": "Speedtest Tracker",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8109",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "lscr.io/linuxserver/speedtest-tracker:latest",
+    "port": 8109,
+    "desc": "Continuously logs your ISP download, upload, and ping history with charts."
+  },
+  {
+    "id": "smokeping",
+    "title": "SmokePing",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8110",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "lscr.io/linuxserver/smokeping:latest",
+    "port": 8110,
+    "desc": "Track network latency jitter and packet loss over time."
+  },
+  {
+    "id": "frigate",
+    "title": "Frigate NVR (AI Security Cameras)",
+    "category": "Smart Home",
+    "recommended": false,
+    "tag": "Port 5001",
+    "ram": "512 MB",
+    "hardware_tier": "old_friendly",
+    "image": "ghcr.io/blakeblackshear/frigate:stable",
+    "port": 5001,
+    "desc": "24/7 IP camera NVR with real-time local person, car, and pet detection."
+  },
+  {
+    "id": "scrypted",
+    "title": "Scrypted (HomeKit Secure Video Bridge)",
+    "category": "Smart Home",
+    "recommended": false,
+    "tag": "Port 10443",
+    "ram": "512 MB",
+    "hardware_tier": "old_friendly",
+    "image": "koush/scrypted:latest",
+    "port": 10443,
+    "desc": "Bridge any RTSP/ONVIF camera into Apple HomeKit Secure Video and Google Home."
+  },
+  {
+    "id": "homebridge",
+    "title": "Homebridge",
+    "category": "Smart Home",
+    "recommended": false,
+    "tag": "Port 8581",
+    "ram": "512 MB",
+    "hardware_tier": "old_friendly",
+    "image": "homebridge/homebridge:latest",
+    "port": 8581,
+    "desc": "Connect thousands of non-HomeKit smart devices to Apple Home and Siri."
+  },
+  {
+    "id": "zigbee2mqtt",
+    "title": "Zigbee2MQTT",
+    "category": "Smart Home",
+    "recommended": false,
+    "tag": "Port 8111",
+    "ram": "512 MB",
+    "hardware_tier": "old_friendly",
+    "image": "koenkk/zigbee2mqtt:latest",
+    "port": 8111,
+    "desc": "Pair Aqara, Philips Hue, IKEA, and Sonoff Zigbee sensors without proprietary hubs."
+  },
+  {
+    "id": "mosquitto",
+    "title": "Eclipse Mosquitto MQTT Broker",
+    "category": "Smart Home",
+    "recommended": false,
+    "tag": "Port 1883",
+    "ram": "512 MB",
+    "hardware_tier": "old_friendly",
+    "image": "eclipse-mosquitto:2",
+    "port": 1883,
+    "desc": "Ultra-fast MQTT message broker for Home Assistant, Zigbee2MQTT, and Tasmota."
+  },
+  {
+    "id": "nodered",
+    "title": "Node-RED",
+    "category": "Smart Home",
+    "recommended": false,
+    "tag": "Port 1880",
+    "ram": "512 MB",
+    "hardware_tier": "old_friendly",
+    "image": "nodered/node-red:latest",
+    "port": 1880,
+    "desc": "Drag-and-drop visual wiring tool for smart home automations and APIs."
+  },
+  {
+    "id": "esphome",
+    "title": "ESPHome Dashboard",
+    "category": "Smart Home",
+    "recommended": false,
+    "tag": "Port 6052",
+    "ram": "512 MB",
+    "hardware_tier": "old_friendly",
+    "image": "ghcr.io/esphome/esphome:stable",
+    "port": 6052,
+    "desc": "Build and wireless-flash custom ESP32/ESP8266 sensors from simple YAML files."
+  },
+  {
+    "id": "music_assistant",
+    "title": "Music Assistant",
+    "category": "Smart Home",
+    "recommended": false,
+    "tag": "Port 8095",
+    "ram": "512 MB",
+    "hardware_tier": "old_friendly",
+    "image": "ghcr.io/music-assistant/server:latest",
+    "port": 8095,
+    "desc": "Stream local files and music services across Sonos, Chromecast, and AirPlay speakers."
+  },
+  {
+    "id": "anythingllm",
+    "title": "AnythingLLM (Chat with Your PDFs & Docs)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 3013",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "mintplexlabs/anythingllm:latest",
+    "port": 3013,
+    "desc": "All-in-one private AI desktop & server app to chat with your local documents."
+  },
+  {
+    "id": "librechat",
+    "title": "LibreChat",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 3080",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "ghcr.io/danny-avila/librechat:latest",
+    "port": 3080,
+    "desc": "Unified ChatGPT-style interface supporting Ollama, OpenAI, Claude, and Gemini."
+  },
+  {
+    "id": "whisper_asr",
+    "title": "Whisper ASR (Offline Speech-to-Text)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 9000",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "onerahmet/openai-whisper-asr-webservice:latest",
+    "port": 9000,
+    "desc": "Local OpenAI Whisper speech-to-text API and web UI for transcribing audio/video."
+  },
+  {
+    "id": "flowise",
+    "title": "Flowise AI (Visual LLM Builder)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 3014",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "flowiseai/flowise:latest",
+    "port": 3014,
+    "desc": "Build custom AI agents, RAG pipelines, and chatbots visually."
+  },
+  {
+    "id": "sd_forge",
+    "title": "Stable Diffusion WebUI Forge",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 7860",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "nykk3/stable-diffusion-webui-forge:latest",
+    "port": 7860,
+    "desc": "Generate images locally with Stable Diffusion and Flux on GPU workstations."
+  },
+  {
+    "id": "romm",
+    "title": "RomM (Retro Gaming & Emulator Library)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8113",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "rommapp/romm:latest",
+    "port": 8113,
+    "desc": "Manage and play retro console games directly in your browser via EmulatorJS."
+  },
+  {
+    "id": "palworld",
+    "title": "Palworld Dedicated Server",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8211",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "thijsvanloef/palworld-server-docker:latest",
+    "port": 8211,
+    "desc": "Dedicated multiplayer Palworld server with automatic world backups."
+  },
+  {
+    "id": "valheim",
+    "title": "Valheim Dedicated Server",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 2456",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "lloesche/valheim-server:latest",
+    "port": 2456,
+    "desc": "24/7 Valheim multiplayer world server with automatic update & backup hooks."
+  },
+  {
+    "id": "terraria",
+    "title": "Terraria Server (TShock)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 7777",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "ryshe/terraria:latest",
+    "port": 7777,
+    "desc": "Lightweight dedicated Terraria multiplayer server that runs great on old laptops."
+  },
+  {
+    "id": "factorio",
+    "title": "Factorio Headless Server",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 34197",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "factoriotools/factorio:stable",
+    "port": 34197,
+    "desc": "Dedicated Factorio multiplayer server for building megafactories with friends."
+  },
+  {
+    "id": "actualbudget",
+    "title": "Actual Budget",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 5006",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "actualbudget/actual-server:latest",
+    "port": 5006,
+    "desc": "Fast, local-first envelope budgeting and personal finance tracker."
+  },
+  {
+    "id": "firefly",
+    "title": "Firefly III",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8114",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "fireflyiii/core:latest",
+    "port": 8114,
+    "desc": "Comprehensive personal finance manager with double-entry accounting and reports."
+  },
+  {
+    "id": "wallos",
+    "title": "Wallos (Subscription Tracker)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8282",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "bellamy/wallos:latest",
+    "port": 8282,
+    "desc": "Track recurring subscriptions, bills, and renewal reminders in multiple currencies."
+  },
+  {
+    "id": "mealie",
+    "title": "Mealie (Recipe & Meal Planner)",
+    "category": "Smart Home",
+    "recommended": false,
+    "tag": "Port 9925",
+    "ram": "512 MB",
+    "hardware_tier": "old_friendly",
+    "image": "ghcr.io/mealie-recipes/mealie:latest",
+    "port": 9925,
+    "desc": "Import recipes from any website in 1 click, plan weekly meals, and build grocery lists."
+  },
+  {
+    "id": "tandoor",
+    "title": "Tandoor Recipes",
+    "category": "Smart Home",
+    "recommended": false,
+    "tag": "Port 8115",
+    "ram": "512 MB",
+    "hardware_tier": "old_friendly",
+    "image": "vabene1111/recipes:latest",
+    "port": 8115,
+    "desc": "Manage recipes, scale ingredients, and sync shared household shopping lists."
+  },
+  {
+    "id": "grocy",
+    "title": "Grocy (Pantry & Household ERP)",
+    "category": "Smart Home",
+    "recommended": false,
+    "tag": "Port 9283",
+    "ram": "512 MB",
+    "hardware_tier": "old_friendly",
+    "image": "lscr.io/linuxserver/grocy:latest",
+    "port": 9283,
+    "desc": "Track kitchen inventory, expiration dates, household chores, and battery replacements."
+  },
+  {
+    "id": "vikunja",
+    "title": "Vikunja (To-Do & Kanban)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 3456",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "vikunja/vikunja:latest",
+    "port": 3456,
+    "desc": "Organize tasks, lists, Gantt charts, and Kanban boards with CalDAV sync."
+  },
+  {
+    "id": "nocodb",
+    "title": "NocoDB (Airtable Alternative)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8116",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "nocodb/nocodb:latest",
+    "port": 8116,
+    "desc": "Turn any database into a smart collaborative spreadsheet, gallery, and form builder."
+  },
+  {
+    "id": "baserow",
+    "title": "Baserow",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8117",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "baserow/baserow:latest",
+    "port": 8117,
+    "desc": "Create custom relational tables, views, and forms without writing code."
+  },
+  {
+    "id": "homebox",
+    "title": "Homebox (Home Inventory)",
+    "category": "Smart Home",
+    "recommended": false,
+    "tag": "Port 3100",
+    "ram": "512 MB",
+    "hardware_tier": "old_friendly",
+    "image": "ghcr.io/sysadminsmedia/homebox:latest",
+    "port": 3100,
+    "desc": "Catalog home electronics, serial numbers, receipts, warranties, and storage boxes."
+  },
+  {
+    "id": "2fauth",
+    "title": "2FAuth (Web 2FA Authenticator)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8118",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "2fauth/2fauth:latest",
+    "port": 8118,
+    "desc": "Self-hosted two-factor authentication (TOTP) code generator with QR scanner."
+  },
+  {
+    "id": "authentik",
+    "title": "Authentik SSO",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 9001",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "ghcr.io/goauthentik/server:latest",
+    "port": 9001,
+    "desc": "Protect all your self-hosted apps with single sign-on, passkeys, and 2FA."
+  },
+  {
+    "id": "pocketid",
+    "title": "Pocket ID (Passkey OIDC Provider)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 3015",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "ghcr.io/pocket-id/pocket-id:latest",
+    "port": 3015,
+    "desc": "Lightweight OIDC provider that lets you sign in to apps using fingerprint/FaceID passkeys."
+  },
+  {
+    "id": "dockge",
+    "title": "Dockge (Compose Stack Manager)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 5001",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "louislam/dockge:1",
+    "port": 5001,
+    "desc": "Reactive, easy-to-use `docker-compose.yaml` manager by the creator of Uptime Kuma."
+  },
+  {
+    "id": "dozzle",
+    "title": "Dozzle (Real-Time Container Logs)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8888",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "amir20/dozzle:latest",
+    "port": 8888,
+    "desc": "Real-time web viewer for Docker container logs with instant search and filtering."
+  },
+  {
+    "id": "forgejo",
+    "title": "Forgejo (Self-Hosted Git)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 3016",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "codeberg.org/forgejo/forgejo:9",
+    "port": 3016,
+    "desc": "Community-governed lightweight Git hosting with pull requests and CI actions."
+  },
+  {
+    "id": "codeserver",
+    "title": "code-server (VS Code in Browser)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8443",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "lscr.io/linuxserver/code-server:latest",
+    "port": 8443,
+    "desc": "Run full Visual Studio Code in your browser from any laptop or iPad."
+  },
+  {
+    "id": "n8n",
+    "title": "n8n Workflow Automation",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 5678",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "docker.n8n.io/n8nio/n8n:latest",
+    "port": 5678,
+    "desc": "Automate workflows across 400+ apps, webhooks, emails, and local AI models."
+  },
+  {
+    "id": "it_tools",
+    "title": "IT-Tools (Developer Swiss Army Knife)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8119",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "corentinth/it-tools:latest",
+    "port": 8119,
+    "desc": "80+ handy browser tools for hashes, QR codes, JSON, regex, and networking."
+  },
+  {
+    "id": "cyberchef",
+    "title": "CyberChef",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8120",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "ghcr.io/gchq/cyberchef:latest",
+    "port": 8120,
+    "desc": "The Cyber Swiss Army Knife for encoding, encryption, compression, and data analysis."
+  },
+  {
+    "id": "homarr",
+    "title": "Homarr Dashboard",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 7575",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "ghcr.io/ajnart/homarr:latest",
+    "port": 7575,
+    "desc": "Customizable homelab startpage with live widgets for Sonarr, Radarr, and qBittorrent."
+  },
+  {
+    "id": "homepage",
+    "title": "Homepage Dashboard",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 3017",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "ghcr.io/gethomepage/homepage:latest",
+    "port": 3017,
+    "desc": "Fast, static-rendered application dashboard with 100+ service integrations."
+  },
+  {
+    "id": "dashy",
+    "title": "Dashy",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 4000",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "lissy93/dashy:latest",
+    "port": 4000,
+    "desc": "Self-hosted dashboard with status checks, widgets, and instant theme switching."
+  },
+  {
+    "id": "glance",
+    "title": "Glance (Personal Feed & Status Hub)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8121",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "glanceapp/glance:latest",
+    "port": 8121,
+    "desc": "All-in-one personal startpage showing server stats, RSS feeds, weather, and YouTube."
+  },
+  {
+    "id": "changedetection",
+    "title": "changedetection.io",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 5005",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "ghcr.io/dgtlmoon/changedetection.io:latest",
+    "port": 5005,
+    "desc": "Monitor websites for price drops, product restocks, and text changes."
+  },
+  {
+    "id": "ntfy",
+    "title": "ntfy Push Notification Server",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8122",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "binwiederhier/ntfy:latest",
+    "port": 8122,
+    "desc": "Send instant push notifications to your phone or desktop from any script via PUT/POST."
+  },
+  {
+    "id": "gotify",
+    "title": "Gotify Notification Server",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8124",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "gotify/server:latest",
+    "port": 8124,
+    "desc": "Simple real-time WebSocket server for sending and receiving messages."
+  },
+  {
+    "id": "scrutiny",
+    "title": "Scrutiny (Hard Drive S.M.A.R.T. Web UI)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8125",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "ghcr.io/analogj/scrutiny:master-omnibus",
+    "port": 8125,
+    "desc": "Monitor hard drive and NVMe S.M.A.R.T. health metrics with Backblaze failure rates."
+  },
+  {
+    "id": "glances",
+    "title": "Glances System Monitor",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 61208",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "nicolargo/glances:latest-full",
+    "port": 61208,
+    "desc": "Cross-platform real-time CPU, memory, disk I/O, network, and sensor monitor."
+  },
+  {
+    "id": "beszel",
+    "title": "Beszel (Lightweight Server Monitoring Hub)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8090",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "henrygd/beszel:latest",
+    "port": 8090,
+    "desc": "Featherweight server resource and Docker container history monitor with alerts."
+  },
+  {
+    "id": "grafana",
+    "title": "Grafana",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 3018",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "grafana/grafana-oss:latest",
+    "port": 3018,
+    "desc": "Visualize time-series metrics, server temperatures, power draw, and logs."
+  },
+  {
+    "id": "prometheus",
+    "title": "Prometheus",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 9092",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "prom/prometheus:latest",
+    "port": 9092,
+    "desc": "Collect and query real-time metrics from your server nodes and containers."
+  },
+  {
+    "id": "watchtower",
+    "title": "Watchtower (Auto Container Updater)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8126",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "containrrr/watchtower:latest",
+    "port": 8126,
+    "desc": "Automatically keeps running Docker containers updated to the latest stable image."
+  },
+  {
+    "id": "excalidraw",
+    "title": "Excalidraw Whiteboard",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 3019",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "excalidraw/excalidraw:latest",
+    "port": 3019,
+    "desc": "Virtual collaborative whiteboard for sketching architecture diagrams and notes."
+  },
+  {
+    "id": "drawio",
+    "title": "draw.io (diagrams.net)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8127",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "jgraph/drawio:latest",
+    "port": 8127,
+    "desc": "Full offline flowchart, UML, and home network topology diagram editor."
+  },
+  {
+    "id": "searxng",
+    "title": "SearXNG (Private Metasearch Engine)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8128",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "searxng/searxng:latest",
+    "port": 8128,
+    "desc": "Aggregate results from 70+ search engines with zero tracking, profiling, or ads."
+  },
+  {
+    "id": "whoogle",
+    "title": "Whoogle Search",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 5002",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "benbusby/whoogle-search:latest",
+    "port": 5002,
+    "desc": "Get Google search results without ads, JavaScript tracking, AMP links, or cookies."
+  },
+  {
+    "id": "privategpt_lite",
+    "title": "Open-Notebook (Self-Hosted NotebookLM)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8502",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "lfnovo/open_notebook:latest",
+    "port": 8502,
+    "desc": "Privacy-focused alternative to NotebookLM for researching PDFs, notes, and links."
+  },
+  {
+    "id": "archivebox",
+    "title": "ArchiveBox (Personal Wayback Machine)",
+    "category": "Security & Tools",
+    "recommended": false,
+    "tag": "Port 8129",
+    "ram": "128 MB",
+    "hardware_tier": "old_friendly",
+    "image": "archivebox/archivebox:latest",
+    "port": 8129,
+    "desc": "Save complete offline copies of websites in HTML, PDF, screenshot, and WARC formats."
+  }
+];
 
     const APP_CATEGORIES = [
       "All",
@@ -1717,6 +3359,8 @@
       selected_apps: ["jellyfin", "nextcloud", "pihole", "kiwix", "immich", "homeassistant", "vaultwarden"],
       appSearchQuery: "",
       appCategoryFilter: "All",
+      custom_apps: [],
+      customWebAppInput: "",
       prebundle_offline_images: false,
       enable_pihole_dns_prep: true,
       enable_samba_nas: true,
@@ -1785,6 +3429,7 @@
       scanningUsb: false,
 
       flashing: false,
+      flashPaused: false,
       flashCancelled: false,
       flashProgress: 0,
       flashStatusText: "",
@@ -1845,7 +3490,10 @@
           if (endpoint === "save-config" && api.save_config) return await api.save_config(payload);
           if (endpoint === "usb" && api.scan_usb_devices) return await api.scan_usb_devices();
           if (endpoint === "flash" && api.start_build) return await api.start_build(payload);
+          if (endpoint === "pause" && api.pause_build) return await api.pause_build();
+          if (endpoint === "resume" && api.resume_build) return await api.resume_build();
           if (endpoint === "cancel" && api.cancel_build) return await api.cancel_build();
+          if (endpoint === "custom-app" && api.add_custom_app) return await api.add_custom_app(payload);
           if (endpoint === "heartbeat" && api.heartbeat) return await api.heartbeat();
           if (endpoint === "shutdown" && api.shutdown_app) return await api.shutdown_app(true);
           if (endpoint === "status" && api.poll_build_status) return await api.poll_build_status();
@@ -1876,6 +3524,7 @@
         device_form_factor: state.device_form_factor,
         dashboard_choice: state.dashboard_choice,
         selected_apps: Array.isArray(state.selected_apps) ? state.selected_apps : [],
+        custom_apps: Array.isArray(state.custom_apps) ? state.custom_apps : [],
         prebundle_offline_images: state.prebundle_offline_images,
         enable_pihole_dns_prep: state.enable_pihole_dns_prep,
         enable_samba_nas: state.enable_samba_nas,
@@ -1959,6 +3608,25 @@
       });
       if (Array.isArray(cfg.selected_apps)) {
         state.selected_apps = cfg.selected_apps;
+      }
+      if (Array.isArray(cfg.custom_apps)) {
+        state.custom_apps = cfg.custom_apps;
+        cfg.custom_apps.forEach(ca => {
+          if (ca && ca.id && !APP_STORE_CATALOG.some(a => a.id === ca.id)) {
+            APP_STORE_CATALOG.unshift({
+              id: ca.id,
+              title: ca.title || ca.id,
+              category: ca.category || "Security & Tools",
+              recommended: true,
+              tag: "Custom • Port " + (ca.port || 8080),
+              ram: "128 MB",
+              hardware_tier: "old_friendly",
+              image: ca.image || "",
+              port: ca.port || 8080,
+              desc: ca.description || ("Custom container (" + (ca.image || ca.id) + ")")
+            });
+          }
+        });
       }
       if (cfg.custom_iso_path && String(cfg.custom_iso_path).trim()) {
         state.iso_source_mode = "local_file";
@@ -2189,17 +3857,31 @@
 
       const hdrActions = document.getElementById("flashPanelHeaderActions");
       if (hdrActions) {
-        const hasCancelBtn = !!hdrActions.querySelector("[data-action='cancel-flash']");
-        if (state.flashing && !hasCancelBtn) {
-          hdrActions.innerHTML = `<button type="button" class="win-btn win-btn-sm win-btn-danger" data-action="cancel-flash">✕ Cancel flashing</button>`;
-        } else if (!state.flashing && hasCancelBtn) {
+        if (state.flashing) {
+          const pauseLbl = state.flashPaused ? `▶ Resume (${state.flashProgress}%)` : "⏸ Pause";
+          const pauseCls = state.flashPaused ? "win-btn win-btn-sm win-btn-accent" : "win-btn win-btn-sm";
+          hdrActions.innerHTML = `
+            <button type="button" class="${pauseCls}" data-action="pause-resume-flash">${pauseLbl}</button>
+            <button type="button" class="win-btn win-btn-sm win-btn-danger" data-action="cancel-flash">✕ Cancel</button>
+          `;
+        } else {
           hdrActions.innerHTML = "";
         }
       }
 
+      const stageWrap = document.getElementById("flashStageStepsRow");
+      if (stageWrap) {
+        stageWrap.innerHTML = renderFlashPipelineStagesHtml();
+      }
+
       document.querySelectorAll("[data-action='start-flash']").forEach(btn => {
         btn.disabled = state.flashing;
-        btn.textContent = state.flashing ? "Flashing Bootable USB..." : "Confirm & Flash Bootable USB";
+        btn.textContent = state.flashing
+          ? (state.flashPaused ? `Paused at ${state.flashProgress}%` : "Flashing Bootable USB...")
+          : "Confirm & Flash Bootable USB";
+      });
+      document.querySelectorAll("[data-action='pause-resume-flash']").forEach(btn => {
+        btn.textContent = state.flashPaused ? `▶ Resume (${state.flashProgress}%)` : "⏸ Pause";
       });
       document.querySelectorAll(".footer-cancel-flash-wrap").forEach(wrap => {
         wrap.style.display = state.flashing ? "inline-flex" : "none";
@@ -2240,11 +3922,110 @@
       scrollTerminalToBottomIfSticky();
     }
 
+    function renderFlashPipelineStagesHtml() {
+      const p = Number(state.flashProgress) || 0;
+      const stages = [
+        { label: "1. Config & Checks", min: 0, doneAt: 10 },
+        { label: "2. Ubuntu ISO", min: 10, doneAt: 42 },
+        { label: "3. App Packages", min: 42, doneAt: 55 },
+        { label: "4. USB Write", min: 55, doneAt: 92 },
+        { label: "5. Verify & Ready", min: 92, doneAt: 100 }
+      ];
+      return stages.map(st => {
+        const isDone = p >= st.doneAt;
+        const isActive = !isDone && p >= st.min && state.flashing;
+        const badgeCls = isDone ? "badge-success" : (isActive ? (state.flashPaused ? "badge-warning" : "badge-accent") : "");
+        const prefix = isDone ? "✓ " : (isActive ? (state.flashPaused ? "⏸ " : "⟳ ") : "");
+        return `<span class="badge ${badgeCls}" style="font-size:11px;padding:3px 8px;">${prefix}${esc(st.label)}</span>`;
+      }).join("");
+    }
+
+    async function togglePauseResumeFlashing() {
+      if (!state.flashing) return;
+      if (!state.flashPaused) {
+        state.flashPaused = true;
+        await callBackend("pause", "POST");
+        state.flashStatusText = `Paused at ${state.flashProgress}% — ISO cache & ${state.selected_apps.length} app packages saved. Click Resume to continue.`;
+        state.flashLogs.push(`[PAUSED] Flashing paused at ${state.flashProgress}%. All downloaded ISO bytes and self-hosted app packages are preserved.`);
+        updateFlashPanelInPlace();
+        showToast("Flashing paused — click Resume anytime");
+      } else {
+        state.flashPaused = false;
+        await callBackend("resume", "POST");
+        state.flashStatusText = `Resuming USB provisioning from ${state.flashProgress}%...`;
+        state.flashLogs.push(`[RESUMED] Continuing from ${state.flashProgress}% without restarting downloads.`);
+        updateFlashPanelInPlace();
+        showToast("Flashing resumed");
+      }
+    }
+
+    async function addCustomWebAppFromInput() {
+      const raw = (state.customWebAppInput || "").trim();
+      if (!raw) {
+        showToast("Paste a Docker image, docker run command, or GitHub/Docker Hub URL");
+        return;
+      }
+      let parsed = null;
+      const res = await callBackend("custom-app", "POST", { raw_input: raw });
+      if (res && res.ok && res.app) {
+        parsed = res.app;
+      } else {
+        let image = raw;
+        let port = 8080;
+        const mPort = raw.match(/-p\s+(\d{2,5}):(\d{2,5})/) || raw.match(/:(\d{2,5})\b/);
+        if (mPort) port = Number(mPort[1]);
+        if (raw.includes("hub.docker.com/r/")) {
+          image = raw.split("hub.docker.com/r/")[1].split(/[/?#]/).slice(0, 2).join("/");
+        } else if (raw.includes("github.com/")) {
+          const parts = raw.split("github.com/")[1].split(/[/?#]/).slice(0, 2);
+          image = "ghcr.io/" + parts.join("/").toLowerCase() + ":latest";
+        } else if (raw.startsWith("docker run")) {
+          const tokens = raw.split(/\s+/);
+          image = tokens[tokens.length - 1];
+        }
+        if (!image.includes(":")) image += ":latest";
+        const baseName = image.split("/").pop().split(":")[0].replace(/[^a-z0-9_-]/gi, "-").toLowerCase() || "custom-app";
+        parsed = {
+          id: "custom_" + baseName.replace(/-/g, "_"),
+          title: baseName.replace(/[-_]/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
+          category: "Security & Tools",
+          image,
+          port,
+          volumes: [`/DATA/AppData/${baseName}:/data`],
+          description: `Custom container (${image}) on port ${port}.`
+        };
+      }
+      if (!state.custom_apps.some(a => a.id === parsed.id)) {
+        state.custom_apps.push(parsed);
+      }
+      if (!APP_STORE_CATALOG.some(a => a.id === parsed.id)) {
+        APP_STORE_CATALOG.unshift({
+          id: parsed.id,
+          title: parsed.title,
+          category: "Security & Tools",
+          recommended: true,
+          tag: `Custom • Port ${parsed.port}`,
+          ram: "128 MB",
+          hardware_tier: "old_friendly",
+          image: parsed.image,
+          port: parsed.port,
+          desc: parsed.description
+        });
+      }
+      if (!state.selected_apps.includes(parsed.id)) {
+        state.selected_apps.push(parsed.id);
+      }
+      state.customWebAppInput = "";
+      showToast(`Added & selected ${parsed.title} (${parsed.image})`);
+      renderApp();
+    }
+
     async function cancelFlashingProcess(exitAfterCancel = false) {
       clearInterval(pollTimer);
       pollTimer = null;
       await callBackend("cancel", "POST");
       state.flashing = false;
+      state.flashPaused = false;
       state.flashCancelled = true;
       state.activeProgressLine = "";
       state.flashStatusText = "Flashing cancelled by user — safe to unplug or retry anytime.";
@@ -2274,6 +4055,7 @@
       } catch (_e) {}
 
       state.flashing = true;
+      state.flashPaused = false;
       state.flashCancelled = false;
       state.flashProgress = 6;
       state.flashEtaText = "ETA: calculating...";
@@ -2308,6 +4090,11 @@
             window.__showCloseWhileFlashingWarning();
           }
           if (!state.flashing) return;
+          if (snap.status === "PAUSED" || state.flashPaused) {
+            state.flashPaused = true;
+            updateFlashPanelInPlace();
+            return;
+          }
 
           spinIdx = (spinIdx + 1) % spinFrames.length;
           const elapsedSec = Math.max(0, Math.floor((Date.now() - flashStartEpoch) / 1000));
@@ -2431,6 +4218,10 @@
       let idx = 0;
       clearInterval(pollTimer);
       pollTimer = setInterval(() => {
+        if (state.flashPaused) {
+          updateFlashPanelInPlace();
+          return;
+        }
         if (!state.flashing || idx >= simPhases.length) {
           clearInterval(pollTimer);
           pollTimer = null;
@@ -2551,11 +4342,17 @@
             </div>
             <div id="flashPanelHeaderActions" style="display:flex;align-items:center;gap:8px;">
               ${state.flashing ? `
+                <button type="button" class="win-btn win-btn-sm ${state.flashPaused ? "win-btn-accent" : ""}" data-action="pause-resume-flash">
+                  ${state.flashPaused ? `▶ Resume (${state.flashProgress}%)` : "⏸ Pause"}
+                </button>
                 <button type="button" class="win-btn win-btn-sm win-btn-danger" data-action="cancel-flash">
-                  ✕ Cancel flashing
+                  ✕ Cancel
                 </button>
               ` : ""}
             </div>
+          </div>
+          <div id="flashStageStepsRow" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:2px 0;">
+            ${renderFlashPipelineStagesHtml()}
           </div>
           <div class="progress-track">
             <div class="progress-fill" id="flashProgressFill" style="width: ${state.flashProgress}%;"></div>
@@ -2575,6 +4372,12 @@
               ↓ Auto-scroll paused — Jump to bottom
             </button>
           </div>
+          <details style="margin-top:6px;border-top:1px solid var(--border-subtle);padding-top:8px;">
+            <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--text-secondary);">
+              Transparent Config &amp; Staged Files Overview (cloud-init YAML + ${state.selected_apps.length} App Manifests)
+            </summary>
+            <div class="code-viewer" style="margin-top:8px;max-height:170px;overflow:auto;">${esc(generateYamlPreview())}</div>
+          </details>
         </div>
       `;
     }
@@ -2930,6 +4733,28 @@ ${storageSnippet}
           </div>
         </div>
 
+        <div class="win-card" style="padding:10px 14px;">
+          <div class="card-left">
+            <div class="card-icon">🌐</div>
+            <div class="card-text">
+              <div class="card-title">Add custom app or any app from the web</div>
+              <div class="card-desc">Paste a Docker image, <code>docker run</code> command, or GitHub / Docker Hub URL</div>
+            </div>
+          </div>
+          <div class="card-right" style="flex:1;max-width:460px;display:flex;gap:8px;">
+            <input
+              type="text"
+              class="win-input"
+              style="flex:1;min-width:200px;"
+              id="customWebAppInput"
+              data-field="customWebAppInput"
+              value="${esc(state.customWebAppInput || "")}"
+              placeholder="e.g. linuxserver/plex:latest, docker run -p 8080:80 ..., or GitHub URL"
+            />
+            <button type="button" class="win-btn win-btn-accent" data-action="add-custom-web-app">＋ Add App</button>
+          </div>
+        </div>
+
         <div class="appstore-toolbar">
           <div class="appstore-top-row">
             <input
@@ -2939,7 +4764,7 @@ ${storageSnippet}
               id="appStoreSearchInput"
               data-field="appSearchQuery"
               value="${esc(state.appSearchQuery)}"
-              placeholder="Search 26 self-hosted apps (e.g. Wikipedia, Minecraft, Ollama AI, Jellyfin, Nextcloud, Pi-hole)..."
+              placeholder="Search ${APP_STORE_CATALOG.length}+ self-hosted apps (Jellyfin, Nextcloud, Immich, Pi-hole, Ollama, Minecraft, Grafana, Frigate)..."
             />
           </div>
           <div class="appstore-filter-pills" id="appCategoryPills">
@@ -3620,8 +5445,9 @@ ${storageSnippet}
             <button type="button" class="win-btn win-btn-accent" data-action="setup-next">Proceed →</button>
           ` : `
             <button type="button" class="win-btn" data-action="save-config-home">Save configuration</button>
-            <span class="footer-cancel-flash-wrap" style="display:${state.flashing ? "inline-flex" : "none"};">
-              <button type="button" class="win-btn win-btn-danger" data-action="cancel-flash">✕ Cancel flashing</button>
+            <span class="footer-cancel-flash-wrap" style="display:${state.flashing ? "inline-flex" : "none"};gap:8px;">
+              <button type="button" class="win-btn" data-action="pause-resume-flash">${state.flashPaused ? `▶ Resume (${state.flashProgress}%)` : "⏸ Pause"}</button>
+              <button type="button" class="win-btn win-btn-danger" data-action="cancel-flash">✕ Cancel</button>
             </span>
             <button type="button" class="win-btn win-btn-accent win-btn-large" data-action="start-flash" ${state.flashing ? "disabled" : ""}>
               ${state.flashing ? "Flashing Bootable USB..." : "Confirm & Flash Bootable USB"}
@@ -3747,8 +5573,9 @@ ${storageSnippet}
               <button type="button" class="win-btn win-btn-accent win-btn-large" data-action="start-flash" ${state.flashing ? "disabled" : ""}>
                 ${state.flashing ? "Flashing Bootable USB..." : "Flash Bootable USB"}
               </button>
-              <span class="footer-cancel-flash-wrap" style="display:${state.flashing ? "inline-flex" : "none"};">
-                <button type="button" class="win-btn win-btn-danger win-btn-large" data-action="cancel-flash">✕ Cancel flashing</button>
+              <span class="footer-cancel-flash-wrap" style="display:${state.flashing ? "inline-flex" : "none"};gap:8px;">
+                <button type="button" class="win-btn win-btn-large" data-action="pause-resume-flash">${state.flashPaused ? `▶ Resume (${state.flashProgress}%)` : "⏸ Pause"}</button>
+                <button type="button" class="win-btn win-btn-danger win-btn-large" data-action="cancel-flash">✕ Cancel</button>
               </span>
             </div>
 
@@ -4353,6 +6180,10 @@ ${storageSnippet}
         await saveConfigurationAndOpenHome();
       } else if (action === "start-flash") {
         await startFlashingProcess();
+      } else if (action === "pause-resume-flash") {
+        await togglePauseResumeFlashing();
+      } else if (action === "add-custom-web-app") {
+        await addCustomWebAppFromInput();
       } else if (action === "cancel-flash") {
         await cancelFlashingProcess(false);
       } else if (action === "resume-log-autoscroll") {

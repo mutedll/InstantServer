@@ -249,6 +249,19 @@ class ServerDashboardController:
                 "cluster": get_cluster_status_api(),
             }
 
+    def add_custom_app_to_dashboard(self, raw_input: str, title: str = "", port: int = 0) -> Dict[str, Any]:
+        entry = config_builder.parse_custom_app_input(raw_input, custom_title=title, custom_port=port)
+        with self._lock:
+            custom_list = list(self.settings.get("custom_apps", []))
+            custom_list = [a for a in custom_list if a.get("id") != entry["id"]] + [entry]
+            self.settings["custom_apps"] = custom_list
+            installed = list(self.settings.get("installed_apps", []))
+            if entry["id"] not in installed:
+                installed.append(entry["id"])
+            self.settings["installed_apps"] = installed
+            self._save_settings()
+        return self.get_full_state()
+
     def handle_app_action(self, app_id: str, action: str) -> Dict[str, Any]:
         if app_id not in config_builder.APP_CATALOG_BY_ID:
             raise ValueError(f"Unknown app_id: {app_id}")
@@ -542,6 +555,14 @@ def serve_dashboard(port: int = 8088, host: str = "0.0.0.0") -> None:
             except Exception:
                 payload = {}
 
+            if path == "/api/dashboard/apps/custom":
+                res = controller.add_custom_app_to_dashboard(
+                    raw_input=str(payload.get("raw_input", "")),
+                    title=str(payload.get("title", "")),
+                    port=int(payload.get("port", 0) or 0),
+                )
+                self._send_json(res)
+                return
             if path == "/api/dashboard/apps/action":
                 res = controller.handle_app_action(
                     app_id=str(payload.get("app_id", "")),

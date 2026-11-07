@@ -795,30 +795,2017 @@
 
   <script>
     const DEFAULT_APPS = [
-      { id: "kiwix", title: "Offline Wikipedia (Kiwix)", category: "Knowledge & Wiki", port: 8086, ram_mb: 128, image: "ghcr.io/kiwix/kiwix-serve:latest", volumes: ["/DATA/AppData/kiwix/zim:/data"], installed: true, status: "running", description: "Host full offline Wikipedia, WikiMed, iFixit repair manuals, and Project Gutenberg (.zim files) on your home Wi-Fi." },
-      { id: "jellyfin", title: "Jellyfin Media Server", category: "Media & Photos", port: 8096, ram_mb: 512, image: "jellyfin/jellyfin:latest", volumes: ["/DATA/AppData/jellyfin/config:/config", "/DATA/Media:/media"], installed: true, status: "running", description: "Stream movies, TV shows, and music to any phone, smart TV, or browser with zero subscriptions." },
-      { id: "nextcloud", title: "Nextcloud Personal Cloud", category: "Cloud & Files", port: 8081, ram_mb: 512, image: "nextcloud:stable", volumes: ["/DATA/AppData/nextcloud/html:/var/www/html", "/DATA/AppData/nextcloud/data:/var/www/html/data"], installed: true, status: "running", description: "Private Google Drive & Workspace replacement for documents, photos, calendars, and contacts." },
-      { id: "pihole", title: "Pi-hole Network Ad-Blocker", category: "Network & VPN", port: 8085, ram_mb: 128, image: "pihole/pihole:latest", volumes: ["/DATA/AppData/pihole/etc-pihole:/etc/pihole", "/DATA/AppData/pihole/etc-dnsmasq.d:/etc/dnsmasq.d"], installed: true, status: "running", description: "Network-wide DNS sinkhole that blocks ads and trackers on every device connected to your router." },
-      { id: "immich", title: "Immich Photo Backup", category: "Media & Photos", port: 2283, ram_mb: 1024, image: "ghcr.io/immich-app/immich-server:release", volumes: ["/DATA/AppData/immich/upload:/usr/src/app/upload"], installed: true, status: "running", description: "Self-hosted Google Photos replacement with automatic mobile camera roll backup and AI face recognition." },
-      { id: "homeassistant", title: "Home Assistant", category: "Smart Home", port: 8123, ram_mb: 512, image: "homeassistant/home-assistant:stable", volumes: ["/DATA/AppData/homeassistant/config:/config"], installed: true, status: "running", description: "Local smart home automation hub for lights, sensors, Zigbee, Matter, and energy dashboards." },
-      { id: "vaultwarden", title: "Vaultwarden Passwords", category: "Security & Tools", port: 8082, ram_mb: 64, image: "vaultwarden/server:latest", volumes: ["/DATA/AppData/vaultwarden/data:/data"], installed: true, status: "running", description: "Lightweight Bitwarden-compatible password manager server for browsers and mobile apps." },
-      { id: "wg_easy", title: "WireGuard VPN (wg-easy)", category: "Network & VPN", port: 51821, ram_mb: 64, image: "ghcr.io/wg-easy/wg-easy:latest", volumes: ["/DATA/AppData/wg_easy:/etc/wireguard"], installed: false, status: "available", description: "One-click WireGuard VPN server with web UI and QR codes for connecting to your home LAN from anywhere." },
-      { id: "syncthing", title: "Syncthing File Sync", category: "Cloud & Files", port: 8384, ram_mb: 128, image: "lscr.io/linuxserver/syncthing:latest", volumes: ["/DATA/AppData/syncthing/config:/config", "/DATA/Sync:/data1"], installed: false, status: "available", description: "Continuous peer-to-peer folder synchronization across your laptops, desktops, and phones." },
-      { id: "qbittorrent", title: "qBittorrent Web UI", category: "Media & Photos", port: 8090, ram_mb: 256, image: "lscr.io/linuxserver/qbittorrent:latest", volumes: ["/DATA/AppData/qbittorrent/config:/config", "/DATA/Downloads:/downloads"], installed: false, status: "available", description: "Web-based torrent and magnet download manager with RSS automation." },
-      { id: "adguardhome", title: "AdGuard Home DNS", category: "Network & VPN", port: 3000, ram_mb: 128, image: "adguard/adguardhome:latest", volumes: ["/DATA/AppData/adguardhome/work:/opt/adguardhome/work", "/DATA/AppData/adguardhome/conf:/opt/adguardhome/conf"], installed: false, status: "available", description: "Encrypted DNS-over-HTTPS ad blocker with family safe-search and per-device parental controls." },
-      { id: "filebrowser", title: "FileBrowser Web NAS", category: "Cloud & Files", port: 8095, ram_mb: 64, image: "filebrowser/filebrowser:latest", volumes: ["/DATA:/srv", "/DATA/AppData/filebrowser:/database"], installed: false, status: "available", description: "Clean web file manager to upload, download, and share files stored on your server drive." },
-      { id: "calibreweb", title: "Calibre-Web eBooks", category: "Knowledge & Wiki", port: 8083, ram_mb: 128, image: "lscr.io/linuxserver/calibre-web:latest", volumes: ["/DATA/AppData/calibreweb/config:/config", "/DATA/Media/Books:/books"], installed: false, status: "available", description: "Digital eBook & audiobook library with one-click wireless delivery to Kindle and Kobo readers." },
-      { id: "bookstack", title: "BookStack Family Wiki", category: "Knowledge & Wiki", port: 6875, ram_mb: 256, image: "lscr.io/linuxserver/bookstack:latest", volumes: ["/DATA/AppData/bookstack/config:/config"], installed: false, status: "available", description: "Personal and homelab documentation wiki organized like books and chapters." },
-      { id: "uptimekuma", title: "Uptime Kuma Monitor", category: "Security & Tools", port: 3001, ram_mb: 128, image: "louislam/uptime-kuma:1", volumes: ["/DATA/AppData/uptimekuma/data:/app/data"], installed: false, status: "available", description: "Self-hosted status monitoring dashboard with instant alerts when services or internet drop." },
-      { id: "portainer", title: "Portainer CE", category: "Security & Tools", port: 9443, ram_mb: 128, image: "portainer/portainer-ce:latest", volumes: ["/var/run/docker.sock:/var/run/docker.sock", "/DATA/AppData/portainer/data:/data"], installed: false, status: "available", description: "Full visual container, volume, network, and Docker Compose stack management UI." },
-      { id: "paperless", title: "Paperless-ngx OCR", category: "Cloud & Files", port: 8000, ram_mb: 512, image: "ghcr.io/paperless-ngx/paperless-ngx:latest", volumes: ["/DATA/AppData/paperless/data:/usr/src/paperless/data", "/DATA/AppData/paperless/media:/usr/src/paperless/media"], installed: false, status: "available", description: "Document scanner and archive that converts receipts, PDFs, and invoices into searchable text." },
-      { id: "stirlingpdf", title: "Stirling-PDF Studio", category: "Security & Tools", port: 8084, ram_mb: 256, image: "frooodle/s-pdf:latest", volumes: ["/DATA/AppData/stirlingpdf/configs:/configs"], installed: false, status: "available", description: "All-in-one local PDF toolkit to merge, split, OCR, compress, and sign PDFs privately." },
-      { id: "navidrome", title: "Navidrome Music Streamer", category: "Media & Photos", port: 4533, ram_mb: 64, image: "deluan/navidrome:latest", volumes: ["/DATA/AppData/navidrome/data:/data", "/DATA/Media/Music:/music:ro"], installed: false, status: "available", description: "Ultra-fast personal music streaming server compatible with Subsonic mobile apps." },
-      { id: "gitea", title: "Gitea Private Git", category: "Security & Tools", port: 3002, ram_mb: 128, image: "gitea/gitea:latest", volumes: ["/DATA/AppData/gitea/data:/data"], installed: false, status: "available", description: "Self-hosted GitHub alternative for private source code repositories and CI/CD runners." },
-      { id: "minecraft", title: "Minecraft Java Server", category: "Gaming & AI", port: 25565, ram_mb: 2048, image: "itzg/minecraft-server:latest", volumes: ["/DATA/AppData/minecraft/data:/data"], installed: false, status: "available", description: "24/7 multiplayer Minecraft Java server (Paper / Vanilla / Fabric) with automatic backups." },
-      { id: "minecraft_bedrock", title: "Minecraft Bedrock Server", category: "Gaming & AI", port: 19132, ram_mb: 512, image: "itzg/minecraft-bedrock-server:latest", volumes: ["/DATA/AppData/minecraft_bedrock/data:/data"], installed: false, status: "available", description: "Cross-play Minecraft Bedrock server for mobile, Xbox, PlayStation, Switch, and Windows." },
-      { id: "ollama_webui", title: "Ollama + Open WebUI (Local AI)", category: "Gaming & AI", port: 3005, ram_mb: 8192, image: "ghcr.io/open-webui/open-webui:ollama", volumes: ["/DATA/AppData/ollama_webui/ollama:/root/.ollama"], installed: false, status: "available", description: "Private offline ChatGPT interface for running Llama 3, DeepSeek, Mistral, and Qwen locally." }
-    ];
+  {
+    "id": "kiwix",
+    "title": "Offline Wikipedia (Kiwix)",
+    "category": "Security & Tools",
+    "port": 8086,
+    "ram_mb": 128,
+    "image": "ghcr.io/kiwix/kiwix-serve:latest",
+    "volumes": [
+      "/DATA/AppData/kiwix/zim:/data"
+    ],
+    "installed": true,
+    "status": "running",
+    "description": "Host full offline Wikipedia, Wiktionary, medical guides, and Project Gutenberg (.zim files) on any old..."
+  },
+  {
+    "id": "jellyfin",
+    "title": "Jellyfin",
+    "category": "Security & Tools",
+    "port": 8096,
+    "ram_mb": 128,
+    "image": "jellyfin/jellyfin:latest",
+    "volumes": [
+      "/DATA/AppData/jellyfin/config:/config",
+      "/DATA/Media:/media"
+    ],
+    "installed": true,
+    "status": "running",
+    "description": "Stream your movies, TV shows, and music to phones, smart TVs, and browsers with zero subscriptions."
+  },
+  {
+    "id": "nextcloud",
+    "title": "Nextcloud",
+    "category": "Security & Tools",
+    "port": 8081,
+    "ram_mb": 128,
+    "image": "nextcloud:stable",
+    "volumes": [
+      "/DATA/AppData/nextcloud/html:/var/www/html",
+      "/DATA/AppData/nextcloud/data:/var/www/html/data"
+    ],
+    "installed": true,
+    "status": "running",
+    "description": "Private Google Drive & Google Workspace replacement for your files, calendars, contacts, and phone bac..."
+  },
+  {
+    "id": "pihole",
+    "title": "Pi-hole",
+    "category": "Security & Tools",
+    "port": 8085,
+    "ram_mb": 128,
+    "image": "pihole/pihole:latest",
+    "volumes": [
+      "/DATA/AppData/pihole/etc-pihole:/etc/pihole",
+      "/DATA/AppData/pihole/etc-dnsmasq.d:/etc/dnsmasq.d"
+    ],
+    "installed": true,
+    "status": "running",
+    "description": "Network-wide DNS ad-blocker and tracker shield that blocks ads on every phone, TV, and laptop on your..."
+  },
+  {
+    "id": "immich",
+    "title": "Immich",
+    "category": "Security & Tools",
+    "port": 2283,
+    "ram_mb": 128,
+    "image": "ghcr.io/immich-app/immich-server:release",
+    "volumes": [
+      "/DATA/AppData/immich/upload:/usr/src/app/upload"
+    ],
+    "installed": true,
+    "status": "running",
+    "description": "Fast self-hosted Google Photos alternative with automatic iOS/Android camera backup and album sharing."
+  },
+  {
+    "id": "homeassistant",
+    "title": "Home Assistant",
+    "category": "Smart Home",
+    "port": 8123,
+    "ram_mb": 512,
+    "image": "homeassistant/home-assistant:stable",
+    "volumes": [
+      "/DATA/AppData/homeassistant/config:/config"
+    ],
+    "installed": true,
+    "status": "running",
+    "description": "Automate smart lights, plugs, cameras, and Zigbee/Matter devices locally inside your home."
+  },
+  {
+    "id": "vaultwarden",
+    "title": "Vaultwarden",
+    "category": "Security & Tools",
+    "port": 8082,
+    "ram_mb": 128,
+    "image": "vaultwarden/server:latest",
+    "volumes": [
+      "/DATA/AppData/vaultwarden/data:/data"
+    ],
+    "installed": true,
+    "status": "running",
+    "description": "Ultra-lightweight Bitwarden-compatible password manager server for your browser extensions and mobile..."
+  },
+  {
+    "id": "minecraft",
+    "title": "Minecraft Dedicated Server (Java)",
+    "category": "Security & Tools",
+    "port": 25565,
+    "ram_mb": 128,
+    "image": "itzg/minecraft-server:latest",
+    "volumes": [
+      "/DATA/AppData/minecraft/data:/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "24/7 dedicated Minecraft Java server (Vanilla, Paper, Spigot, Fabric, or Forge) with automatic world b..."
+  },
+  {
+    "id": "minecraft_bedrock",
+    "title": "Minecraft Bedrock Server (Mobile / Console)",
+    "category": "Security & Tools",
+    "port": 19132,
+    "ram_mb": 128,
+    "image": "itzg/minecraft-bedrock-server:latest",
+    "volumes": [
+      "/DATA/AppData/minecraft_bedrock/data:/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Lightweight C++ Minecraft Bedrock server for Phones (iOS/Android), Xbox, PlayStation, Switch, and Wind..."
+  },
+  {
+    "id": "ollama_webui",
+    "title": "Local AI Server (Ollama + Open WebUI)",
+    "category": "Security & Tools",
+    "port": 3005,
+    "ram_mb": 128,
+    "image": "ghcr.io/open-webui/open-webui:ollama",
+    "volumes": [
+      "/DATA/AppData/ollama_webui/ollama:/root/.ollama",
+      "/DATA/AppData/ollama_webui/webui:/app/backend/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Run private local AI models (Llama 3, DeepSeek, Mistral, Qwen) with a ChatGPT web UI. Not for old low-..."
+  },
+  {
+    "id": "localai",
+    "title": "LocalAI (Private AI Voice, Vision & Text)",
+    "category": "Security & Tools",
+    "port": 8088,
+    "ram_mb": 128,
+    "image": "localai/localai:latest",
+    "volumes": [
+      "/DATA/AppData/localai/models:/build/models"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Self-hosted OpenAI-compatible API for local text generation, Whisper speech-to-text, and voice synthesis."
+  },
+  {
+    "id": "bookstack",
+    "title": "BookStack (Personal Wiki & Notes)",
+    "category": "Security & Tools",
+    "port": 6875,
+    "ram_mb": 128,
+    "image": "lscr.io/linuxserver/bookstack:latest",
+    "volumes": [
+      "/DATA/AppData/bookstack/config:/config"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Build your own Wikipedia-style knowledge base, family handbook, and study notes organized into books a..."
+  },
+  {
+    "id": "calibreweb",
+    "title": "Calibre-Web (E-Book Library)",
+    "category": "Security & Tools",
+    "port": 8083,
+    "ram_mb": 128,
+    "image": "lscr.io/linuxserver/calibre-web:latest",
+    "volumes": [
+      "/DATA/AppData/calibreweb/config:/config",
+      "/DATA/Media/Books:/books"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Browse, read in browser, and wireless-send EPUB/PDF e-books to your Kindle, Kobo, or phone."
+  },
+  {
+    "id": "wg_easy",
+    "title": "WireGuard VPN (wg-easy)",
+    "category": "Security & Tools",
+    "port": 51821,
+    "ram_mb": 128,
+    "image": "ghcr.io/wg-easy/wg-easy:latest",
+    "volumes": [
+      "/DATA/AppData/wg_easy/etc_wireguard:/etc/wireguard"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Fast WireGuard VPN server with a web dashboard and instant QR-code setup for phones and laptops."
+  },
+  {
+    "id": "adguardhome",
+    "title": "AdGuard Home",
+    "category": "Security & Tools",
+    "port": 3000,
+    "ram_mb": 128,
+    "image": "adguard/adguardhome:latest",
+    "volumes": [
+      "/DATA/AppData/adguardhome/work:/opt/adguardhome/work",
+      "/DATA/AppData/adguardhome/conf:/opt/adguardhome/conf"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "All-in-one DNS ad-blocker, parental control filter, and encrypted DNS-over-HTTPS server."
+  },
+  {
+    "id": "plex",
+    "title": "Plex Media Server",
+    "category": "Security & Tools",
+    "port": 32400,
+    "ram_mb": 128,
+    "image": "lscr.io/linuxserver/plex:latest",
+    "volumes": [
+      "/DATA/AppData/plex/config:/config",
+      "/DATA/Media:/media"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Organize and stream personal movies, shows, and music to Plex apps on any smart TV, console, or phone."
+  },
+  {
+    "id": "syncthing",
+    "title": "Syncthing",
+    "category": "Security & Tools",
+    "port": 8384,
+    "ram_mb": 128,
+    "image": "lscr.io/linuxserver/syncthing:latest",
+    "volumes": [
+      "/DATA/AppData/syncthing/config:/config",
+      "/DATA/Sync:/data1"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Real-time peer-to-peer folder sync across your laptops, desktops, and Android devices."
+  },
+  {
+    "id": "filebrowser",
+    "title": "FileBrowser",
+    "category": "Security & Tools",
+    "port": 8087,
+    "ram_mb": 128,
+    "image": "filebrowser/filebrowser:latest",
+    "volumes": [
+      "/DATA:/srv",
+      "/DATA/AppData/filebrowser/db:/database"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Simple web interface to browse, upload, download, and share files stored on your server."
+  },
+  {
+    "id": "qbittorrent",
+    "title": "qBittorrent",
+    "category": "Security & Tools",
+    "port": 8080,
+    "ram_mb": 128,
+    "image": "lscr.io/linuxserver/qbittorrent:latest",
+    "volumes": [
+      "/DATA/AppData/qbittorrent/config:/config",
+      "/DATA/Downloads:/downloads"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Web-based torrent downloader with magnet link, sequential download, and RSS auto-download support."
+  },
+  {
+    "id": "uptimekuma",
+    "title": "Uptime Kuma",
+    "category": "Security & Tools",
+    "port": 3001,
+    "ram_mb": 128,
+    "image": "louislam/uptime-kuma:1",
+    "volumes": [
+      "/DATA/AppData/uptimekuma/data:/app/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Self-hosted status page and uptime monitor that sends alerts if your home apps or internet go offline."
+  },
+  {
+    "id": "portainer",
+    "title": "Portainer CE",
+    "category": "Security & Tools",
+    "port": 9443,
+    "ram_mb": 128,
+    "image": "portainer/portainer-ce:latest",
+    "volumes": [
+      "/var/run/docker.sock:/var/run/docker.sock",
+      "/DATA/AppData/portainer/data:/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Advanced web dashboard for managing Docker containers, images, networks, and Compose stacks."
+  },
+  {
+    "id": "nginxproxymanager",
+    "title": "Nginx Proxy Manager",
+    "category": "Security & Tools",
+    "port": 81,
+    "ram_mb": 128,
+    "image": "jc21/nginx-proxy-manager:latest",
+    "volumes": [
+      "/DATA/AppData/nginxproxymanager/data:/data",
+      "/DATA/AppData/nginxproxymanager/letsencrypt:/etc/letsencrypt"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Route custom domain names to your self-hosted apps with automatic Let's Encrypt SSL certificates."
+  },
+  {
+    "id": "paperless",
+    "title": "Paperless-ngx",
+    "category": "Security & Tools",
+    "port": 8000,
+    "ram_mb": 128,
+    "image": "ghcr.io/paperless-ngx/paperless-ngx:latest",
+    "volumes": [
+      "/DATA/AppData/paperless/data:/usr/src/paperless/data",
+      "/DATA/AppData/paperless/media:/usr/src/paperless/media"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Organize scanned receipts, PDFs, and invoices with automatic OCR full-text search."
+  },
+  {
+    "id": "stirlingpdf",
+    "title": "Stirling-PDF",
+    "category": "Security & Tools",
+    "port": 8084,
+    "ram_mb": 128,
+    "image": "frooodle/s-pdf:latest",
+    "volumes": [
+      "/DATA/AppData/stirlingpdf/configs:/configs"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Private local web toolkit to merge, split, rotate, compress, and convert PDF documents."
+  },
+  {
+    "id": "navidrome",
+    "title": "Navidrome",
+    "category": "Security & Tools",
+    "port": 4533,
+    "ram_mb": 128,
+    "image": "deluan/navidrome:latest",
+    "volumes": [
+      "/DATA/AppData/navidrome/data:/data",
+      "/DATA/Media/Music:/music:ro"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Fast, lightweight personal music streaming server compatible with Subsonic mobile apps."
+  },
+  {
+    "id": "gitea",
+    "title": "Gitea",
+    "category": "Security & Tools",
+    "port": 3002,
+    "ram_mb": 128,
+    "image": "gitea/gitea:latest",
+    "volumes": [
+      "/DATA/AppData/gitea/data:/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Lightweight self-hosted Git service for hosting your private code repositories, issues, and actions."
+  },
+  {
+    "id": "audiobookshelf",
+    "title": "Audiobookshelf",
+    "category": "Security & Tools",
+    "port": 13378,
+    "ram_mb": 128,
+    "image": "ghcr.io/advplyr/audiobookshelf:latest",
+    "volumes": [
+      "/DATA/Media/Audiobooks:/audiobooks",
+      "/DATA/Media/Podcasts:/podcasts",
+      "/DATA/AppData/audiobookshelf/config:/config",
+      "/DATA/AppData/audiobookshelf/metadata:/metadata"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Stream audiobooks and podcasts with progress sync across iOS and Android."
+  },
+  {
+    "id": "kavita",
+    "title": "Kavita",
+    "category": "Security & Tools",
+    "port": 5000,
+    "ram_mb": 128,
+    "image": "jvmilazz0/kavita:latest",
+    "volumes": [
+      "/DATA/Media/Books:/manga",
+      "/DATA/AppData/kavita/config:/kavita/config"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Fast digital reader for manga, comics, EPUBs, and PDFs."
+  },
+  {
+    "id": "komga",
+    "title": "Komga",
+    "category": "Security & Tools",
+    "port": 25600,
+    "ram_mb": 128,
+    "image": "gotson/komga:latest",
+    "volumes": [
+      "/DATA/AppData/komga/config:/config",
+      "/DATA/Media/Comics:/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Media server for comics, mangas, BDs, and magazines with OPDS support."
+  },
+  {
+    "id": "photoprism",
+    "title": "PhotoPrism",
+    "category": "Security & Tools",
+    "port": 2342,
+    "ram_mb": 128,
+    "image": "photoprism/photoprism:latest",
+    "volumes": [
+      "/DATA/Media/Photos:/photoprism/originals",
+      "/DATA/AppData/photoprism/storage:/photoprism/storage"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Browse, tag, and organize family photos with map view and face recognition."
+  },
+  {
+    "id": "photoview",
+    "title": "Photoview",
+    "category": "Security & Tools",
+    "port": 8089,
+    "ram_mb": 128,
+    "image": "viktorstrate/photoview:2",
+    "volumes": [
+      "/DATA/Media/Photos:/photos:ro",
+      "/DATA/AppData/photoview/cache:/app/cache"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Fast photo gallery built for browsing existing folder hierarchies on disk."
+  },
+  {
+    "id": "swingmusic",
+    "title": "Swing Music",
+    "category": "Security & Tools",
+    "port": 1970,
+    "ram_mb": 128,
+    "image": "ghcr.io/swingmx/swingmusic:latest",
+    "volumes": [
+      "/DATA/Media/Music:/music",
+      "/DATA/AppData/swingmusic/config:/config"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Modern self-hosted music player with gapless playback and lyrics."
+  },
+  {
+    "id": "airsonic",
+    "title": "Airsonic-Advanced",
+    "category": "Security & Tools",
+    "port": 4040,
+    "ram_mb": 128,
+    "image": "airsonicadvanced/airsonic-advanced:latest",
+    "volumes": [
+      "/DATA/Media/Music:/var/music",
+      "/DATA/AppData/airsonic/data:/var/airsonic"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Full-featured Subsonic music and podcast server with transcoding."
+  },
+  {
+    "id": "jellyseerr",
+    "title": "Jellyseerr",
+    "category": "Security & Tools",
+    "port": 5055,
+    "ram_mb": 128,
+    "image": "fallenbagel/jellyseerr:latest",
+    "volumes": [
+      "/DATA/AppData/jellyseerr/config:/app/config"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Request and discover movies and TV shows for Jellyfin and Plex."
+  },
+  {
+    "id": "overseerr",
+    "title": "Overseerr",
+    "category": "Security & Tools",
+    "port": 5056,
+    "ram_mb": 128,
+    "image": "lscr.io/linuxserver/overseerr:latest",
+    "volumes": [
+      "/DATA/AppData/overseerr/config:/config"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Request management and media discovery portal for Plex libraries."
+  },
+  {
+    "id": "tautulli",
+    "title": "Tautulli",
+    "category": "Security & Tools",
+    "port": 8181,
+    "ram_mb": 128,
+    "image": "lscr.io/linuxserver/tautulli:latest",
+    "volumes": [
+      "/DATA/AppData/tautulli/config:/config"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Monitor stream history, bandwidth, and playback stats on your media server."
+  },
+  {
+    "id": "ersatztv",
+    "title": "ErsatzTV",
+    "category": "Security & Tools",
+    "port": 8409,
+    "ram_mb": 128,
+    "image": "jasongdove/ersatztv:latest",
+    "volumes": [
+      "/DATA/AppData/ersatztv/config:/root/.local/share/ersatztv",
+      "/DATA/Media:/media:ro"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Turn your personal movie and show files into live IPTV channels with EPG."
+  },
+  {
+    "id": "owncast",
+    "title": "Owncast",
+    "category": "Security & Tools",
+    "port": 8097,
+    "ram_mb": 128,
+    "image": "owncast/owncast:latest",
+    "volumes": [
+      "/DATA/AppData/owncast/data:/app/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Self-hosted live video streaming and chat server compatible with OBS."
+  },
+  {
+    "id": "transmission",
+    "title": "Transmission",
+    "category": "Security & Tools",
+    "port": 9091,
+    "ram_mb": 128,
+    "image": "lscr.io/linuxserver/transmission:latest",
+    "volumes": [
+      "/DATA/AppData/transmission/config:/config",
+      "/DATA/Downloads:/downloads"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Ultra-lightweight torrent client with a clean web UI for low-RAM laptops."
+  },
+  {
+    "id": "deluge",
+    "title": "Deluge",
+    "category": "Security & Tools",
+    "port": 8112,
+    "ram_mb": 128,
+    "image": "lscr.io/linuxserver/deluge:latest",
+    "volumes": [
+      "/DATA/AppData/deluge/config:/config",
+      "/DATA/Downloads:/downloads"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Plugin-extensible BitTorrent client with web and thin-client support."
+  },
+  {
+    "id": "sabnzbd",
+    "title": "SABnzbd",
+    "category": "Security & Tools",
+    "port": 8090,
+    "ram_mb": 128,
+    "image": "lscr.io/linuxserver/sabnzbd:latest",
+    "volumes": [
+      "/DATA/AppData/sabnzbd/config:/config",
+      "/DATA/Downloads:/downloads"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Automated Usenet binary newsreader with PAR2 repair and unpacking."
+  },
+  {
+    "id": "nzbget",
+    "title": "NZBGet",
+    "category": "Security & Tools",
+    "port": 6789,
+    "ram_mb": 128,
+    "image": "lscr.io/linuxserver/nzbget:latest",
+    "volumes": [
+      "/DATA/AppData/nzbget/config:/config",
+      "/DATA/Downloads:/downloads"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Low-memory C++ Usenet downloader ideal for older laptops and mini-PCs."
+  },
+  {
+    "id": "sonarr",
+    "title": "Sonarr",
+    "category": "Security & Tools",
+    "port": 8989,
+    "ram_mb": 128,
+    "image": "lscr.io/linuxserver/sonarr:latest",
+    "volumes": [
+      "/DATA/AppData/sonarr/config:/config",
+      "/DATA/Media/TV:/tv",
+      "/DATA/Downloads:/downloads"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Automatically track, organize, and rename TV series episodes."
+  },
+  {
+    "id": "radarr",
+    "title": "Radarr",
+    "category": "Security & Tools",
+    "port": 7878,
+    "ram_mb": 128,
+    "image": "lscr.io/linuxserver/radarr:latest",
+    "volumes": [
+      "/DATA/AppData/radarr/config:/config",
+      "/DATA/Media/Movies:/movies",
+      "/DATA/Downloads:/downloads"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Automated movie collection manager and organizer for your home cinema."
+  },
+  {
+    "id": "prowlarr",
+    "title": "Prowlarr",
+    "category": "Security & Tools",
+    "port": 9696,
+    "ram_mb": 128,
+    "image": "lscr.io/linuxserver/prowlarr:latest",
+    "volumes": [
+      "/DATA/AppData/prowlarr/config:/config"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Centralized indexer manager that syncs across Sonarr, Radarr, and Lidarr."
+  },
+  {
+    "id": "lidarr",
+    "title": "Lidarr",
+    "category": "Security & Tools",
+    "port": 8686,
+    "ram_mb": 128,
+    "image": "lscr.io/linuxserver/lidarr:latest",
+    "volumes": [
+      "/DATA/AppData/lidarr/config:/config",
+      "/DATA/Media/Music:/music",
+      "/DATA/Downloads:/downloads"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Music collection manager that organizes albums, tracks, and metadata."
+  },
+  {
+    "id": "readarr",
+    "title": "Readarr",
+    "category": "Security & Tools",
+    "port": 8787,
+    "ram_mb": 128,
+    "image": "lscr.io/linuxserver/readarr:develop",
+    "volumes": [
+      "/DATA/AppData/readarr/config:/config",
+      "/DATA/Media/Books:/books",
+      "/DATA/Downloads:/downloads"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "E-book and audiobook library organizer with automatic metadata tagging."
+  },
+  {
+    "id": "bazarr",
+    "title": "Bazarr",
+    "category": "Security & Tools",
+    "port": 6767,
+    "ram_mb": 128,
+    "image": "lscr.io/linuxserver/bazarr:latest",
+    "volumes": [
+      "/DATA/AppData/bazarr/config:/config",
+      "/DATA/Media:/media"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Automatically downloads and syncs multi-language subtitles for movies and TV."
+  },
+  {
+    "id": "metube",
+    "title": "MeTube (yt-dlp Web UI)",
+    "category": "Security & Tools",
+    "port": 8091,
+    "ram_mb": 128,
+    "image": "ghcr.io/alexta69/metube:latest",
+    "volumes": [
+      "/DATA/Downloads:/downloads"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Save lectures, tutorials, and playlists for offline viewing via yt-dlp."
+  },
+  {
+    "id": "owncloud",
+    "title": "ownCloud Infinite Scale (oCIS)",
+    "category": "Security & Tools",
+    "port": 9200,
+    "ram_mb": 128,
+    "image": "owncloud/ocis:latest",
+    "volumes": [
+      "/DATA/AppData/owncloud/config:/etc/ocis",
+      "/DATA/AppData/owncloud/data:/var/lib/ocis"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Single-binary Go file sync and share cloud with low memory footprint."
+  },
+  {
+    "id": "seafile",
+    "title": "Seafile",
+    "category": "Security & Tools",
+    "port": 8092,
+    "ram_mb": 128,
+    "image": "seafileltd/seafile-mc:latest",
+    "volumes": [
+      "/DATA/AppData/seafile/data:/shared"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "High-speed C-based cloud drive with block-level deduplication and sync."
+  },
+  {
+    "id": "pairdrop",
+    "title": "PairDrop (Local AirDrop)",
+    "category": "Security & Tools",
+    "port": 3003,
+    "ram_mb": 128,
+    "image": "lscr.io/linuxserver/pairdrop:latest",
+    "volumes": [
+      "/DATA/AppData/pairdrop/config:/config"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Instant AirDrop-style file sharing between iPhones, Androids, Macs, and PCs."
+  },
+  {
+    "id": "pingvinshare",
+    "title": "Pingvin Share",
+    "category": "Security & Tools",
+    "port": 3004,
+    "ram_mb": 128,
+    "image": "stonith404/pingvin-share:latest",
+    "volumes": [
+      "/DATA/AppData/pingvinshare/data:/opt/app/backend/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Self-hosted file sharing portal with expiring links and password protection."
+  },
+  {
+    "id": "sftpgo",
+    "title": "SFTPGo",
+    "category": "Security & Tools",
+    "port": 8093,
+    "ram_mb": 128,
+    "image": "drakkan/sftpgo:latest",
+    "volumes": [
+      "/DATA/AppData/sftpgo/data:/srv/sftpgo",
+      "/DATA:/var/lib/sftpgo"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Full-featured SFTP, HTTP, and WebDAV file server with web administration."
+  },
+  {
+    "id": "bentopdf",
+    "title": "BentoPDF",
+    "category": "Security & Tools",
+    "port": 8094,
+    "ram_mb": 128,
+    "image": "ghcr.io/alam00000/bentopdf:latest",
+    "volumes": [
+      "/DATA/AppData/bentopdf/data:/app/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Clean browser-based PDF editor, merger, compressor, and converter."
+  },
+  {
+    "id": "onlyoffice",
+    "title": "ONLYOFFICE Document Server",
+    "category": "Security & Tools",
+    "port": 8095,
+    "ram_mb": 128,
+    "image": "onlyoffice/documentserver:latest",
+    "volumes": [
+      "/DATA/AppData/onlyoffice/data:/var/www/onlyoffice/Data",
+      "/DATA/AppData/onlyoffice/logs:/var/log/onlyoffice"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Collaborative online editor for Word, Excel, and PowerPoint files."
+  },
+  {
+    "id": "collabora",
+    "title": "Collabora Online (LibreOffice Web)",
+    "category": "Security & Tools",
+    "port": 9980,
+    "ram_mb": 128,
+    "image": "collabora/code:latest",
+    "volumes": [
+      "/DATA/AppData/collabora/config:/etc/coolwsd"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "LibreOffice-powered collaborative document editing for Nextcloud and web."
+  },
+  {
+    "id": "duplicati",
+    "title": "Duplicati Backup",
+    "category": "Security & Tools",
+    "port": 8200,
+    "ram_mb": 128,
+    "image": "lscr.io/linuxserver/duplicati:latest",
+    "volumes": [
+      "/DATA/AppData/duplicati/config:/config",
+      "/DATA:/source"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Scheduled AES-256 encrypted backups to USB drives, S3, SFTP, or NAS."
+  },
+  {
+    "id": "kopia",
+    "title": "Kopia Backup Server",
+    "category": "Security & Tools",
+    "port": 51515,
+    "ram_mb": 128,
+    "image": "kopia/kopia:latest",
+    "volumes": [
+      "/DATA/AppData/kopia/config:/app/config",
+      "/DATA/AppData/kopia/cache:/app/cache",
+      "/DATA:/data:ro"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Fast, encrypted, deduplicated snapshot backup tool with web UI."
+  },
+  {
+    "id": "outline",
+    "title": "Outline Wiki",
+    "category": "Security & Tools",
+    "port": 3006,
+    "ram_mb": 128,
+    "image": "docker.getoutline.com/outlinewiki/outline:latest",
+    "volumes": [
+      "/DATA/AppData/outline/data:/var/lib/outline/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Fast, markdown-first knowledge base and documentation workspace."
+  },
+  {
+    "id": "affine",
+    "title": "AFFiNE",
+    "category": "Security & Tools",
+    "port": 3010,
+    "ram_mb": 128,
+    "image": "ghcr.io/toeverything/affine:stable",
+    "volumes": [
+      "/DATA/AppData/affine/storage:/root/.affine/storage",
+      "/DATA/AppData/affine/config:/root/.affine/config"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Privacy-focused workspace blending Notion-style docs and Miro whiteboards."
+  },
+  {
+    "id": "blinko",
+    "title": "Blinko",
+    "category": "Security & Tools",
+    "port": 1111,
+    "ram_mb": 128,
+    "image": "blinkospace/blinko:latest",
+    "volumes": [
+      "/DATA/AppData/blinko/data:/app/.blinko"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Self-hosted fleeting notes and knowledge base with local AI search."
+  },
+  {
+    "id": "memos",
+    "title": "Memos",
+    "category": "Security & Tools",
+    "port": 5230,
+    "ram_mb": 128,
+    "image": "neosmemo/memos:stable",
+    "volumes": [
+      "/DATA/AppData/memos/data:/var/opt/memos"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Ultra-fast, lightweight markdown note-taking hub that runs in 40 MB RAM."
+  },
+  {
+    "id": "trilium",
+    "title": "TriliumNext Notes",
+    "category": "Security & Tools",
+    "port": 8098,
+    "ram_mb": 128,
+    "image": "triliumnext/notes:latest",
+    "volumes": [
+      "/DATA/AppData/trilium/data:/home/node/trilium-data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Build deep personal knowledge graphs, journals, and encrypted note trees."
+  },
+  {
+    "id": "silverbullet",
+    "title": "SilverBullet",
+    "category": "Security & Tools",
+    "port": 3007,
+    "ram_mb": 128,
+    "image": "zefhemel/silverbullet:latest",
+    "volumes": [
+      "/DATA/AppData/silverbullet/space:/space"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Offline-capable plain-markdown note app with live queries and backlinks."
+  },
+  {
+    "id": "docmost",
+    "title": "Docmost",
+    "category": "Security & Tools",
+    "port": 3008,
+    "ram_mb": 128,
+    "image": "docmost/docmost:latest",
+    "volumes": [
+      "/DATA/AppData/docmost/data:/app/data/storage"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Clean open-source Confluence and Notion alternative for documentation."
+  },
+  {
+    "id": "karakeep",
+    "title": "Karakeep (Hoarder Bookmarks)",
+    "category": "Security & Tools",
+    "port": 3009,
+    "ram_mb": 128,
+    "image": "ghcr.io/karakeep-app/karakeep:release",
+    "volumes": [
+      "/DATA/AppData/karakeep/data:/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Save links, articles, notes, and full-page snapshots with auto-tagging."
+  },
+  {
+    "id": "linkwarden",
+    "title": "Linkwarden",
+    "category": "Security & Tools",
+    "port": 3011,
+    "ram_mb": 128,
+    "image": "ghcr.io/linkwarden/linkwarden:latest",
+    "volumes": [
+      "/DATA/AppData/linkwarden/data:/data/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Preserve web pages asoffline HTML/PDFs so saved links never succumb to link rot."
+  },
+  {
+    "id": "freshrss",
+    "title": "FreshRSS",
+    "category": "Security & Tools",
+    "port": 8099,
+    "ram_mb": 128,
+    "image": "lscr.io/linuxserver/freshrss:latest",
+    "volumes": [
+      "/DATA/AppData/freshrss/config:/config"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Fast, self-hosted RSS and Atom news aggregator capable of 100,000+ articles."
+  },
+  {
+    "id": "miniflux",
+    "title": "Miniflux",
+    "category": "Security & Tools",
+    "port": 8101,
+    "ram_mb": 128,
+    "image": "miniflux/miniflux:latest",
+    "volumes": [
+      "/DATA/AppData/miniflux/data:/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Opinionated, keyboard-driven minimalist feed reader written in Go."
+  },
+  {
+    "id": "wallabag",
+    "title": "Wallabag (Read-It-Later)",
+    "category": "Security & Tools",
+    "port": 8102,
+    "ram_mb": 128,
+    "image": "wallabag/wallabag:latest",
+    "volumes": [
+      "/DATA/AppData/wallabag/data:/var/www/wallabag/data",
+      "/DATA/AppData/wallabag/images:/var/www/wallabag/web/assets/images"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Save web articles cleanly without ads for offline reading on phone or e-reader."
+  },
+  {
+    "id": "technitium",
+    "title": "Technitium DNS Server",
+    "category": "Security & Tools",
+    "port": 5380,
+    "ram_mb": 128,
+    "image": "technitium/dns-server:latest",
+    "volumes": [
+      "/DATA/AppData/technitium/config:/etc/dns"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Full authoritative and recursive DNS server with blocklists and DNS-over-HTTPS."
+  },
+  {
+    "id": "unbound",
+    "title": "Unbound Recursive DNS",
+    "category": "Security & Tools",
+    "port": 5335,
+    "ram_mb": 128,
+    "image": "mvance/unbound:latest",
+    "volumes": [
+      "/DATA/AppData/unbound/conf:/opt/unbound/etc/unbound"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Validating, recursive, caching DNS resolver that queries root servers directly."
+  },
+  {
+    "id": "headscale",
+    "title": "Headscale (Self-Hosted Tailscale Control)",
+    "category": "Security & Tools",
+    "port": 8103,
+    "ram_mb": 128,
+    "image": "headscale/headscale:latest",
+    "volumes": [
+      "/DATA/AppData/headscale/config:/etc/headscale",
+      "/DATA/AppData/headscale/data:/var/lib/headscale"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Open-source implementation of the Tailscale mesh VPN control server."
+  },
+  {
+    "id": "netbird",
+    "title": "NetBird Mesh VPN",
+    "category": "Security & Tools",
+    "port": 8104,
+    "ram_mb": 128,
+    "image": "netbirdio/dashboard:latest",
+    "volumes": [
+      "/DATA/AppData/netbird/data:/config"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Peer-to-peer WireGuard overlay network connecting all your devices securely."
+  },
+  {
+    "id": "traefik",
+    "title": "Traefik Proxy",
+    "category": "Security & Tools",
+    "port": 8105,
+    "ram_mb": 128,
+    "image": "traefik:v3.1",
+    "volumes": [
+      "/var/run/docker.sock:/var/run/docker.sock:ro",
+      "/DATA/AppData/traefik/config:/etc/traefik"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Cloud-native edge router that automatically discovers running Docker apps."
+  },
+  {
+    "id": "caddy",
+    "title": "Caddy Web & Reverse Proxy",
+    "category": "Security & Tools",
+    "port": 8106,
+    "ram_mb": 128,
+    "image": "caddy:latest",
+    "volumes": [
+      "/DATA/AppData/caddy/data:/data",
+      "/DATA/AppData/caddy/config:/config"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Fast, automatic-HTTPS reverse proxy and static file server."
+  },
+  {
+    "id": "cloudflared",
+    "title": "Cloudflare Tunnel (cloudflared)",
+    "category": "Security & Tools",
+    "port": 8107,
+    "ram_mb": 128,
+    "image": "cloudflare/cloudflared:latest",
+    "volumes": [
+      "/DATA/AppData/cloudflared/config:/etc/cloudflared"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Expose self-hosted web apps securely to your domain without opening router ports."
+  },
+  {
+    "id": "librespeed",
+    "title": "LibreSpeed (LAN Speedtest)",
+    "category": "Security & Tools",
+    "port": 8108,
+    "ram_mb": 128,
+    "image": "lscr.io/linuxserver/librespeed:latest",
+    "volumes": [
+      "/DATA/AppData/librespeed/config:/config"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Test real Wi-Fi and Ethernet throughput between your phones/laptops and server."
+  },
+  {
+    "id": "openspeedtest",
+    "title": "OpenSpeedTest",
+    "category": "Security & Tools",
+    "port": 3012,
+    "ram_mb": 128,
+    "image": "openspeedtest/latest:latest",
+    "volumes": [
+      "/DATA/AppData/openspeedtest/data:/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Zero-plugin HTML5 network speed test for diagnosing home Wi-Fi dead zones."
+  },
+  {
+    "id": "speedtest_tracker",
+    "title": "Speedtest Tracker",
+    "category": "Security & Tools",
+    "port": 8109,
+    "ram_mb": 128,
+    "image": "lscr.io/linuxserver/speedtest-tracker:latest",
+    "volumes": [
+      "/DATA/AppData/speedtest_tracker/config:/config"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Continuously logs your ISP download, upload, and ping history with charts."
+  },
+  {
+    "id": "smokeping",
+    "title": "SmokePing",
+    "category": "Security & Tools",
+    "port": 8110,
+    "ram_mb": 128,
+    "image": "lscr.io/linuxserver/smokeping:latest",
+    "volumes": [
+      "/DATA/AppData/smokeping/config:/config",
+      "/DATA/AppData/smokeping/data:/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Track network latency jitter and packet loss over time."
+  },
+  {
+    "id": "frigate",
+    "title": "Frigate NVR (AI Security Cameras)",
+    "category": "Smart Home",
+    "port": 5001,
+    "ram_mb": 512,
+    "image": "ghcr.io/blakeblackshear/frigate:stable",
+    "volumes": [
+      "/DATA/AppData/frigate/config:/config",
+      "/DATA/Media/Cameras:/media/frigate"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "24/7 IP camera NVR with real-time local person, car, and pet detection."
+  },
+  {
+    "id": "scrypted",
+    "title": "Scrypted (HomeKit Secure Video Bridge)",
+    "category": "Smart Home",
+    "port": 10443,
+    "ram_mb": 512,
+    "image": "koush/scrypted:latest",
+    "volumes": [
+      "/DATA/AppData/scrypted/volume:/server/volume"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Bridge any RTSP/ONVIF camera into Apple HomeKit Secure Video and Google Home."
+  },
+  {
+    "id": "homebridge",
+    "title": "Homebridge",
+    "category": "Smart Home",
+    "port": 8581,
+    "ram_mb": 512,
+    "image": "homebridge/homebridge:latest",
+    "volumes": [
+      "/DATA/AppData/homebridge/data:/homebridge"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Connect thousands of non-HomeKit smart devices to Apple Home and Siri."
+  },
+  {
+    "id": "zigbee2mqtt",
+    "title": "Zigbee2MQTT",
+    "category": "Smart Home",
+    "port": 8111,
+    "ram_mb": 512,
+    "image": "koenkk/zigbee2mqtt:latest",
+    "volumes": [
+      "/DATA/AppData/zigbee2mqtt/data:/app/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Pair Aqara, Philips Hue, IKEA, and Sonoff Zigbee sensors without proprietary hubs."
+  },
+  {
+    "id": "mosquitto",
+    "title": "Eclipse Mosquitto MQTT Broker",
+    "category": "Smart Home",
+    "port": 1883,
+    "ram_mb": 512,
+    "image": "eclipse-mosquitto:2",
+    "volumes": [
+      "/DATA/AppData/mosquitto/config:/mosquitto/config",
+      "/DATA/AppData/mosquitto/data:/mosquitto/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Ultra-fast MQTT message broker for Home Assistant, Zigbee2MQTT, and Tasmota."
+  },
+  {
+    "id": "nodered",
+    "title": "Node-RED",
+    "category": "Smart Home",
+    "port": 1880,
+    "ram_mb": 512,
+    "image": "nodered/node-red:latest",
+    "volumes": [
+      "/DATA/AppData/nodered/data:/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Drag-and-drop visual wiring tool for smart home automations and APIs."
+  },
+  {
+    "id": "esphome",
+    "title": "ESPHome Dashboard",
+    "category": "Smart Home",
+    "port": 6052,
+    "ram_mb": 512,
+    "image": "ghcr.io/esphome/esphome:stable",
+    "volumes": [
+      "/DATA/AppData/esphome/config:/config"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Build and wireless-flash custom ESP32/ESP8266 sensors from simple YAML files."
+  },
+  {
+    "id": "music_assistant",
+    "title": "Music Assistant",
+    "category": "Smart Home",
+    "port": 8095,
+    "ram_mb": 512,
+    "image": "ghcr.io/music-assistant/server:latest",
+    "volumes": [
+      "/DATA/AppData/music_assistant/data:/data",
+      "/DATA/Media/Music:/media:ro"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Stream local files and music services across Sonos, Chromecast, and AirPlay speakers."
+  },
+  {
+    "id": "anythingllm",
+    "title": "AnythingLLM (Chat with Your PDFs & Docs)",
+    "category": "Security & Tools",
+    "port": 3013,
+    "ram_mb": 128,
+    "image": "mintplexlabs/anythingllm:latest",
+    "volumes": [
+      "/DATA/AppData/anythingllm/storage:/app/server/storage"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "All-in-one private AI desktop & server app to chat with your local documents."
+  },
+  {
+    "id": "librechat",
+    "title": "LibreChat",
+    "category": "Security & Tools",
+    "port": 3080,
+    "ram_mb": 128,
+    "image": "ghcr.io/danny-avila/librechat:latest",
+    "volumes": [
+      "/DATA/AppData/librechat/images:/app/client/public/images"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Unified ChatGPT-style interface supporting Ollama, OpenAI, Claude, and Gemini."
+  },
+  {
+    "id": "whisper_asr",
+    "title": "Whisper ASR (Offline Speech-to-Text)",
+    "category": "Security & Tools",
+    "port": 9000,
+    "ram_mb": 128,
+    "image": "onerahmet/openai-whisper-asr-webservice:latest",
+    "volumes": [
+      "/DATA/AppData/whisper_asr/cache:/root/.cache"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Local OpenAI Whisper speech-to-text API and web UI for transcribing audio/video."
+  },
+  {
+    "id": "flowise",
+    "title": "Flowise AI (Visual LLM Builder)",
+    "category": "Security & Tools",
+    "port": 3014,
+    "ram_mb": 128,
+    "image": "flowiseai/flowise:latest",
+    "volumes": [
+      "/DATA/AppData/flowise/data:/root/.flowise"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Build custom AI agents, RAG pipelines, and chatbots visually."
+  },
+  {
+    "id": "sd_forge",
+    "title": "Stable Diffusion WebUI Forge",
+    "category": "Security & Tools",
+    "port": 7860,
+    "ram_mb": 128,
+    "image": "nykk3/stable-diffusion-webui-forge:latest",
+    "volumes": [
+      "/DATA/AppData/sd_forge/data:/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Generate images locally with Stable Diffusion and Flux on GPU workstations."
+  },
+  {
+    "id": "romm",
+    "title": "RomM (Retro Gaming & Emulator Library)",
+    "category": "Security & Tools",
+    "port": 8113,
+    "ram_mb": 128,
+    "image": "rommapp/romm:latest",
+    "volumes": [
+      "/DATA/Media/Roms:/romm/library",
+      "/DATA/AppData/romm/resources:/romm/resources"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Manage and play retro console games directly in your browser via EmulatorJS."
+  },
+  {
+    "id": "palworld",
+    "title": "Palworld Dedicated Server",
+    "category": "Security & Tools",
+    "port": 8211,
+    "ram_mb": 128,
+    "image": "thijsvanloef/palworld-server-docker:latest",
+    "volumes": [
+      "/DATA/AppData/palworld/palworld:/palworld"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Dedicated multiplayer Palworld server with automatic world backups."
+  },
+  {
+    "id": "valheim",
+    "title": "Valheim Dedicated Server",
+    "category": "Security & Tools",
+    "port": 2456,
+    "ram_mb": 128,
+    "image": "lloesche/valheim-server:latest",
+    "volumes": [
+      "/DATA/AppData/valheim/config:/config",
+      "/DATA/AppData/valheim/data:/opt/valheim"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "24/7 Valheim multiplayer world server with automatic update & backup hooks."
+  },
+  {
+    "id": "terraria",
+    "title": "Terraria Server (TShock)",
+    "category": "Security & Tools",
+    "port": 7777,
+    "ram_mb": 128,
+    "image": "ryshe/terraria:latest",
+    "volumes": [
+      "/DATA/AppData/terraria/world:/root/.local/share/Terraria/Worlds"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Lightweight dedicated Terraria multiplayer server that runs great on old laptops."
+  },
+  {
+    "id": "factorio",
+    "title": "Factorio Headless Server",
+    "category": "Security & Tools",
+    "port": 34197,
+    "ram_mb": 128,
+    "image": "factoriotools/factorio:stable",
+    "volumes": [
+      "/DATA/AppData/factorio/data:/factorio"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Dedicated Factorio multiplayer server for building megafactories with friends."
+  },
+  {
+    "id": "actualbudget",
+    "title": "Actual Budget",
+    "category": "Security & Tools",
+    "port": 5006,
+    "ram_mb": 128,
+    "image": "actualbudget/actual-server:latest",
+    "volumes": [
+      "/DATA/AppData/actualbudget/data:/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Fast, local-first envelope budgeting and personal finance tracker."
+  },
+  {
+    "id": "firefly",
+    "title": "Firefly III",
+    "category": "Security & Tools",
+    "port": 8114,
+    "ram_mb": 128,
+    "image": "fireflyiii/core:latest",
+    "volumes": [
+      "/DATA/AppData/firefly/upload:/var/www/html/storage/upload"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Comprehensive personal finance manager with double-entry accounting and reports."
+  },
+  {
+    "id": "wallos",
+    "title": "Wallos (Subscription Tracker)",
+    "category": "Security & Tools",
+    "port": 8282,
+    "ram_mb": 128,
+    "image": "bellamy/wallos:latest",
+    "volumes": [
+      "/DATA/AppData/wallos/db:/var/www/html/db",
+      "/DATA/AppData/wallos/logos:/var/www/html/images/uploads/logos"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Track recurring subscriptions, bills, and renewal reminders in multiple currencies."
+  },
+  {
+    "id": "mealie",
+    "title": "Mealie (Recipe & Meal Planner)",
+    "category": "Smart Home",
+    "port": 9925,
+    "ram_mb": 512,
+    "image": "ghcr.io/mealie-recipes/mealie:latest",
+    "volumes": [
+      "/DATA/AppData/mealie/data:/app/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Import recipes from any website in 1 click, plan weekly meals, and build grocery lists."
+  },
+  {
+    "id": "tandoor",
+    "title": "Tandoor Recipes",
+    "category": "Smart Home",
+    "port": 8115,
+    "ram_mb": 512,
+    "image": "vabene1111/recipes:latest",
+    "volumes": [
+      "/DATA/AppData/tandoor/staticfiles:/opt/recipes/staticfiles",
+      "/DATA/AppData/tandoor/mediafiles:/opt/recipes/mediafiles"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Manage recipes, scale ingredients, and sync shared household shopping lists."
+  },
+  {
+    "id": "grocy",
+    "title": "Grocy (Pantry & Household ERP)",
+    "category": "Smart Home",
+    "port": 9283,
+    "ram_mb": 512,
+    "image": "lscr.io/linuxserver/grocy:latest",
+    "volumes": [
+      "/DATA/AppData/grocy/config:/config"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Track kitchen inventory, expiration dates, household chores, and battery replacements."
+  },
+  {
+    "id": "vikunja",
+    "title": "Vikunja (To-Do & Kanban)",
+    "category": "Security & Tools",
+    "port": 3456,
+    "ram_mb": 128,
+    "image": "vikunja/vikunja:latest",
+    "volumes": [
+      "/DATA/AppData/vikunja/files:/app/vikunja/files"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Organize tasks, lists, Gantt charts, and Kanban boards with CalDAV sync."
+  },
+  {
+    "id": "nocodb",
+    "title": "NocoDB (Airtable Alternative)",
+    "category": "Security & Tools",
+    "port": 8116,
+    "ram_mb": 128,
+    "image": "nocodb/nocodb:latest",
+    "volumes": [
+      "/DATA/AppData/nocodb/data:/usr/app/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Turn any database into a smart collaborative spreadsheet, gallery, and form builder."
+  },
+  {
+    "id": "baserow",
+    "title": "Baserow",
+    "category": "Security & Tools",
+    "port": 8117,
+    "ram_mb": 128,
+    "image": "baserow/baserow:latest",
+    "volumes": [
+      "/DATA/AppData/baserow/data:/baserow/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Create custom relational tables, views, and forms without writing code."
+  },
+  {
+    "id": "homebox",
+    "title": "Homebox (Home Inventory)",
+    "category": "Smart Home",
+    "port": 3100,
+    "ram_mb": 512,
+    "image": "ghcr.io/sysadminsmedia/homebox:latest",
+    "volumes": [
+      "/DATA/AppData/homebox/data:/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Catalog home electronics, serial numbers, receipts, warranties, and storage boxes."
+  },
+  {
+    "id": "2fauth",
+    "title": "2FAuth (Web 2FA Authenticator)",
+    "category": "Security & Tools",
+    "port": 8118,
+    "ram_mb": 128,
+    "image": "2fauth/2fauth:latest",
+    "volumes": [
+      "/DATA/AppData/2fauth/data:/2fauth"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Self-hosted two-factor authentication (TOTP) code generator with QR scanner."
+  },
+  {
+    "id": "authentik",
+    "title": "Authentik SSO",
+    "category": "Security & Tools",
+    "port": 9001,
+    "ram_mb": 128,
+    "image": "ghcr.io/goauthentik/server:latest",
+    "volumes": [
+      "/DATA/AppData/authentik/media:/media",
+      "/DATA/AppData/authentik/templates:/templates"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Protect all your self-hosted apps with single sign-on, passkeys, and 2FA."
+  },
+  {
+    "id": "pocketid",
+    "title": "Pocket ID (Passkey OIDC Provider)",
+    "category": "Security & Tools",
+    "port": 3015,
+    "ram_mb": 128,
+    "image": "ghcr.io/pocket-id/pocket-id:latest",
+    "volumes": [
+      "/DATA/AppData/pocketid/data:/app/backend/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Lightweight OIDC provider that lets you sign in to apps using fingerprint/FaceID passkeys."
+  },
+  {
+    "id": "dockge",
+    "title": "Dockge (Compose Stack Manager)",
+    "category": "Security & Tools",
+    "port": 5001,
+    "ram_mb": 128,
+    "image": "louislam/dockge:1",
+    "volumes": [
+      "/var/run/docker.sock:/var/run/docker.sock",
+      "/DATA/AppData/dockge/data:/app/data",
+      "/opt/stacks:/opt/stacks"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Reactive, easy-to-use `docker-compose.yaml` manager by the creator of Uptime Kuma."
+  },
+  {
+    "id": "dozzle",
+    "title": "Dozzle (Real-Time Container Logs)",
+    "category": "Security & Tools",
+    "port": 8888,
+    "ram_mb": 128,
+    "image": "amir20/dozzle:latest",
+    "volumes": [
+      "/var/run/docker.sock:/var/run/docker.sock:ro"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Real-time web viewer for Docker container logs with instant search and filtering."
+  },
+  {
+    "id": "forgejo",
+    "title": "Forgejo (Self-Hosted Git)",
+    "category": "Security & Tools",
+    "port": 3016,
+    "ram_mb": 128,
+    "image": "codeberg.org/forgejo/forgejo:9",
+    "volumes": [
+      "/DATA/AppData/forgejo/data:/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Community-governed lightweight Git hosting with pull requests and CI actions."
+  },
+  {
+    "id": "codeserver",
+    "title": "code-server (VS Code in Browser)",
+    "category": "Security & Tools",
+    "port": 8443,
+    "ram_mb": 128,
+    "image": "lscr.io/linuxserver/code-server:latest",
+    "volumes": [
+      "/DATA/AppData/codeserver/config:/config",
+      "/DATA:/workspace"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Run full Visual Studio Code in your browser from any laptop or iPad."
+  },
+  {
+    "id": "n8n",
+    "title": "n8n Workflow Automation",
+    "category": "Security & Tools",
+    "port": 5678,
+    "ram_mb": 128,
+    "image": "docker.n8n.io/n8nio/n8n:latest",
+    "volumes": [
+      "/DATA/AppData/n8n/data:/home/node/.n8n"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Automate workflows across 400+ apps, webhooks, emails, and local AI models."
+  },
+  {
+    "id": "it_tools",
+    "title": "IT-Tools (Developer Swiss Army Knife)",
+    "category": "Security & Tools",
+    "port": 8119,
+    "ram_mb": 128,
+    "image": "corentinth/it-tools:latest",
+    "volumes": [
+      "/DATA/AppData/it_tools/data:/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "80+ handy browser tools for hashes, QR codes, JSON, regex, and networking."
+  },
+  {
+    "id": "cyberchef",
+    "title": "CyberChef",
+    "category": "Security & Tools",
+    "port": 8120,
+    "ram_mb": 128,
+    "image": "ghcr.io/gchq/cyberchef:latest",
+    "volumes": [
+      "/DATA/AppData/cyberchef/data:/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "The Cyber Swiss Army Knife for encoding, encryption, compression, and data analysis."
+  },
+  {
+    "id": "homarr",
+    "title": "Homarr Dashboard",
+    "category": "Security & Tools",
+    "port": 7575,
+    "ram_mb": 128,
+    "image": "ghcr.io/ajnart/homarr:latest",
+    "volumes": [
+      "/var/run/docker.sock:/var/run/docker.sock",
+      "/DATA/AppData/homarr/configs:/app/data/configs"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Customizable homelab startpage with live widgets for Sonarr, Radarr, and qBittorrent."
+  },
+  {
+    "id": "homepage",
+    "title": "Homepage Dashboard",
+    "category": "Security & Tools",
+    "port": 3017,
+    "ram_mb": 128,
+    "image": "ghcr.io/gethomepage/homepage:latest",
+    "volumes": [
+      "/DATA/AppData/homepage/config:/app/config",
+      "/var/run/docker.sock:/var/run/docker.sock:ro"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Fast, static-rendered application dashboard with 100+ service integrations."
+  },
+  {
+    "id": "dashy",
+    "title": "Dashy",
+    "category": "Security & Tools",
+    "port": 4000,
+    "ram_mb": 128,
+    "image": "lissy93/dashy:latest",
+    "volumes": [
+      "/DATA/AppData/dashy/config:/app/user-data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Self-hosted dashboard with status checks, widgets, and instant theme switching."
+  },
+  {
+    "id": "glance",
+    "title": "Glance (Personal Feed & Status Hub)",
+    "category": "Security & Tools",
+    "port": 8121,
+    "ram_mb": 128,
+    "image": "glanceapp/glance:latest",
+    "volumes": [
+      "/DATA/AppData/glance/config:/app/config"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "All-in-one personal startpage showing server stats, RSS feeds, weather, and YouTube."
+  },
+  {
+    "id": "changedetection",
+    "title": "changedetection.io",
+    "category": "Security & Tools",
+    "port": 5005,
+    "ram_mb": 128,
+    "image": "ghcr.io/dgtlmoon/changedetection.io:latest",
+    "volumes": [
+      "/DATA/AppData/changedetection/data:/datastore"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Monitor websites for price drops, product restocks, and text changes."
+  },
+  {
+    "id": "ntfy",
+    "title": "ntfy Push Notification Server",
+    "category": "Security & Tools",
+    "port": 8122,
+    "ram_mb": 128,
+    "image": "binwiederhier/ntfy:latest",
+    "volumes": [
+      "/DATA/AppData/ntfy/cache:/var/cache/ntfy",
+      "/DATA/AppData/ntfy/etc:/etc/ntfy"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Send instant push notifications to your phone or desktop from any script via PUT/POST."
+  },
+  {
+    "id": "gotify",
+    "title": "Gotify Notification Server",
+    "category": "Security & Tools",
+    "port": 8124,
+    "ram_mb": 128,
+    "image": "gotify/server:latest",
+    "volumes": [
+      "/DATA/AppData/gotify/data:/app/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Simple real-time WebSocket server for sending and receiving messages."
+  },
+  {
+    "id": "scrutiny",
+    "title": "Scrutiny (Hard Drive S.M.A.R.T. Web UI)",
+    "category": "Security & Tools",
+    "port": 8125,
+    "ram_mb": 128,
+    "image": "ghcr.io/analogj/scrutiny:master-omnibus",
+    "volumes": [
+      "/DATA/AppData/scrutiny/config:/opt/scrutiny/config",
+      "/DATA/AppData/scrutiny/influxdb:/opt/scrutiny/influxdb"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Monitor hard drive and NVMe S.M.A.R.T. health metrics with Backblaze failure rates."
+  },
+  {
+    "id": "glances",
+    "title": "Glances System Monitor",
+    "category": "Security & Tools",
+    "port": 61208,
+    "ram_mb": 128,
+    "image": "nicolargo/glances:latest-full",
+    "volumes": [
+      "/var/run/docker.sock:/var/run/docker.sock:ro"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Cross-platform real-time CPU, memory, disk I/O, network, and sensor monitor."
+  },
+  {
+    "id": "beszel",
+    "title": "Beszel (Lightweight Server Monitoring Hub)",
+    "category": "Security & Tools",
+    "port": 8090,
+    "ram_mb": 128,
+    "image": "henrygd/beszel:latest",
+    "volumes": [
+      "/DATA/AppData/beszel/data:/beszel_data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Featherweight server resource and Docker container history monitor with alerts."
+  },
+  {
+    "id": "grafana",
+    "title": "Grafana",
+    "category": "Security & Tools",
+    "port": 3018,
+    "ram_mb": 128,
+    "image": "grafana/grafana-oss:latest",
+    "volumes": [
+      "/DATA/AppData/grafana/data:/var/lib/grafana"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Visualize time-series metrics, server temperatures, power draw, and logs."
+  },
+  {
+    "id": "prometheus",
+    "title": "Prometheus",
+    "category": "Security & Tools",
+    "port": 9092,
+    "ram_mb": 128,
+    "image": "prom/prometheus:latest",
+    "volumes": [
+      "/DATA/AppData/prometheus/data:/prometheus"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Collect and query real-time metrics from your server nodes and containers."
+  },
+  {
+    "id": "watchtower",
+    "title": "Watchtower (Auto Container Updater)",
+    "category": "Security & Tools",
+    "port": 8126,
+    "ram_mb": 128,
+    "image": "containrrr/watchtower:latest",
+    "volumes": [
+      "/var/run/docker.sock:/var/run/docker.sock"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Automatically keeps running Docker containers updated to the latest stable image."
+  },
+  {
+    "id": "excalidraw",
+    "title": "Excalidraw Whiteboard",
+    "category": "Security & Tools",
+    "port": 3019,
+    "ram_mb": 128,
+    "image": "excalidraw/excalidraw:latest",
+    "volumes": [
+      "/DATA/AppData/excalidraw/data:/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Virtual collaborative whiteboard for sketching architecture diagrams and notes."
+  },
+  {
+    "id": "drawio",
+    "title": "draw.io (diagrams.net)",
+    "category": "Security & Tools",
+    "port": 8127,
+    "ram_mb": 128,
+    "image": "jgraph/drawio:latest",
+    "volumes": [
+      "/DATA/AppData/drawio/data:/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Full offline flowchart, UML, and home network topology diagram editor."
+  },
+  {
+    "id": "searxng",
+    "title": "SearXNG (Private Metasearch Engine)",
+    "category": "Security & Tools",
+    "port": 8128,
+    "ram_mb": 128,
+    "image": "searxng/searxng:latest",
+    "volumes": [
+      "/DATA/AppData/searxng/etc:/etc/searxng"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Aggregate results from 70+ search engines with zero tracking, profiling, or ads."
+  },
+  {
+    "id": "whoogle",
+    "title": "Whoogle Search",
+    "category": "Security & Tools",
+    "port": 5002,
+    "ram_mb": 128,
+    "image": "benbusby/whoogle-search:latest",
+    "volumes": [
+      "/DATA/AppData/whoogle/data:/config"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Get Google search results without ads, JavaScript tracking, AMP links, or cookies."
+  },
+  {
+    "id": "privategpt_lite",
+    "title": "Open-Notebook (Self-Hosted NotebookLM)",
+    "category": "Security & Tools",
+    "port": 8502,
+    "ram_mb": 128,
+    "image": "lfnovo/open_notebook:latest",
+    "volumes": [
+      "/DATA/AppData/open_notebook/data:/app/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Privacy-focused alternative to NotebookLM for researching PDFs, notes, and links."
+  },
+  {
+    "id": "archivebox",
+    "title": "ArchiveBox (Personal Wayback Machine)",
+    "category": "Security & Tools",
+    "port": 8129,
+    "ram_mb": 128,
+    "image": "archivebox/archivebox:latest",
+    "volumes": [
+      "/DATA/AppData/archivebox/data:/data"
+    ],
+    "installed": false,
+    "status": "available",
+    "description": "Save complete offline copies of websites in HTML, PDF, screenshot, and WARC formats."
+  }
+];
 
     const DEFAULT_ZIMS = [
       { id: "wikipedia_en_simple", title: "Wikipedia (Simple English — Illustrated)", size_gb: 2.4, articles: "255,000+ articles", category: "Encyclopedia", installed: true, progress_pct: 100, filename: "wikipedia_en_simple_all_maxi.zim", description: "Fast, complete Simple English Wikipedia with images. Ready for instant offline search." },
@@ -852,6 +2839,7 @@ ${vols}`;
       activeTab: "apps",
       searchQuery: "",
       appCategory: "All",
+      customAppInput: "",
       customZimUrl: "",
       inspectingAppId: null,
       doctorStatusMsg: "",
@@ -1143,8 +3131,21 @@ ${vols}`;
 
         <div class="section-hdr" style="margin-top:28px;">
           <div>
-            <div class="section-title">Self-Hosted App Store Catalog (${state.apps.length} Apps)</div>
-            <div class="section-desc">Install any new app onto your server with 1 click — pre-configured with Docker Compose &amp; CasaOS metadata.</div>
+            <div class="section-title">Self-Hosted App Store Catalog (${state.apps.length}+ Apps)</div>
+            <div class="section-desc">1-click install for ${state.apps.length}+ verified apps, or paste any Docker image / command / URL from the web below.</div>
+          </div>
+        </div>
+
+        <div class="settings-group" style="margin-bottom:14px;">
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">Add Any Custom App from the Web</div>
+              <div class="setting-sub">Paste a Docker image, <code>docker run</code> command, or GitHub / Docker Hub link to auto-generate its container &amp; install immediately.</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;width:100%;max-width:460px;">
+              <input type="text" id="inputDashCustomApp" class="text-input" style="flex:1;" placeholder="e.g. louislam/uptime-kuma:1 or docker run -p 8080:80 ..." value="${esc(state.customAppInput || "")}" />
+              <button type="button" class="win-btn win-btn-accent win-btn-sm" data-action="dash-add-custom-app">＋ Add &amp; Install</button>
+            </div>
           </div>
         </div>
 
@@ -1837,6 +3838,52 @@ ${vols}`;
           }
         }
         await callDashboardApi("/api/dashboard/kiwix", "POST", { zim_id: zimId, action: op });
+        renderDashboard();
+        return;
+      }
+
+      if (action === "dash-add-custom-app") {
+        const inp = document.getElementById("inputDashCustomApp");
+        const raw = inp ? inp.value.trim() : "";
+        if (!raw) {
+          showToast("Paste a Docker image, docker run command, or URL first");
+          return;
+        }
+        let parsed = null;
+        const apiRes = await callDashboardApi("/api/dashboard/apps/custom", "POST", { raw_input: raw });
+        if (apiRes && apiRes.ok && apiRes.app) {
+          parsed = apiRes.app;
+        } else {
+          let image = raw;
+          let port = 8080;
+          const mPort = raw.match(/-p\s+(\d{2,5}):(\d{2,5})/) || raw.match(/:(\d{2,5})\b/);
+          if (mPort) port = Number(mPort[1]);
+          if (raw.startsWith("docker run")) {
+            const toks = raw.split(/\s+/);
+            image = toks[toks.length - 1];
+          }
+          if (!image.includes(":")) image += ":latest";
+          const base = image.split("/").pop().split(":")[0].replace(/[^a-z0-9_-]/gi, "-").toLowerCase() || "custom-app";
+          parsed = {
+            id: "custom_" + base.replace(/-/g, "_"),
+            title: base.replace(/[-_]/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
+            category: "Security & Tools",
+            port,
+            ram_mb: 128,
+            image,
+            volumes: [`/DATA/AppData/${base}:/data`],
+            installed: true,
+            status: "running",
+            description: `Custom container (${image}) on port ${port}.`
+          };
+        }
+        parsed.installed = true;
+        parsed.status = "running";
+        if (!state.apps.some(a => a.id === parsed.id)) {
+          state.apps.unshift(parsed);
+        }
+        state.customAppInput = "";
+        showToast(`Installed & started ${parsed.title} on port ${parsed.port}`);
         renderDashboard();
         return;
       }

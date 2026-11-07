@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict, dataclass, field, field
+from dataclasses import asdict, dataclass, field
 import importlib
 import json
 import os
@@ -75,13 +75,12 @@ class PackagingManifest:
     )
 
 def generate_pyinstaller_spec(manifest: PackagingManifest) -> str:
-    datas_tuples = ",\n    ".join(f"('{f}', '.')" for f in (manifest.bundled_data_files or []))
+    datas_list = ", ".join(f"'{f}'" for f in (manifest.bundled_data_files or []))
     return f"""# -*- mode: python ; coding: utf-8 -*-
-
 import os
 import subprocess
 import sys
-from PyInstaller.utils.hooks import collect_all
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
 
 try:
     import webview
@@ -91,13 +90,43 @@ except ImportError:
 
 block_cipher = None
 
-bundled_datas = [
-    {datas_tuples}
-]
-bundled_binaries = []
+def _resolve_spec_asset(rel_name):
+    for prefix in (
+        '.',
+        'src/instant_server',
+        'src/instant_server/ui',
+        'src/instant_server/scripts',
+        'src/instant_server/native',
+        'tests',
+        'build_dist',
+    ):
+        cand = os.path.join(prefix, rel_name)
+        if os.path.isfile(cand):
+            return cand
+    return rel_name
 
-win_icon = '{manifest.icon_ico}' if os.path.exists('{manifest.icon_ico}') else None
-mac_icon = '{manifest.icon_icns}' if os.path.exists('{manifest.icon_icns}') else None
+bundled_datas = []
+for _fname in [{datas_list}]:
+    _resolved = _resolve_spec_asset(_fname)
+    if os.path.isfile(_resolved):
+        bundled_datas.append((_resolved, '.'))
+
+bundled_binaries = []
+for _bin_cand in (
+    'src/instant_server/native/win_usb_flasher.exe',
+    'src/instant_server/native/win_usb_flasher',
+    'win_usb_flasher.exe',
+    'win_usb_flasher',
+):
+    if os.path.isfile(_bin_cand):
+        bundled_binaries.append((_bin_cand, '.'))
+        break
+
+win_icon_path = _resolve_spec_asset('{manifest.icon_ico}')
+mac_icon_path = _resolve_spec_asset('{manifest.icon_icns}')
+win_icon = win_icon_path if os.path.isfile(win_icon_path) else None
+mac_icon = mac_icon_path if os.path.isfile(mac_icon_path) else None
+entry_script = _resolve_spec_asset('{manifest.entrypoint_script}')
 
 hidden_imports = [
     'host_probe',
@@ -105,6 +134,7 @@ hidden_imports = [
     'usb_engine',
     'config_builder',
     'payload_packager',
+    'dashboard_service',
     'hardware_adapter',
     'vm_test_harness',
     'http.server',
@@ -120,18 +150,15 @@ hidden_imports = [
     'proxy_tools',
 ]
 
-for _pkg in ('webview', 'bottle', 'proxy_tools', 'clr_loader', 'pythonnet'):
-    try:
-        _d, _b, _h = collect_all(_pkg)
-        bundled_datas.extend(_d)
-        bundled_binaries.extend(_b)
-        hidden_imports.extend(_h)
-    except Exception:
-        pass
+try:
+    bundled_datas.extend(collect_data_files('webview'))
+    bundled_binaries.extend(collect_dynamic_libs('webview'))
+except Exception:
+    pass
 
 a = Analysis(
-    ['{manifest.entrypoint_script}'],
-    pathex=['.'],
+    [entry_script],
+    pathex=['.', 'src', 'src/instant_server', 'src/instant_server/scripts', 'tests'],
     binaries=bundled_binaries,
     datas=bundled_datas,
     hiddenimports=hidden_imports,
@@ -140,6 +167,7 @@ a = Analysis(
     runtime_hooks=[],
     excludes=[
         'tkinter', 'matplotlib', 'numpy', 'pandas', 'scipy', 'PIL', 'unittest', 'pydoc',
+        'webview.platforms.android', 'android',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,

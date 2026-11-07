@@ -508,6 +508,8 @@ class AsyncPipelineManager:
         self.base_dir = base_dir
         self._lock = threading.Lock()
         self._cancel_requested = threading.Event()
+        self._pause_gate = threading.Event()
+        self._pause_gate.set()
         self._job_id: int = 0
         self.status: str = "IDLE"
         self.percent: int = 0
@@ -533,7 +535,11 @@ class AsyncPipelineManager:
         data = payload.get("data") or {}
 
         active_cancel = cancel_event if cancel_event is not None else self._cancel_requested
-        if ev not in ("JOB_CANCELLED", "JOB_FAILED"):
+        if ev not in ("JOB_CANCELLED", "JOB_FAILED", "JOB_PAUSED", "JOB_RESUMED"):
+            while not self._pause_gate.is_set():
+                if active_cancel.is_set() or (job_id is not None and job_id != self._job_id):
+                    raise InterruptedError("Flashing cancelled by user.")
+                time.sleep(0.1)
             if active_cancel.is_set() or (job_id is not None and job_id != self._job_id):
                 raise InterruptedError("Flashing cancelled by user.")
 
@@ -597,11 +603,48 @@ class AsyncPipelineManager:
                     "terminal_line": format_terminal_progress_bar(float(self.percent), label=stage_label, detail=msg_text),
                 }
 
-    def cancel_job(self) -> Dict[str, Any]:
+    def pause_job(self) -> Dict[str, Any]:
         with self._lock:
             if self.status != "RUNNING":
+                return {"paused": False, "status": self.status}
+            self._pause_gate.clear()
+            self.status = "PAUSED"
+            entry = {
+                "event": "JOB_PAUSED",
+                "module": "CLI_BRIDGE",
+                "message": f"Paused at {self.percent}% — all downloaded ISO & app packages are saved. Click Resume to continue.",
+                "data": {"percent": self.percent},
+                "seq": len(self.events) + 1,
+                "elapsed": self._elapsed_tag(),
+                "formatted_line": f"{self._elapsed_tag()} Paused at {self.percent}% — all downloaded ISO & app packages are saved. Click Resume to continue.",
+            }
+            self.events.append(entry)
+        return {"paused": True, "status": "PAUSED", "percent": self.percent}
+
+    def resume_job(self) -> Dict[str, Any]:
+        with self._lock:
+            if self.status != "PAUSED":
+                return {"resumed": False, "status": self.status}
+            self.status = "RUNNING"
+            self._pause_gate.set()
+            entry = {
+                "event": "JOB_RESUMED",
+                "module": "CLI_BRIDGE",
+                "message": f"Resumed from {self.percent}% — continuing from exact byte/package position.",
+                "data": {"percent": self.percent},
+                "seq": len(self.events) + 1,
+                "elapsed": self._elapsed_tag(),
+                "formatted_line": f"{self._elapsed_tag()} Resumed from {self.percent}% — continuing from exact byte/package position.",
+            }
+            self.events.append(entry)
+        return {"resumed": True, "status": "RUNNING", "percent": self.percent}
+
+    def cancel_job(self) -> Dict[str, Any]:
+        with self._lock:
+            if self.status not in ("RUNNING", "PAUSED"):
                 return {"cancelled": False, "status": self.status}
             self._cancel_requested.set()
+            self._pause_gate.set()
             self._job_id += 1
             self.active_progress = None
             self.error = "Flashing cancelled by user."
@@ -635,6 +678,7 @@ class AsyncPipelineManager:
             my_job_id = self._job_id
             my_cancel_event = threading.Event()
             self._cancel_requested = my_cancel_event
+            self._pause_gate.set()
             self.status = "RUNNING"
             self.percent = 5
             self.job_start_time = time.time()
@@ -791,8 +835,22 @@ class InstantServerJsApi:
             auto_download_iso=auto_download_iso,
         )
 
+    def pause_build(self) -> Dict[str, Any]:
+        return self.jobs.pause_job()
+
+    def resume_build(self) -> Dict[str, Any]:
+        return self.jobs.resume_job()
+
     def cancel_build(self) -> Dict[str, Any]:
         return self.jobs.cancel_job()
+
+    def add_custom_app(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        entry = config_builder.parse_custom_app_input(
+            str(payload.get("raw_input", "")),
+            custom_title=str(payload.get("title", "")),
+            custom_port=int(payload.get("port", 0) or 0),
+        )
+        return {"ok": True, "app": entry, "total_catalog": len(config_builder.SELF_HOSTED_APP_CATALOG)}
 
     def poll_build_status(self) -> Dict[str, Any]:
         self.last_heartbeat = time.time()
@@ -1044,8 +1102,17 @@ def launch_desktop_or_browser_gui(port: int = 8765, open_browser: bool = True) -
             if path == "/api/elevate":
                 self._send_json(api.elevate_admin())
                 return
+            if path == "/api/pause":
+                self._send_json(api.pause_build())
+                return
+            if path == "/api/resume":
+                self._send_json(api.resume_build())
+                return
             if path == "/api/cancel":
                 self._send_json(api.cancel_build())
+                return
+            if path == "/api/custom-app":
+                self._send_json(api.add_custom_app(payload))
                 return
             if path == "/api/shutdown":
                 self._send_json(api.shutdown_app(force=bool(payload.get("force", True))))

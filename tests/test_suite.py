@@ -13,24 +13,21 @@ from typing import Any
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parent
-REPO_ROOT = ROOT.parent if ROOT.name.lower() == "tests" else ROOT
-
 for cand in (
-    REPO_ROOT,
-    REPO_ROOT / "src" / "instant_server",
-    REPO_ROOT / "src" / "instant_server" / "scripts",
     ROOT,
     ROOT / "src" / "instant_server",
     ROOT / "src" / "instant_server" / "scripts",
+    ROOT.parent,
+    ROOT.parent / "src" / "instant_server",
+    ROOT.parent / "src" / "instant_server" / "scripts",
 ):
     if cand.is_dir() and str(cand) not in sys.path:
         sys.path.append(str(cand))
 
 for _sh_cand in (
-    REPO_ROOT / "src" / "instant_server" / "scripts" / "laptop_hardening.sh",
     ROOT.parent / "src" / "instant_server" / "scripts" / "laptop_hardening.sh",
     ROOT / "src" / "instant_server" / "scripts" / "laptop_hardening.sh",
-    REPO_ROOT / "laptop_hardening.sh",
+    ROOT.parent / "laptop_hardening.sh",
     ROOT / "laptop_hardening.sh",
 ):
     if _sh_cand.is_file():
@@ -62,50 +59,14 @@ class InstantServerCleanArchitectureTests(unittest.TestCase):
 
     def test_02_native_c_usb_flasher_compilation_and_selftest(self) -> None:
         c_candidates = [
-            REPO_ROOT / "src" / "instant_server" / "native" / "win_usb_flasher.c",
             ROOT.parent / "src" / "instant_server" / "native" / "win_usb_flasher.c",
-            pathlib.Path.cwd() / "src" / "instant_server" / "native" / "win_usb_flasher.c",
             ROOT / "src" / "instant_server" / "native" / "win_usb_flasher.c",
-            REPO_ROOT / "win_usb_flasher.c",
             ROOT.parent / "win_usb_flasher.c",
             ROOT / "win_usb_flasher.c",
         ]
         c_file = next((p for p in c_candidates if p.is_file()), None)
-
-        if c_file is None:
-            for native_dir in (
-                REPO_ROOT / "src" / "instant_server" / "native",
-                ROOT.parent / "src" / "instant_server" / "native",
-                pathlib.Path.cwd() / "src" / "instant_server" / "native",
-            ):
-                if native_dir.is_dir():
-                    for entry in native_dir.iterdir():
-                        if entry.is_file() and ("flasher" in entry.name.lower() or entry.suffix.lower() == ".c"):
-                            canonical = native_dir / "win_usb_flasher.c"
-                            if entry != canonical and not canonical.is_file():
-                                try:
-                                    shutil.copy2(entry, canonical)
-                                    c_file = canonical
-                                except Exception:
-                                    c_file = entry
-                            else:
-                                c_file = entry
-                            break
-                if c_file is not None:
-                    break
-
-        if c_file is None:
-            found = list(REPO_ROOT.rglob("*usb_flasher*"))
-            for f in found:
-                if f.is_file() and f.suffix.lower() in (".c", ".txt", ""):
-                    c_file = f
-                    break
-
-        self.assertIsNotNone(c_file, f"win_usb_flasher.c must exist in {REPO_ROOT / 'src/instant_server/native/win_usb_flasher.c'}")
+        self.assertIsNotNone(c_file, "win_usb_flasher.c must exist")
         assert c_file is not None
-        raw_c_bytes = c_file.read_bytes()
-        if not raw_c_bytes.endswith(b"\n"):
-            c_file.write_bytes(raw_c_bytes + b"\n")
         c_text = c_file.read_text(encoding="utf-8")
         first_line = c_text.splitlines()[0]
         self.assertEqual(first_line.strip(), "// src/instant_server/native/win_usb_flasher.c")
@@ -162,11 +123,9 @@ class InstantServerCleanArchitectureTests(unittest.TestCase):
 
     def test_05_day2_self_healing_guardrails_in_hardening_script(self) -> None:
         sh_candidates = [
-            REPO_ROOT / "src" / "instant_server" / "scripts" / "laptop_hardening.sh",
             ROOT.parent / "src" / "instant_server" / "scripts" / "laptop_hardening.sh",
-            pathlib.Path.cwd() / "src" / "instant_server" / "scripts" / "laptop_hardening.sh",
             ROOT / "src" / "instant_server" / "scripts" / "laptop_hardening.sh",
-            REPO_ROOT / "laptop_hardening.sh",
+            ROOT.parent / "laptop_hardening.sh",
             ROOT / "laptop_hardening.sh",
         ]
         sh_file = next((p for p in sh_candidates if p.is_file()), None)
@@ -227,6 +186,23 @@ class InstantServerCleanArchitectureTests(unittest.TestCase):
         )
         self.assertTrue(confirmed_audit["ok"])
         self.assertFalse(confirmed_audit["wipe_blocked"])
+
+    def test_09_pause_resume_100plus_apps_and_release_spec(self) -> None:
+        self.assertGreaterEqual(len(config_builder.SELF_HOSTED_APP_CATALOG), 100)
+        parsed_run = config_builder.parse_custom_app_input("docker run -d -p 8888:80 --name my-custom-wiki nginx:alpine")
+        self.assertEqual(parsed_run["port"], 8888)
+        self.assertIn("nginx:alpine", parsed_run["image"])
+        parsed_gh = config_builder.parse_custom_app_input("https://github.com/louislam/uptime-kuma")
+        self.assertIn("uptime-kuma", parsed_gh["image"])
+        mgr = cli.AsyncPipelineManager()
+        mgr.status = "RUNNING"
+        mgr._pause_gate.set()
+        paused_res = mgr.pause_job()
+        self.assertTrue(paused_res["paused"])
+        self.assertEqual(mgr.status, "PAUSED")
+        resumed_res = mgr.resume_job()
+        self.assertTrue(resumed_res["resumed"])
+        self.assertEqual(mgr.status, "RUNNING")
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
