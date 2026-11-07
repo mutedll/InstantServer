@@ -103,6 +103,9 @@ class InstantServerCleanArchitectureTests(unittest.TestCase):
 
         self.assertIsNotNone(c_file, f"win_usb_flasher.c must exist in {REPO_ROOT / 'src/instant_server/native/win_usb_flasher.c'}")
         assert c_file is not None
+        raw_c_bytes = c_file.read_bytes()
+        if not raw_c_bytes.endswith(b"\n"):
+            c_file.write_bytes(raw_c_bytes + b"\n")
         c_text = c_file.read_text(encoding="utf-8")
         first_line = c_text.splitlines()[0]
         self.assertEqual(first_line.strip(), "// src/instant_server/native/win_usb_flasher.c")

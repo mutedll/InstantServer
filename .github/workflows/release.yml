@@ -45,6 +45,7 @@ jobs:
         run: |
           SRC_C="src/instant_server/native/win_usb_flasher.c"
           [ -f "$SRC_C" ] || SRC_C="win_usb_flasher.c"
+          printf "\n" >> "$SRC_C"
           if [[ "$RUNNER_OS" == "Windows" ]]; then
             gcc -std=c11 -O3 -Wall -Wextra -Wpedantic -Werror "$SRC_C" -o src/instant_server/native/win_usb_flasher.exe
             ./src/instant_server/native/win_usb_flasher.exe --self-test
