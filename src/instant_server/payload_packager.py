@@ -39,8 +39,6 @@ def emit_event(
 def _build_apps_unpacker_script(selected_apps: List[str]) -> str:
     apps_space_sep = " ".join(selected_apps)
     return f"""#!/usr/bin/env bash
-# Instant Server — Automated Self-Hosted App Bundle Unpacker & CasaOS Registrar
-# Pre-staged on Host PC and executed automatically on the target laptop.
 set -uo pipefail
 
 APPS_SRC_DIR="/opt/instant-server/apps"
@@ -59,13 +57,11 @@ for app_id in "${{SELECTED_APPS[@]}}"; do
     cp -f "${{src_bundle}}/docker-compose.yml" "${{target_app_dir}}/docker-compose.yml"
     [[ -f "${{src_bundle}}/app-meta.json" ]] && cp -f "${{src_bundle}}/app-meta.json" "${{target_app_dir}}/app-meta.json"
 
-    # If the user pre-downloaded the container image tarball on the host PC, load it offline!
     if [[ -f "${{src_bundle}}/image.tar.gz" ]] && command -v docker >/dev/null 2>&1; then
         echo "[Instant Server Apps] Loading pre-bundled offline container image for ${{app_id}}..."
         docker load -i "${{src_bundle}}/image.tar.gz" || true
     fi
 
-    # Register with CasaOS CLI if installed, then ensure stack is running via Docker Compose
     if command -v casaos-cli >/dev/null 2>&1; then
         casaos-cli app-management apply "$app_id" -f "${{target_app_dir}}/docker-compose.yml" || true
     fi
@@ -223,7 +219,7 @@ def stage_cidata_directory(
         "manifest": manifest_map,
     }
     emit_event(
-        "M5_STAGING_COMPLETE",
+        "PAYLOAD_STAGING_COMPLETE",
         f"Staged {len(written_files)} files (including {len(staged_apps)} pre-unpacked apps) into cidata payload.",
         {"percent": 60, **summary},
         callback=event_callback,
@@ -255,7 +251,7 @@ def verify_staged_cidata_directory(staging_dir: str) -> List[str]:
     return errors
 
 def _run_self_test() -> int:
-    print("[PayloadPackager Test] Testing end-to-end orchestration (M1 + M2 + M3 + M4 + M5 + Pre-Unpacked Apps)...")
+    print("[PayloadPackager Test] Testing end-to-end orchestration and pre-unpacked app bundles...")
     with tempfile.TemporaryDirectory() as tmpdir:
         iso_file = os.path.join(tmpdir, "ubuntu-24.04-mock.iso")
         iso_manager._build_synthetic_iso_with_deb(
@@ -287,7 +283,7 @@ def _run_self_test() -> int:
     return 0
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Instant Server — M5 Payload Packager")
+    parser = argparse.ArgumentParser(description="Instant Server — Payload Packager")
     parser.add_argument("--self-test", action="store_true", help="Run end-to-end integration self-test")
     parser.add_argument("--output-dir", type=str, default="", help="Directory to stage cidata files")
     parser.add_argument("--hostname", type=str, default="instant-server")

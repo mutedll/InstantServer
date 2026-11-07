@@ -327,13 +327,10 @@ class ServerDashboardController:
         return self.get_full_state()
 
 def lookup_error_api(query: str = "") -> Dict[str, Any]:
-    """Returns matching IS-ERR-XXXX error definitions and guided fixes."""
     matches = config_builder.lookup_error_code(query)
     return {"ok": True, "query": query, "count": len(matches), "results": matches}
 
-
 def execute_self_heal_action(action: str) -> Dict[str, Any]:
-    """Executes a 1-click self-healing guardrail action from the dashboard."""
     action = (action or "").strip()
     if action == "prune_storage":
         subprocess.run(["journalctl", "--vacuum-size=200M"], capture_output=True)
@@ -344,8 +341,6 @@ def execute_self_heal_action(action: str) -> Dict[str, Any]:
         subprocess.run(["systemctl", "restart", "avahi-daemon"], capture_output=True)
         return {"ok": True, "action": action, "message": "Unblocked Wi-Fi radio, disabled power_save, and restarted Avahi mDNS."}
     return {"ok": True, "action": action, "message": f"Executed self-healing routine: {action}"}
-
-
 
 CLUSTER_STATE: Dict[str, Any] = {
     "cluster_name": "instant-homelab",
@@ -403,7 +398,6 @@ CLUSTER_STATE: Dict[str, Any] = {
     ],
 }
 
-
 def get_cluster_status_api() -> Dict[str, Any]:
     total_gb = sum(n["total_gb"] for n in CLUSTER_STATE["nodes"])
     used_gb = sum(n["used_gb"] for n in CLUSTER_STATE["nodes"])
@@ -422,7 +416,6 @@ def get_cluster_status_api() -> Dict[str, Any]:
         "nodes": CLUSTER_STATE["nodes"],
         "discovered_lan_nodes": CLUSTER_STATE["discovered_lan_nodes"],
     }
-
 
 def join_cluster_node_api(payload: Dict[str, Any]) -> Dict[str, Any]:
     target_host = payload.get("hostname") or "instant-server-b8f2"
@@ -480,7 +473,6 @@ def join_cluster_node_api(payload: Dict[str, Any]) -> Dict[str, Any]:
         "cluster": get_cluster_status_api(),
     }
 
-
 def run_repair_diagnostics_api(action: str = "full_scan") -> Dict[str, Any]:
     return {
         "ok": True,
@@ -493,7 +485,6 @@ def run_repair_diagnostics_api(action: str = "full_scan") -> Dict[str, Any]:
             {"id": "sqlite_locks", "name": "Cluster SQLite & Docker Volume Integrity", "status": "healthy", "detail": "All stateful SQLite databases pinned to local NVMe; .bak snapshots verified."},
         ],
     }
-
 
 def _resolve_dashboard_html_path() -> str:
     candidates = [
@@ -652,7 +643,6 @@ def main() -> int:
         return _run_self_test()
     serve_dashboard(port=args.port, host=args.host)
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())

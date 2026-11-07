@@ -1196,7 +1196,6 @@ def compile_cidata_payloads(
     valid_selected_apps = [a for a in (profile.selected_apps or []) if a in APP_CATALOG_BY_ID]
 
     env_lines = [
-        "# Instant Server — Target Hardware & Stack Environment Configuration",
         f"INSTANT_HOSTNAME={_sh_escape(profile.hostname)}",
         f"INSTANT_USERNAME={_sh_escape(profile.username)}",
         f"INSTANT_UBUNTU_RELEASE={_sh_escape(profile.ubuntu_release)}",
@@ -1295,7 +1294,6 @@ def compile_cidata_payloads(
         "user-data": user_data_yaml,
         "meta-data": meta_data_content,
         "instant-server-env.conf": instant_env_conf,
-        "lazarus-env.conf": instant_env_conf,
         "profile.json": json.dumps(asdict(profile), indent=2),
     }
 
@@ -1394,7 +1392,7 @@ def _run_self_test() -> int:
     return 0
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Instant Server — M4 Config Builder")
+    parser = argparse.ArgumentParser(description="Instant Server — Configuration & Autoinstall Compiler")
     parser.add_argument("--self-test", action="store_true", help="Run built-in cryptographic and schema self-tests")
     parser.add_argument("--output-dir", type=str, default="", help="Write compiled cidata files to directory")
     parser.add_argument("--hostname", type=str, default="instant-server")
@@ -1614,9 +1612,7 @@ DIAGNOSTIC_ERROR_CATALOG: Dict[str, Dict[str, str]] = {
     },
 }
 
-
 def lookup_error_code(query: str) -> List[Dict[str, str]]:
-    """Looks up an IS-ERR-XXXX code or searches error titles/symptoms."""
     q = (query or "").strip().upper()
     if not q:
         return list(DIAGNOSTIC_ERROR_CATALOG.values())
@@ -1637,18 +1633,12 @@ def lookup_error_code(query: str) -> List[Dict[str, str]]:
             matches.append(item)
     return matches
 
-
-
 def run_cluster_preflight_audit(
     primary_node: Dict[str, Any],
     secondary_node: Dict[str, Any],
     storage_policy: str = "mergerfs_union_safe",
     confirm_wipe_token: str = "",
 ) -> Dict[str, Any]:
-    """Audits two servers before combining them into a unified Instant Server cluster.
-    Detects existing data volumes, duplicate filenames, overlapping Docker ports,
-    SQLite database paths that must remain pinned locally, and validates wipe tokens.
-    """
     p_host = primary_node.get("hostname", "instant-server-1")
     s_host = secondary_node.get("hostname", "instant-server-2")
     p_used_gb = float(primary_node.get("used_gb", 420.0))
@@ -1719,7 +1709,6 @@ def run_cluster_preflight_audit(
             f"/DATA/LocalBranch:/mnt/cluster/{s_host}/DATA /DATA/ClusterPool"
         ),
     }
-
 
 if __name__ == "__main__":
     sys.exit(main())

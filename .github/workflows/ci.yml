@@ -3,36 +3,49 @@ name: CI
 
 on:
   push:
-    branches: [main, develop, "feat/**", "fix/**"]
+    branches: [main]
   pull_request:
-    branches: [main, develop]
+    branches: [main]
 
 jobs:
-  test:
+  verify:
+    name: Verify (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ["3.11", "3.12"]
+        os: [ubuntu-24.04, windows-2022, macos-15-intel]
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Repository
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git init .
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --no-tags --depth=1 origin "${GITHUB_SHA}"
+          git checkout --force FETCH_HEAD
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Compile Native C USB Flasher (win_usb_flasher.c)
+      - name: Compile & Verify Native C11 USB Flasher (win_usb_flasher.c)
         shell: bash
         run: |
-          SRC_C="win_usb_flasher.c"
-          [ -f "src/instant_server/native/win_usb_flasher.c" ] && SRC_C="src/instant_server/native/win_usb_flasher.c"
-          gcc -O3 -Wall -Wextra "$SRC_C" -o win_usb_flasher
-          ./win_usb_flasher --self-test
+          SRC_C="src/instant_server/native/win_usb_flasher.c"
+          [ -f "$SRC_C" ] || SRC_C="win_usb_flasher.c"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            gcc -std=c11 -O3 -Wall -Wextra -Wpedantic -Werror "$SRC_C" -o win_usb_flasher.exe
+            ./win_usb_flasher.exe --self-test
+          else
+            gcc -std=c11 -O3 -Wall -Wextra -Wpedantic -Werror "$SRC_C" -o win_usb_flasher
+            ./win_usb_flasher --self-test
+          fi
 
-      - name: Verify Syntax & Imports Across All Modules
+      - name: Run Automated Test Suite & VM Matrix Simulation
+        shell: bash
         run: |
-          python -m py_compile instant_server.py
-          python test_suite.py
+          PY_BIN="python3"
+          command -v python3 >/dev/null 2>&1 || PY_BIN="python"
+          "$PY_BIN" -m py_compile instant_server.py build_executables.py
+          "$PY_BIN" tests/test_suite.py
+          "$PY_BIN" tests/vm_test_harness.py --self-test
+          "$PY_BIN" build_executables.py --self-test

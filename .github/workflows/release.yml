@@ -10,50 +10,81 @@ on:
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build-binaries:
+    name: Build (${{ matrix.artifact_name }})
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: windows-latest
+          - os: windows-2022
             artifact_name: InstantServer-Windows.exe
-          - os: macos-latest
+          - os: macos-15-intel
             artifact_name: InstantServer-macOS.dmg
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             artifact_name: InstantServer-Linux
 
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Repository
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git init .
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --no-tags --depth=1 origin "${GITHUB_SHA}"
+          git checkout --force FETCH_HEAD
 
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Compile Native C USB Flasher
+      - name: Compile Native C11 USB Flasher
         shell: bash
         run: |
-          SRC_C="win_usb_flasher.c"
-          [ -f "src/instant_server/native/win_usb_flasher.c" ] && SRC_C="src/instant_server/native/win_usb_flasher.c"
-          gcc -O3 -Wall -Wextra "$SRC_C" -o win_usb_flasher
-          ./win_usb_flasher --self-test
+          SRC_C="src/instant_server/native/win_usb_flasher.c"
+          [ -f "$SRC_C" ] || SRC_C="win_usb_flasher.c"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            gcc -std=c11 -O3 -Wall -Wextra -Wpedantic -Werror "$SRC_C" -o src/instant_server/native/win_usb_flasher.exe
+            ./src/instant_server/native/win_usb_flasher.exe --self-test
+          else
+            gcc -std=c11 -O3 -Wall -Wextra -Wpedantic -Werror "$SRC_C" -o src/instant_server/native/win_usb_flasher
+            ./src/instant_server/native/win_usb_flasher --self-test
+          fi
 
-      - name: Install PyInstaller & GUI Runtime
+      - name: Install PyInstaller & Lightweight WebView Runtime
+        shell: bash
         run: |
-          python -m pip install --upgrade pip
-          pip install pyinstaller PyQt6 PyQt6-WebEngine
+          PY_BIN="python3"
+          command -v python3 >/dev/null 2>&1 || PY_BIN="python"
+          "$PY_BIN" -m pip install --upgrade pip
+          "$PY_BIN" -m pip install pyinstaller pillow pywebview
 
       - name: Run Automated Test Suite
-        run: python test_suite.py
+        shell: bash
+        run: |
+          PY_BIN="python3"
+          command -v python3 >/dev/null 2>&1 || PY_BIN="python"
+          "$PY_BIN" tests/test_suite.py
 
       - name: Build Standalone Executable
-        run: python build_executables.py --build
+        shell: bash
+        run: |
+          PY_BIN="python3"
+          command -v python3 >/dev/null 2>&1 || PY_BIN="python"
+          "$PY_BIN" build_executables.py --emit-configs ./build_dist
+          cp ./build_dist/InstantServer.spec ./InstantServer.spec
+          cp ./build_dist/instant_server_icon.ico ./instant_server_icon.ico
+          cp ./build_dist/instant_server_icon.icns ./instant_server_icon.icns
+          cp ./build_dist/instant_server_icon.png ./instant_server_icon.png
+          pyinstaller --clean --noconfirm InstantServer.spec
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            bash ./build_dist/macos_codesign_and_dmg.sh
+          fi
 
       - name: Upload Release Binary
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
-          path: dist/*
+          path: dist/${{ matrix.artifact_name }}

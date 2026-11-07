@@ -390,7 +390,7 @@ def _run_self_test() -> int:
     return 0
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Instant Server — Phase 3 QEMU UEFI/BIOS Test Harness")
+    parser = argparse.ArgumentParser(description="Instant Server — QEMU UEFI/BIOS Test Harness")
     parser.add_argument("--self-test", action="store_true", help="Run built-in test suite & 8-way simulation matrix")
     parser.add_argument("--print-qemu-cmd", action="store_true", help="Print QEMU launch command for a topology")
     parser.add_argument("--firmware", type=str, default="uefi", choices=["uefi", "bios"])

@@ -26,7 +26,6 @@ for cand in (
     if cand.is_dir() and str(cand) not in sys.path:
         sys.path.append(str(cand))
 
-# Automatically normalize any .sh scripts to pure LF (\n) on disk if saved with CRLF on Windows
 for _sh_cand in (
     REPO_ROOT / "src" / "instant_server" / "scripts" / "laptop_hardening.sh",
     ROOT.parent / "src" / "instant_server" / "scripts" / "laptop_hardening.sh",
@@ -52,7 +51,6 @@ dashboard_service: Any = importlib.import_module("dashboard_service")
 hardware_adapter: Any = importlib.import_module("hardware_adapter")
 cli: Any = importlib.import_module("cli")
 
-
 class InstantServerCleanArchitectureTests(unittest.TestCase):
     def test_01_clean_imports_and_single_line_headers(self) -> None:
         self.assertEqual(pkg_init.__version__, "2.5.0")
@@ -74,7 +72,6 @@ class InstantServerCleanArchitectureTests(unittest.TestCase):
         ]
         c_file = next((p for p in c_candidates if p.is_file()), None)
 
-        # Fallback: scan src/instant_server/native/ in case Windows Explorer hid a .txt extension
         if c_file is None:
             for native_dir in (
                 REPO_ROOT / "src" / "instant_server" / "native",
@@ -227,7 +224,6 @@ class InstantServerCleanArchitectureTests(unittest.TestCase):
         )
         self.assertTrue(confirmed_audit["ok"])
         self.assertFalse(confirmed_audit["wipe_blocked"])
-
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

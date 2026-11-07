@@ -1031,7 +1031,7 @@ def _run_self_test() -> int:
     return 0
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Instant Server — M3 Cross-Platform USB & GPT Engine")
+    parser = argparse.ArgumentParser(description="Instant Server — Cross-Platform USB & GPT Engine")
     parser.add_argument("--self-test", action="store_true", help="Run built-in unit tests")
     parser.add_argument("--scan-usb", action="store_true", help="Scan host USB devices with Triple-Lock filter")
     parser.add_argument("--inject-cidata", type=str, default="", help="Path to raw USB device or disk image")
@@ -1054,9 +1054,7 @@ def main() -> int:
     parser.print_help()
     return 0
 
-
 def locate_native_c_flasher() -> Optional[Path]:
-    """Locates the compiled win_usb_flasher binary if available on the host."""
     here = Path(__file__).resolve().parent
     candidates = [
         here / "win_usb_flasher.exe",
@@ -1071,13 +1069,10 @@ def locate_native_c_flasher() -> Optional[Path]:
             return cand
     return None
 
-
 def get_macos_raw_disk_path(dev_path: str) -> str:
-    """Converts /dev/diskN to /dev/rdiskN on macOS for unbuffered character device I/O."""
     if dev_path.startswith("/dev/disk"):
         return dev_path.replace("/dev/disk", "/dev/rdisk", 1)
     return dev_path
-
 
 def run_native_c_flasher(
     iso_path: Path,
@@ -1086,7 +1081,6 @@ def run_native_c_flasher(
     verify_crc: bool = True,
     progress_cb: Optional[Callable[[int, str], None]] = None,
 ) -> Dict[str, Any]:
-    """Invokes the native C win_usb_flasher helper and streams JSON telemetry."""
     bin_path = locate_native_c_flasher()
     if not bin_path:
         return {"used_native_c": False, "error": "Native binary not found"}
@@ -1116,7 +1110,6 @@ def run_native_c_flasher(
         err_out = proc.stderr.read() if proc.stderr else ""
         raise RuntimeError(f"Native C flasher failed (exit {rc}): {err_out.strip()}")
     return last_telemetry
-
 
 if __name__ == "__main__":
     sys.exit(main())

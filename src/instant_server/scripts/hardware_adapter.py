@@ -27,11 +27,6 @@ def load_instant_env(path: str) -> Dict[str, str]:
                 v = v[1:-1].replace('\\"', '"').replace("\\$", "$").replace("\\\\", "\\")
             clean_k = k.strip()
             env[clean_k] = v
-
-            if clean_k.startswith("LAZARUS_"):
-                env["INSTANT_" + clean_k[len("LAZARUS_") :]] = v
-            elif clean_k.startswith("INSTANT_"):
-                env["LAZARUS_" + clean_k[len("INSTANT_") :]] = v
     return env
 
 def run_cmd(cmd: List[str]) -> str:
@@ -44,7 +39,7 @@ def run_cmd(cmd: List[str]) -> str:
 def check_existing_installation_sentinel(force_reinstall: bool) -> bool:
     if force_reinstall:
         return False
-    for label in ("INSTANT_SERVER", "LAZARUS_INSTALLED"):
+    for label in ("INSTANT_SERVER",):
         if run_cmd(["blkid", "-L", label]):
             return True
     return False
@@ -186,7 +181,7 @@ def _find_live_medium_backing_disks() -> set:
 def _tree_has_live_mount_or_label(node: Dict[str, Any]) -> bool:
     mp = str(node.get("mountpoint") or "")
     lbl = str(node.get("label") or "").lower()
-    if mp in ("/cdrom", "/run/instant-cidata", "/run/lazarus-cidata", "/rofs") or lbl in ("cidata", "ubuntu-server"):
+    if mp in ("/cdrom", "/run/instant-cidata", "/rofs") or lbl in ("cidata", "ubuntu-server"):
         return True
     for child in node.get("children", []) or []:
         if _tree_has_live_mount_or_label(child):
@@ -742,7 +737,7 @@ def _run_self_test() -> int:
     return 0
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Instant Server — P1 Early Hardware & Disk Mode Prober")
+    parser = argparse.ArgumentParser(description="Instant Server — Early Hardware & Disk Mode Prober")
     parser.add_argument("--self-test", action="store_true", help="Run hardware prober unit tests")
     parser.add_argument("--env", type=str, default="/run/instant-cidata/instant-server-env.conf")
     parser.add_argument("--autoinstall", type=str, default="/autoinstall.yaml")
@@ -779,19 +774,15 @@ def main() -> int:
             with open(args.autoinstall, "w", encoding="utf-8") as wf:
                 yaml.safe_dump(doc, wf, default_flow_style=False, sort_keys=False)
             print(
-                f"[INSTANT-SERVER P1] Adapted {args.autoinstall}: mode={adapted['install_mode']} "
+                f"[INSTANT-SERVER] Adapted {args.autoinstall}: mode={adapted['install_mode']} "
                 f"boot_mode={adapted['boot_mode']}"
             )
         except Exception as exc:
-            sys.stderr.write(f"[INSTANT-SERVER P1] Failed to update {args.autoinstall}: {exc}\n")
+            sys.stderr.write(f"[INSTANT-SERVER] Failed to update {args.autoinstall}: {exc}\n")
             return 1
     return 0
 
-
 def detect_device_chassis_and_capabilities() -> Dict[str, Any]:
-    """Detects whether the target machine is a laptop, desktop PC, mini-PC, or multi-bay NAS,
-    and probes GPU acceleration (Intel/AMD/NVIDIA) and 2.5GbE NICs.
-    """
     has_battery = False
     power_supply = Path("/sys/class/power_supply")
     if power_supply.is_dir():
@@ -837,17 +828,12 @@ def detect_device_chassis_and_capabilities() -> Dict[str, Any]:
         "mac_suffix": mac_suffix,
     }
 
-
 def resolve_cluster_node_hostname(base_hostname: str, cluster_mode: str, mac_suffix: str) -> str:
-    """Prevents LAN hostname/mDNS collisions when the exact same USB stick is used to
-    install multiple laptops/PCs in 'usb_multi_node_auto' mode.
-    """
     if cluster_mode in {"usb_multi_node_auto", "cluster_worker"}:
         suffix = (mac_suffix or "node").lower()[-4:]
         if not base_hostname.endswith(f"-{suffix}"):
             return f"{base_hostname}-{suffix}"
     return base_hostname
-
 
 if __name__ == "__main__":
     sys.exit(main())

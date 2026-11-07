@@ -543,9 +543,9 @@ class AsyncPipelineManager:
 
             if "percent" in data:
                 self.percent = max(self.percent, int(data["percent"]))
-            elif ev == "M4_COMPILE_COMPLETE":
+            elif ev == "CONFIG_COMPILE_COMPLETE":
                 self.percent = max(self.percent, 45)
-            elif ev == "M5_STAGING_COMPLETE":
+            elif ev == "PAYLOAD_STAGING_COMPLETE":
                 self.percent = max(self.percent, 60)
             elif ev == "USB_COPY_CIDATA":
                 self.percent = max(self.percent, 88)
@@ -1169,24 +1169,6 @@ def launch_desktop_or_browser_gui(port: int = 8765, open_browser: bool = True) -
         pass
 
     if sys.platform.startswith("win"):
-        wv2_dll_candidates = [
-            os.path.join(paths["workspace_dir"], "WebView2"),
-        ]
-        ps_winforms = f"""
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
-[System.Windows.Forms.Application]::EnableVisualStyles()
-
-$form = New-Object System.Windows.Forms.Form
-$form.Text = "Instant Server"
-$form.Size = New-Object System.Drawing.Size(1220, 820)
-$form.MinimumSize = New-Object System.Drawing.Size(940, 660)
-$form.StartPosition = "CenterScreen"
-$form.BackColor = [System.Drawing.Color]::FromArgb(24, 28, 36)
-if (Test-Path '{paths["icon_ico_path"]}') {{
-    $form.Icon = New-Object System.Drawing.Icon('{paths["icon_ico_path"]}')
-}}
-"""
 
         edge_candidates = [
             os.path.join(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)"), "Microsoft\\Edge\\Application\\msedge.exe"),

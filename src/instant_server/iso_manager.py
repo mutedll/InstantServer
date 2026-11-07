@@ -1387,7 +1387,7 @@ def _run_self_test() -> int:
     return 0
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Instant Server — M2 ISO Manager & Pure-Python .deb Extractor")
+    parser = argparse.ArgumentParser(description="Instant Server — ISO Manager, OCI Registry Client & .deb Extractor")
     parser.add_argument("--self-test", action="store_true", help="Run built-in unit tests")
     parser.add_argument("--extract-debs-from-iso", type=str, default="", help="Path to local Ubuntu ISO")
     parser.add_argument("--output-debs-dir", type=str, default="./cidata_debs", help="Directory for extracted .debs")
