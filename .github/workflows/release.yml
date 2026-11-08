@@ -9,9 +9,6 @@ on:
 permissions:
   contents: write
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   build-executables:
     name: Build (${{ matrix.binary_name }})
@@ -20,22 +17,23 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: windows-2022
+          - os: windows-2025
             binary_name: InstantServer-Windows.exe
-          - os: macos-15-intel
+          - os: macos-latest
             binary_name: InstantServer-macOS.dmg
-          - os: ubuntu-24.04
+          - os: ubuntu-latest
             binary_name: InstantServer-Linux
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
-          go-version: "1.22"
+          go-version: "stable"
           check-latest: true
+          cache: false
 
       - name: Install Linux GTK3 & WebKit2GTK 4.1 Dependencies
         if: runner.os == 'Linux'
@@ -46,35 +44,66 @@ jobs:
       - name: Prepare Directory Layout & Run Go Unit Tests
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p usb network privilege build/windows frontend/wailsjs/go/main src/instant_server/ui src/instant_server/scripts dist
           for f in flasher_common.go flasher_linux.go flasher_darwin.go flasher_windows.go scanner.go payload_builder.go catalog.go iso_downloader.go cidata_fat.go flasher_test.go; do
-            [ -f "$f" ] && [ ! -f "usb/$f" ] && cp "$f" "usb/$f" || true
+            if [ -f "$f" ]; then
+              mv -f "$f" "usb/$f"
+            fi
           done
           for f in mdns_discovery.go mdns_test.go; do
-            [ -f "$f" ] && [ ! -f "network/$f" ] && cp "$f" "network/$f" || true
+            if [ -f "$f" ]; then
+              mv -f "$f" "network/$f"
+            fi
           done
           for f in escalate.go escalate_test.go; do
-            [ -f "$f" ] && [ ! -f "privilege/$f" ] && cp "$f" "privilege/$f" || true
+            if [ -f "$f" ]; then
+              mv -f "$f" "privilege/$f"
+            fi
           done
           [ -f "wails.exe.manifest" ] && [ ! -f "build/windows/wails.exe.manifest" ] && cp "wails.exe.manifest" "build/windows/wails.exe.manifest" || true
           [ -f "app_ui.html" ] && [ ! -f "src/instant_server/ui/app_ui.html" ] && cp "app_ui.html" "src/instant_server/ui/app_ui.html" || true
           [ -f "server_dashboard.html" ] && [ ! -f "src/instant_server/ui/server_dashboard.html" ] && cp "server_dashboard.html" "src/instant_server/ui/server_dashboard.html" || true
-          for ujf in catalog_data.js app_studio.js; do [ -f "$ujf" ] && [ ! -f "src/instant_server/ui/$ujf" ] && cp "$ujf" "src/instant_server/ui/$ujf" || true; done
+          for ujf in catalog_data.js app_studio.js; do
+            [ -f "$ujf" ] && [ ! -f "src/instant_server/ui/$ujf" ] && cp "$ujf" "src/instant_server/ui/$ujf" || true
+          done
           [ -f "laptop_hardening.sh" ] && [ ! -f "src/instant_server/scripts/laptop_hardening.sh" ] && cp "laptop_hardening.sh" "src/instant_server/scripts/laptop_hardening.sh" || true
           sed -i 's/\r$//' src/instant_server/scripts/laptop_hardening.sh 2>/dev/null || true
+
+          # Synchronize internal subpackage import paths with go.mod module name
+          if [ ! -f "go.mod" ]; then
+            go mod init github.com/InstantServer/InstantServer
+          fi
+          MOD_NAME=$(awk '/^module /{print $2}' go.mod | tr -d '\r')
+          if [ -z "$MOD_NAME" ]; then
+            MOD_NAME="github.com/InstantServer/InstantServer"
+          fi
+          if [ -f "app.go" ]; then
+            sed -i.bak \
+              -e "s|github.com/instant-server/instant-server/network|${MOD_NAME}/network|g" \
+              -e "s|github.com/instant-server/instant-server/privilege|${MOD_NAME}/privilege|g" \
+              -e "s|github.com/instant-server/instant-server/usb|${MOD_NAME}/usb|g" \
+              -e "s|github.com/InstantServer/InstantServer/network|${MOD_NAME}/network|g" \
+              -e "s|github.com/InstantServer/InstantServer/privilege|${MOD_NAME}/privilege|g" \
+              -e "s|github.com/InstantServer/InstantServer/usb|${MOD_NAME}/usb|g" \
+              app.go
+            rm -f app.go.bak
+          fi
+
+          go get github.com/wailsapp/wails/v2@latest
           go mod tidy
           go test -v ./usb/... ./network/... ./privilege/...
 
       - name: Build Native Standalone Executable (Wails + Go)
         shell: bash
         run: |
-          go install github.com/wailsapp/wails/v2/cmd/wails@v2.9.2
+          go install github.com/wailsapp/wails/v2/cmd/wails@latest
           export PATH="$(go env GOPATH)/bin:$PATH"
           if [[ "$RUNNER_OS" == "Windows" ]]; then
-            wails build -clean -skipbindings -o InstantServer-Windows.exe || go build -ldflags="-s -w -H windowsgui" -o build/bin/InstantServer-Windows.exe .
+            wails build -clean -skipbindings -o InstantServer-Windows.exe || go build -tags desktop,production -ldflags="-s -w -H windowsgui" -o build/bin/InstantServer-Windows.exe .
             cp build/bin/InstantServer-Windows.exe dist/InstantServer-Windows.exe
           elif [[ "$RUNNER_OS" == "macOS" ]]; then
-            wails build -clean -skipbindings || go build -ldflags="-s -w" -o build/bin/InstantServer .
+            wails build -clean -skipbindings || go build -tags desktop,production -ldflags="-s -w" -o build/bin/InstantServer .
             mkdir -p build/dmg_staging
             if [ -d "build/bin/InstantServer.app" ]; then
               cp -R "build/bin/InstantServer.app" build/dmg_staging/
@@ -83,14 +112,14 @@ jobs:
             fi
             hdiutil create -volname "Instant Server" -srcfolder build/dmg_staging -ov -format UDZO dist/InstantServer-macOS.dmg
           else
-            wails build -clean -skipbindings -tags webkit2_41 -o InstantServer-Linux || go build -tags webkit2_41 -ldflags="-s -w" -o build/bin/InstantServer-Linux .
+            wails build -clean -skipbindings -tags webkit2_41 -o InstantServer-Linux || go build -tags desktop,production,webkit2_41 -ldflags="-s -w" -o build/bin/InstantServer-Linux .
             cp build/bin/InstantServer-Linux dist/InstantServer-Linux
             chmod +x dist/InstantServer-Linux
           fi
           ls -lh dist/
 
       - name: Upload Release Binary Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ matrix.binary_name }}
           path: dist/${{ matrix.binary_name }}

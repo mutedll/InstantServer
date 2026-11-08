@@ -14,9 +14,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/instant-server/instant-server/network"
-	"github.com/instant-server/instant-server/privilege"
-	"github.com/instant-server/instant-server/usb"
+	"github.com/InstantServer/InstantServer/network"
+	"github.com/InstantServer/InstantServer/privilege"
+	"github.com/InstantServer/InstantServer/usb"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 

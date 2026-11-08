@@ -6,6 +6,22 @@ It effortlessly transforms spare laptops, Mini-PCs, desktop towers, and multi-co
 
 ---
 
+## 📌 Table of Contents
+
+* [✨ Key Capabilities](#-key-capabilities)
+  * [1. Native Go + Wails Architecture](#1-native-go--wails-architecture)
+  * [2. Hardware Survival, Thermal Safety & Network Failover](#2-hardware-survival-thermal-safety--network-failover)
+  * [3. App Ecosystem & Multi-Server Pooling](#3-app-ecosystem--multi-server-pooling)
+* [📂 Project Structure](#-project-structure)
+* [🛠️ Building & Running from Source](#%EF%B8%8F-building--running-from-source)
+  * [Prerequisites](#prerequisites)
+  * [Running Unit Tests](#running-unit-tests)
+  * [Compiling Standalone Native Binaries](#compiling-standalone-native-binaries)
+* [💡 Real-World Hardware Best Practices](#-real-world-hardware-best-practices)
+* [📄 License](#-license)
+
+---
+
 ## ✨ Key Capabilities
 
 ### 1. Native Go + Wails Architecture
@@ -14,7 +30,7 @@ It effortlessly transforms spare laptops, Mini-PCs, desktop towers, and multi-co
 * **4096-Byte Page-Aligned Direct DMA Engine (`usb/`):**
   * **Linux (`usb/flasher_linux.go`):** Allocates 4096-byte page-aligned 4 MB buffers (`AllocPageAlignedBuffer`) and streams directly to block devices using `syscall.O_DIRECT | syscall.O_EXCL` (avoiding the `O_SYNC` per-block stall mirage), followed by a final hardware fsync, `BLKFLSBUF`, and `BLKRRPART`.
   * **macOS (`usb/flasher_darwin.go`):** Automatically routes block paths (`/dev/diskN`) to raw character devices (`/dev/rdiskN`), unlocks DiskArbitration mounts (`diskutil unmountDisk force`), and bypasses the XNU buffer cache via `F_NOCACHE`.
-  * **Windows (`usb/flasher_windows.go` & `build/windows/wails.exe.manifest`):** Embeds an explicit `requireAdministrator` UAC manifest, isolates `WebviewUserDataPath` to prevent elevated WebView2 permission conflicts, locks and dismounts mounted partitions (`FSCTL_LOCK_VOLUME` + `FSCTL_DISMOUNT_VOLUME`), and writes unbuffered 4 MB blocks (`FILE_FLAG_NO_BUFFERING` | FILE_FLAG_WRITE_THROUGH).
+  * **Windows (`usb/flasher_windows.go` & `build/windows/wails.exe.manifest`):** Embeds an explicit `requireAdministrator` UAC manifest, isolates `WebviewUserDataPath` to prevent elevated WebView2 permission conflicts, locks and dismounts mounted partitions (`FSCTL_LOCK_VOLUME` + `FSCTL_DISMOUNT_VOLUME`), and writes unbuffered 4 MB blocks (`FILE_FLAG_NO_BUFFERING` | `FILE_FLAG_WRITE_THROUGH`).
 * **Stateful Pause, Resume & Cancel:** Freeze USB provisioning at any byte or container layer and resume from the exact position without losing downloaded ISO data or staged app manifests.
 * **Native mDNS `.local` Discovery (`network/mdns_discovery.go`):** Built-in pure-Go multicast DNS resolver and concurrent LAN scanner that locates `instant-server.local` nodes without external scripts.
 
