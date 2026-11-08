@@ -1,123 +1,125 @@
 # ⚡ Instant Server
 
-Turn any old laptop, desktop PC, or Mini-PC into a fast, quiet Linux home server by plugging in a USB stick.
+**Instant Server is a native, cross-platform provisioning engine and zero-touch Ubuntu LTS homelab builder powered by Go and Wails.**
 
-Most people have an old laptop sitting in a drawer—maybe the battery only lasts 20 minutes, maybe the screen hinge is cracked, or maybe it's just too slow for Windows 11. **Instant Server lets you turn that old laptop (or any spare desktop PC, Intel N100 Mini-PC, or multi-drive box) into a fast, quiet Linux home server for your files, movies, photo backups, and self-hosted apps without needing to know Linux commands.**
-
-You run the Instant Server desktop app on your regular computer, plug in a USB flash drive, pick your settings, and hit **Flash USB**. When you plug that USB into your server computer and turn it on, it sets everything up on its own.
+It effortlessly transforms spare laptops, Mini-PCs, desktop towers, and multi-computer setups into a self-healing personal cloud, media server, network ad-blocker, offline Wikipedia box, or local AI/gaming host—**completely eliminating the need for terminal commands or manual router port-forwarding.**
 
 ---
 
-## 🛠️ What It Does for Your Hardware
+## ✨ Key Capabilities
 
-Normal server installers aren't built for laptops or headless home servers. Instant Server configures Ubuntu Server LTS specifically for your hardware right out of the box:
+### 1. Native Go + Wails Architecture
 
-* **Close the lid and tuck it away:** Closing a laptop lid won't put the server to sleep (`HandleLidSwitch=ignore`). It turns the screen off after 60 seconds (`consoleblank=60`) so it doesn't waste power or burn in.
-* **Protects laptop batteries (and acts as a built-in UPS):** Leaving a laptop plugged into the wall 24/7 at 100% can swell the battery over time. Instant Server limits battery charging between 40% and 60% via TLP and ACPI thresholds, and includes a 60-second watchdog timer that safely shuts down your databases and OS if power goes out and the battery drops to 15%.
-* **Desktop PC, Mini-PC & Multi-Bay NAS tuning:** Automatically detects when no battery is present and switches from laptop battery daemons to PCIe ASPM, SATA ALPM, and Realtek 2.5GbE ASPM power-saving along with Intel QuickSync / VA-API hardware transcoding.
-* **Automatic Wi-Fi failover:** Configures both Ethernet (priority metric 100) and Wi-Fi (failover metric 600) with Wi-Fi power-saving disabled so your server never drops off the network when you unplug the Ethernet cable.
-* **Self-healing disk & network guardrails:** Caps system logs (`SystemMaxUse=200M`), prunes unused container layers weekly, and runs a 2-minute network/mDNS self-healing watchdog so `.local` discovery stays reachable months and years later.
+* **Zero Runtime Extraction:** Compiles `app_ui.html`, `server_dashboard.html`, and `laptop_hardening.sh` directly into the binary's read-only data segment via `//go:embed`. Serves the entire interface straight from RAM without extracting temporary files to disk.
+* **4096-Byte Page-Aligned Direct DMA Engine (`usb/`):**
+  * **Linux (`usb/flasher_linux.go`):** Allocates 4096-byte page-aligned 4 MB buffers (`AllocPageAlignedBuffer`) and streams directly to block devices using `syscall.O_DIRECT | syscall.O_EXCL` (avoiding the `O_SYNC` per-block stall mirage), followed by a final hardware fsync, `BLKFLSBUF`, and `BLKRRPART`.
+  * **macOS (`usb/flasher_darwin.go`):** Automatically routes block paths (`/dev/diskN`) to raw character devices (`/dev/rdiskN`), unlocks DiskArbitration mounts (`diskutil unmountDisk force`), and bypasses the XNU buffer cache via `F_NOCACHE`.
+  * **Windows (`usb/flasher_windows.go` & `build/windows/wails.exe.manifest`):** Embeds an explicit `requireAdministrator` UAC manifest, isolates `WebviewUserDataPath` to prevent elevated WebView2 permission conflicts, locks and dismounts mounted partitions (`FSCTL_LOCK_VOLUME` + `FSCTL_DISMOUNT_VOLUME`), and writes unbuffered 4 MB blocks (`FILE_FLAG_NO_BUFFERING` | FILE_FLAG_WRITE_THROUGH).
+* **Stateful Pause, Resume & Cancel:** Freeze USB provisioning at any byte or container layer and resume from the exact position without losing downloaded ISO data or staged app manifests.
+* **Native mDNS `.local` Discovery (`network/mdns_discovery.go`):** Built-in pure-Go multicast DNS resolver and concurrent LAN scanner that locates `instant-server.local` nodes without external scripts.
 
----
+### 2. Hardware Survival, Thermal Safety & Network Failover
 
-## 📦 Offline USB Install & 26 One-Click Self-Hosted Apps
+* **Laptop Lid-Close & Thermal Protection:** Keeps the server awake when the laptop lid is closed while actively warning against enclosed-drawer overheating traps. Includes a 1-click **Cool & Quiet CPU Mode** (disables Turbo Boost and switches to the `powersave` governor to lower peak temperatures by 10–15°C).
+* **Battery Health Limiter & Built-In UPS Watchdog:** Caps continuous AC charging (default 40%–60%) to prevent lithium-ion swelling. Triggers a clean filesystem sync and shutdown when battery charge drops below your configured threshold during a power outage.
+* **Seamless Ethernet-to-Wi-Fi Failover & Tailscale Remote Access:** Configures dual-interface netplan metrics with Wi-Fi power-save disabled for instant cable-unplug failover. Integrates built-in Tailscale VPN provisioning (Subnet Router + Tailscale SSH) for secure remote access outside your home network.
 
-* **Resumable ISO & App Layer Caching:** Downloads the official Ubuntu Server LTS ISO (26.04.1 LTS, 24.04.5 LTS, or 22.04.5 LTS) and OCI container layers into `Instant_Server_Data/` with HTTP Range resume and SHA-256 verification. Cancelling a flash never loses already-downloaded files.
-* **100% Air-Gapped Offline Install:** Enable *Pre-download app images onto USB* to pull and bundle container tarballs (`docker.io`, `ghcr.io`, `lscr.io`) and offline Wi-Fi `.deb` packages (`wpasupplicant`, `rfkill`, `libpcsclite1`) directly onto the USB drive so your server comes up ready to use even without an internet connection.
-* **Offline Wikipedia & Survival Library (Kiwix):** Pre-select or download `.zim` archives directly from the server dashboard—including Simple English Wikipedia, Full Illustrated English Wikipedia, WikiMed Medical Encyclopedia, iFixit Repair Guides, and Project Gutenberg.
+### 3. App Ecosystem & Multi-Server Pooling
 
----
-
-## 🔗 Combine Multiple Computers into One Server
-
-Have two old laptops or a laptop and a Mini-PC? You can combine them either when flashing the USB or later from the live server web dashboard (`http://instant-server.local:8088`):
-
-* **Keep all files on both computers (Default — MergerFS Union Pool):** Combines the storage of both computers into one shared folder (`/DATA/ClusterPool`) without deleting or overwriting a single file on either machine.
-* **SQLite database protection:** Automatically keeps app databases (Jellyfin, Immich, Nextcloud, Vaultwarden) pinned to local SSD/NVMe storage with scheduled `.backup` snapshots so network hiccups never corrupt your apps.
-* **Mirror important folders across both computers:** Keeps a live backup copy on the second machine so your files stay available if one computer is turned off.
-* **Confirmation gate before erasing a second computer:** Wiping a secondary server is blocked by default unless you explicitly type `WIPE-<hostname>`.
+* **139+ Verified Self-Hosted Apps:** Pre-bundle Jellyfin, Nextcloud, Immich, Pi-hole, AdGuard Home, WireGuard (`wg-easy`), Offline Wikipedia (Kiwix), Home Assistant, Vaultwarden, Paperless-ngx, Stirling-PDF, Portainer, Uptime Kuma, Ollama + Open WebUI, and Minecraft Java/Bedrock servers directly onto your USB stick.
+* **Zero-Friction Custom Web App Importer:** Paste any Docker image (`owner/app:tag`), `docker run ...` command, `docker-compose.yml` snippet, or GitHub / Docker Hub URL to automatically generate its container configuration and `/DATA/AppData/<app>` volume bindings.
+* **Multi-Computer Storage Pooling:** Combine multiple laptops or PCs on your home network using safe non-destructive MergerFS union pooling (preserving existing files on all machines) or confirmed secondary drive expansion.
+* **5 Installation Modes (15 GB – 64 TB):** Supports *Dual-Boot Alongside Existing OS*, *Erase Main Drive*, *Select on Screen*, *Secondary Drive Only*, and *Live Repair & Rescue USB*.
 
 ---
 
-## 🩺 Bootable Repair & Rescue USB Mode
-
-Select **Bootable Repair & Rescue USB** in the installation mode dropdown to create a live diagnostic and recovery drive (inspired by SystemRescue) that works on any laptop, desktop PC, or server without touching installed files:
-
-* **1-Click UEFI & GRUB Bootloader Repair:** Automatically mounts your Linux root and EFI System Partition in a chroot and repairs missing UEFI NVRAM entries (`efibootmgr`).
-* **Safe Unmounted Filesystem Repair:** Runs `e2fsck`, `btrfs check`, or `xfs_repair` safely on unmounted partitions (`fsck`).
-* **Drive Health & Emergency File Rescue:** Checks SSD/NVMe wear levels (`smartctl` / `nvme-cli`) and starts a read-only network share so you can copy files off a computer that won't boot.
-
----
-
-## ⚡ Native C11 Unbuffered DMA USB Engine (`win_usb_flasher.c`)
-
-Inspired by Rufus on Windows and BalenaEtcher on macOS and Linux:
-
-* **Hardware-level Triple-Lock protection:** Queries `IOCTL_STORAGE_QUERY_PROPERTY` and `IOCTL_DISK_GET_DRIVE_GEOMETRY_EX` to verify USB bus type, removable media status, and non-system mountpoints before opening any drive handle.
-* **Automatic Explorer volume unlocking:** Locks, flushes, dismounts, and offlines mounted partitions (`FSCTL_LOCK_VOLUME`, `FSCTL_DISMOUNT_VOLUME`, `IOCTL_VOLUME_OFFLINE`, `IOCTL_DISK_SET_DISK_ATTRIBUTES`) so having the USB drive open in Windows Explorer never crashes or blocks flashing.
-* **4 MB page-aligned DMA streaming & UEFI GPT relocation:** Streams via `VirtualAlloc` (`FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH`), patches GRUB autoinstall in-flight, relocates the backup UEFI GPT header to the end of the USB drive, formats the CIDATA FAT32 partition, and verifies every written block with IEEE 802.3 CRC32 and SHA-256.
-
----
-
-## 📂 Repository Structure
+## 📂 Project Structure
 
 ```text
-InstantServer/
-├── pyproject.toml
-├── README.md
-├── instant_server.py
-├── build_executables.py
-├── .github/
-│   └── workflows/
-│       ├── ci.yml
-│       └── release.yml
+Instant Server/
+├── .github/workflows/
+│   ├── ci.yml                 # Cross-platform Go vet, unit tests & ShellCheck CI
+│   └── release.yml            # Automated Windows (.exe), macOS (.dmg) & Linux builds
+├── build/
+│   └── windows/
+│       └── wails.exe.manifest # Windows UAC requireAdministrator & PerMonitorV2 DPI manifest
+├── frontend/
+│   └── wailsjs/go/main/
+│       └── App.d.ts           # Statically typed Wails TypeScript/JavaScript bindings
+├── network/
+│   ├── mdns_discovery.go      # Pure-Go multicast DNS (.local) resolver & LAN scanner
+│   └── mdns_test.go           # Unit tests for DNS wire-format encoding
+├── privilege/
+│   ├── escalate.go            # Native Polkit (pkexec), macOS AuthorizationServices & Windows UAC
+│   └── escalate_test.go       # Unit tests for privilege detection
 ├── src/
 │   └── instant_server/
-│       ├── __init__.py
-│       ├── cli.py
-│       ├── host_probe.py
-│       ├── iso_manager.py
-│       ├── usb_engine.py
-│       ├── config_builder.py
-│       ├── payload_packager.py
-│       ├── dashboard_service.py
-│       ├── native/
-│       │   └── win_usb_flasher.c
 │       ├── scripts/
-│       │   ├── hardware_adapter.py
-│       │   └── laptop_hardening.sh
+│       │   └── laptop_hardening.sh # Target Ubuntu LTS hardening, cluster & self-healing daemon script
 │       └── ui/
-│           ├── app_ui.html
-│           └── server_dashboard.html
-└── tests/
-    ├── test_suite.py
-    └── vm_test_harness.py
+│           ├── app_ui.html           # Desktop USB provisioner UI (embedded into RAM via //go:embed)
+│           └── server_dashboard.html # Target server web dashboard (:8088)
+├── usb/
+│   ├── cidata_fat.go          # Pure-Go FAT16 (LABEL="CIDATA") VFAT partition image builder
+│   ├── catalog.go             # Verified container port/cap specs & Minecraft Studio builder
+│   ├── iso_downloader.go      # Resumable HTTP Range ISO downloader & SHA-256 verifier
+│   ├── flasher_common.go      # 4096-byte aligned DMA allocator, GRUB patcher & GPT relocator
+│   ├── flasher_darwin.go      # macOS /dev/rdiskN routing, diskutil unmount & F_NOCACHE
+│   ├── flasher_linux.go       # Linux O_DIRECT block streaming & BLKFLSBUF ioctl
+│   ├── flasher_windows.go     # Windows FSCTL_LOCK_VOLUME & FILE_FLAG_NO_BUFFERING engine
+│   ├── payload_builder.go     # Cloud-init autoinstall generator & custom web app parser
+│   ├── scanner.go             # Cross-platform removable USB detector & Triple-Lock guard
+│   └── flasher_test.go        # Unit tests for DMA alignment, streaming, GPT & validation
+├── app.go                     # Wails application controller & asynchronous event channel
+├── go.mod                     # Go module definition
+├── LICENSE                    # GNU General Public License v3.0
+├── main.go                    # Application entry point & WebviewUserDataPath isolation
+├── README.md                  # Project documentation
+└── wails.json                 # Wails project configuration
 ```
 
 ---
 
-## 🚀 Quick Start & Running Tests
+## 🛠️ Building & Running from Source
 
-### Launch the App
+### Prerequisites
+
+* **Go 1.22** or newer
+* **Wails CLI:** Installed via `go install ://github.com`
+
+#### Platform WebView Dependencies
+
+* **Windows:** Microsoft Edge WebView2 Runtime (Pre-installed on Windows 10/11)
+* **macOS:** Xcode Command Line Tools (`xcode-select --install`)
+* **Linux (Ubuntu / Debian):**
+
 ```bash
-python3 instant_server.py
+sudo apt-get update
+sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config build-essential
 ```
 
-### Compile & Self-Test the Native C11 USB Engine
+### Running Unit Tests
+
 ```bash
-gcc -std=c11 -O3 -Wall -Wextra -Wpedantic -Werror src/instant_server/native/win_usb_flasher.c -o win_usb_flasher
-./win_usb_flasher --self-test
+go vet ./usb/... ./network/... ./privilege/...
+go test -v ./usb/... ./network/... ./privilege/...
 ```
 
-### Run Automated Tests & VM Simulations
-```bash
-# Run the automated test suite and 8-way UEFI/BIOS VM matrix simulation
-python3 tests/test_suite.py
-python3 tests/vm_test_harness.py --self-test
-```
+### Compiling Standalone Native Binaries
+
+* **Windows:** `wails build -clean -o InstantServer-Windows.exe`
+* **macOS:** `wails build -clean`
+* **Linux (Ubuntu 24.04+ / WebKit2GTK 4.1):** `wails build -clean -tags webkit2_41 -o InstantServer-Linux`
 
 ---
 
-## ⚖️ License
+## 💡 Real-World Hardware Best Practices
 
-**GNU General Public License v3.0** — Free to use, study, modify, and share.
+* **Avoid the Closed-Lid Overheating Trap:** Laptops are engineered to dissipate heat upward through the keyboard deck. **Never place a closed laptop inside an enclosed drawer, closet, or cabinet.** Trapped heat degrades the battery, NVMe/SATA drives, and the motherboard under 24/7 workloads. Stand the laptop vertically in an open-air stand, prop the lid slightly ajar (1–2 inches), or place it on a cooling pad, and enable **Cool & Quiet CPU Mode** in the app's Power tab.
+* **Hardwired Gigabit Ethernet vs. 2.4GHz Wi-Fi:** While Instant Server configures automatic Wi-Fi failover so unplugging a cable never drops your connection, older laptops with 2.4GHz Wi-Fi cards typically average only 3–8 MB/s with high latency jitter. For smooth 4K Jellyfin streaming, fast Immich camera-roll backups, and Nextcloud transfers (110+ MB/s), connect your server via a **Gigabit Ethernet cable** (or a USB 3.0-to-Gigabit Ethernet adapter) and keep Wi-Fi active purely as your automatic backup failover link.
+
+---
+
+## 📄 License
+
+This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)** — see the [LICENSE](LICENSE) file for full details.

@@ -1,11 +1,14 @@
-# .github/workflows/ci.yml
-name: CI
+name: CI Verification Suite
 
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   verify:
@@ -18,35 +21,51 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          git init .
-          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          git fetch --no-tags --depth=1 origin "${GITHUB_SHA}"
-          git checkout --force FETCH_HEAD
+        uses: actions/checkout@v4
 
-      - name: Compile & Verify Native C11 USB Flasher (win_usb_flasher.c)
-        shell: bash
-        run: |
-          SRC_C="src/instant_server/native/win_usb_flasher.c"
-          [ -f "$SRC_C" ] || SRC_C="win_usb_flasher.c"
-          printf "\n" >> "$SRC_C"
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-            gcc -std=c11 -O3 -Wall -Wextra -Wpedantic -Werror "$SRC_C" -o win_usb_flasher.exe
-            ./win_usb_flasher.exe --self-test
-          else
-            gcc -std=c11 -O3 -Wall -Wextra -Wpedantic -Werror "$SRC_C" -o win_usb_flasher
-            ./win_usb_flasher --self-test
-          fi
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          check-latest: true
 
-      - name: Run Automated Test Suite & VM Matrix Simulation
+      - name: Install Linux WebKit2GTK 4.1 & GTK3 Headers
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config build-essential shellcheck
+
+      - name: Normalize Go Package Layout & Tidy Dependencies
         shell: bash
         run: |
-          PY_BIN="python3"
-          command -v python3 >/dev/null 2>&1 || PY_BIN="python"
-          "$PY_BIN" -m py_compile instant_server.py build_executables.py
-          "$PY_BIN" tests/test_suite.py
-          "$PY_BIN" tests/vm_test_harness.py --self-test
-          "$PY_BIN" build_executables.py --self-test
+          mkdir -p usb network privilege build/windows frontend/wailsjs/go/main src/instant_server/ui src/instant_server/scripts
+          for f in flasher_common.go flasher_linux.go flasher_darwin.go flasher_windows.go scanner.go payload_builder.go catalog.go iso_downloader.go cidata_fat.go flasher_test.go; do
+            [ -f "$f" ] && [ ! -f "usb/$f" ] && cp "$f" "usb/$f" || true
+          done
+          for f in mdns_discovery.go mdns_test.go; do
+            [ -f "$f" ] && [ ! -f "network/$f" ] && cp "$f" "network/$f" || true
+          done
+          for f in escalate.go escalate_test.go; do
+            [ -f "$f" ] && [ ! -f "privilege/$f" ] && cp "$f" "privilege/$f" || true
+          done
+          [ -f "wails.exe.manifest" ] && [ ! -f "build/windows/wails.exe.manifest" ] && cp "wails.exe.manifest" "build/windows/wails.exe.manifest" || true
+          [ -f "app_ui.html" ] && [ ! -f "src/instant_server/ui/app_ui.html" ] && cp "app_ui.html" "src/instant_server/ui/app_ui.html" || true
+          [ -f "server_dashboard.html" ] && [ ! -f "src/instant_server/ui/server_dashboard.html" ] && cp "server_dashboard.html" "src/instant_server/ui/server_dashboard.html" || true
+          for ujf in catalog_data.js app_studio.js; do [ -f "$ujf" ] && [ ! -f "src/instant_server/ui/$ujf" ] && cp "$ujf" "src/instant_server/ui/$ujf" || true; done
+          [ -f "laptop_hardening.sh" ] && [ ! -f "src/instant_server/scripts/laptop_hardening.sh" ] && cp "laptop_hardening.sh" "src/instant_server/scripts/laptop_hardening.sh" || true
+          go mod tidy
+
+      - name: Run Go Static Analysis (go vet) & Unit Tests (go test)
+        shell: bash
+        run: |
+          go vet ./usb/... ./network/... ./privilege/...
+          go test -v ./usb/... ./network/... ./privilege/...
+
+      - name: Verify Target Hardening Script (ShellCheck & LF Line Endings)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          SH_FILE="src/instant_server/scripts/laptop_hardening.sh"
+          sed -i 's/\r$//' "$SH_FILE"
+          bash -n "$SH_FILE"
+          shellcheck -s bash "$SH_FILE"

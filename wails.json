@@ -1,0 +1,24 @@
+{
+  "name": "InstantServer",
+  "outputfilename": "InstantServer",
+  "frontend:dir": "src/instant_server/ui",
+  "frontend:install": "",
+  "frontend:build": "",
+  "frontend:dev:watcher": "",
+  "frontend:dev:serverUrl": "auto",
+  "wailsjsdir": "./frontend/wailsjs",
+  "build:dir": "build",
+  "appargs": "",
+  "author": {
+    "name": "Instant Server Contributors"
+  },
+  "info": {
+    "companyName": "Instant Server",
+    "productName": "Instant Server",
+    "copyright": "GNU General Public License v3.0 (GPL-3.0)",
+    "comments": "Zero-Touch Bootable Ubuntu LTS Homelab & USB Provisioning Engine"
+  },
+  "nsisType": "multiple",
+  "obfuscated": false,
+  "garbleargs": ""
+}

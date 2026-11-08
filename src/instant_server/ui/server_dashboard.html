@@ -775,6 +775,21 @@
       </div>
       <div class="modal-body">
         <div class="diag-box" id="composeVolumeExplainBox"></div>
+        <div class="diag-box" id="appDataFileManagerBox" style="gap:8px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+            <span style="font-weight:600;color:var(--accent);">🗂️ Persistent <code>/DATA/AppData</code> Config File Explorer &amp; Editor</span>
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;" id="appDataFilePills"></div>
+          </div>
+          <textarea id="appDataFileTextarea" class="compose-editor" style="min-height:125px;" spellcheck="false" placeholder="Select a file above to edit its contents inside /DATA/AppData..."></textarea>
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span id="lblActiveAppDataFilePath" style="font-family:var(--font-mono);font-size:11.5px;color:var(--text-secondary);">/DATA/AppData/</span>
+            <div style="display:flex;gap:6px;">
+              <input type="text" id="inputNewAppDataFileName" class="text-input" style="width:140px;height:28px;font-size:12px;" placeholder="new-config.yml" />
+              <button type="button" class="win-btn win-btn-sm" data-action="create-appdata-file">＋ Create File</button>
+              <button type="button" class="win-btn win-btn-accent win-btn-sm" data-action="save-appdata-file">💾 Save Config File</button>
+            </div>
+          </div>
+        </div>
         <div>
           <div style="font-size:12px;font-weight:600;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
             <span>Raw <code>docker-compose.yml</code> (Editable)</span>
@@ -798,7 +813,11 @@
   {
     "id": "kiwix",
     "title": "Offline Wikipedia (Kiwix)",
-    "category": "Security & Tools",
+    "category": "Knowledge & Wiki",
+    "categories": [
+      "Knowledge & Wiki",
+      "Cloud & Files"
+    ],
     "port": 8086,
     "ram_mb": 128,
     "image": "ghcr.io/kiwix/kiwix-serve:latest",
@@ -812,9 +831,12 @@
   {
     "id": "jellyfin",
     "title": "Jellyfin",
-    "category": "Security & Tools",
+    "category": "Media & Photos",
+    "categories": [
+      "Media & Photos"
+    ],
     "port": 8096,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "jellyfin/jellyfin:latest",
     "volumes": [
       "/DATA/AppData/jellyfin/config:/config",
@@ -827,9 +849,12 @@
   {
     "id": "nextcloud",
     "title": "Nextcloud",
-    "category": "Security & Tools",
+    "category": "Cloud & Files",
+    "categories": [
+      "Cloud & Files"
+    ],
     "port": 8081,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "nextcloud:stable",
     "volumes": [
       "/DATA/AppData/nextcloud/html:/var/www/html",
@@ -842,7 +867,12 @@
   {
     "id": "pihole",
     "title": "Pi-hole",
-    "category": "Security & Tools",
+    "category": "Network & VPN",
+    "categories": [
+      "Network & VPN",
+      "Media & Photos",
+      "Security & Tools"
+    ],
     "port": 8085,
     "ram_mb": 128,
     "image": "pihole/pihole:latest",
@@ -857,9 +887,14 @@
   {
     "id": "immich",
     "title": "Immich",
-    "category": "Security & Tools",
+    "category": "Media & Photos",
+    "categories": [
+      "Media & Photos",
+      "Cloud & Files",
+      "Gaming & AI"
+    ],
     "port": 2283,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "ghcr.io/immich-app/immich-server:release",
     "volumes": [
       "/DATA/AppData/immich/upload:/usr/src/app/upload"
@@ -872,6 +907,10 @@
     "id": "homeassistant",
     "title": "Home Assistant",
     "category": "Smart Home",
+    "categories": [
+      "Smart Home",
+      "Media & Photos"
+    ],
     "port": 8123,
     "ram_mb": 512,
     "image": "homeassistant/home-assistant:stable",
@@ -886,6 +925,9 @@
     "id": "vaultwarden",
     "title": "Vaultwarden",
     "category": "Security & Tools",
+    "categories": [
+      "Security & Tools"
+    ],
     "port": 8082,
     "ram_mb": 128,
     "image": "vaultwarden/server:latest",
@@ -899,9 +941,13 @@
   {
     "id": "minecraft",
     "title": "Minecraft Dedicated Server (Java)",
-    "category": "Security & Tools",
+    "category": "Gaming & AI",
+    "categories": [
+      "Gaming & AI",
+      "Cloud & Files"
+    ],
     "port": 25565,
-    "ram_mb": 128,
+    "ram_mb": 2048,
     "image": "itzg/minecraft-server:latest",
     "volumes": [
       "/DATA/AppData/minecraft/data:/data"
@@ -913,7 +959,10 @@
   {
     "id": "minecraft_bedrock",
     "title": "Minecraft Bedrock Server (Mobile / Console)",
-    "category": "Security & Tools",
+    "category": "Gaming & AI",
+    "categories": [
+      "Gaming & AI"
+    ],
     "port": 19132,
     "ram_mb": 128,
     "image": "itzg/minecraft-bedrock-server:latest",
@@ -927,9 +976,12 @@
   {
     "id": "ollama_webui",
     "title": "Local AI Server (Ollama + Open WebUI)",
-    "category": "Security & Tools",
+    "category": "Gaming & AI",
+    "categories": [
+      "Gaming & AI"
+    ],
     "port": 3005,
-    "ram_mb": 128,
+    "ram_mb": 4096,
     "image": "ghcr.io/open-webui/open-webui:ollama",
     "volumes": [
       "/DATA/AppData/ollama_webui/ollama:/root/.ollama",
@@ -942,9 +994,12 @@
   {
     "id": "localai",
     "title": "LocalAI (Private AI Voice, Vision & Text)",
-    "category": "Security & Tools",
+    "category": "Gaming & AI",
+    "categories": [
+      "Gaming & AI"
+    ],
     "port": 8088,
-    "ram_mb": 128,
+    "ram_mb": 4096,
     "image": "localai/localai:latest",
     "volumes": [
       "/DATA/AppData/localai/models:/build/models"
@@ -956,7 +1011,10 @@
   {
     "id": "bookstack",
     "title": "BookStack (Personal Wiki & Notes)",
-    "category": "Security & Tools",
+    "category": "Knowledge & Wiki",
+    "categories": [
+      "Knowledge & Wiki"
+    ],
     "port": 6875,
     "ram_mb": 128,
     "image": "lscr.io/linuxserver/bookstack:latest",
@@ -970,7 +1028,12 @@
   {
     "id": "calibreweb",
     "title": "Calibre-Web (E-Book Library)",
-    "category": "Security & Tools",
+    "category": "Knowledge & Wiki",
+    "categories": [
+      "Knowledge & Wiki",
+      "Cloud & Files",
+      "Security & Tools"
+    ],
     "port": 8083,
     "ram_mb": 128,
     "image": "lscr.io/linuxserver/calibre-web:latest",
@@ -985,10 +1048,14 @@
   {
     "id": "wg_easy",
     "title": "WireGuard VPN (wg-easy)",
-    "category": "Security & Tools",
+    "category": "Network & VPN",
+    "categories": [
+      "Network & VPN",
+      "Security & Tools"
+    ],
     "port": 51821,
     "ram_mb": 128,
-    "image": "ghcr.io/wg-easy/wg-easy:latest",
+    "image": "ghcr.io/wg-easy/wg-easy:15",
     "volumes": [
       "/DATA/AppData/wg_easy/etc_wireguard:/etc/wireguard"
     ],
@@ -999,7 +1066,11 @@
   {
     "id": "adguardhome",
     "title": "AdGuard Home",
-    "category": "Security & Tools",
+    "category": "Network & VPN",
+    "categories": [
+      "Network & VPN",
+      "Security & Tools"
+    ],
     "port": 3000,
     "ram_mb": 128,
     "image": "adguard/adguardhome:latest",
@@ -1014,9 +1085,12 @@
   {
     "id": "plex",
     "title": "Plex Media Server",
-    "category": "Security & Tools",
+    "category": "Media & Photos",
+    "categories": [
+      "Media & Photos"
+    ],
     "port": 32400,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "lscr.io/linuxserver/plex:latest",
     "volumes": [
       "/DATA/AppData/plex/config:/config",
@@ -1029,9 +1103,12 @@
   {
     "id": "syncthing",
     "title": "Syncthing",
-    "category": "Security & Tools",
+    "category": "Cloud & Files",
+    "categories": [
+      "Cloud & Files"
+    ],
     "port": 8384,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "lscr.io/linuxserver/syncthing:latest",
     "volumes": [
       "/DATA/AppData/syncthing/config:/config",
@@ -1044,9 +1121,12 @@
   {
     "id": "filebrowser",
     "title": "FileBrowser",
-    "category": "Security & Tools",
+    "category": "Cloud & Files",
+    "categories": [
+      "Cloud & Files"
+    ],
     "port": 8087,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "filebrowser/filebrowser:latest",
     "volumes": [
       "/DATA:/srv",
@@ -1059,9 +1139,13 @@
   {
     "id": "qbittorrent",
     "title": "qBittorrent",
-    "category": "Security & Tools",
+    "category": "Media & Photos",
+    "categories": [
+      "Media & Photos",
+      "Knowledge & Wiki"
+    ],
     "port": 8080,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "lscr.io/linuxserver/qbittorrent:latest",
     "volumes": [
       "/DATA/AppData/qbittorrent/config:/config",
@@ -1075,6 +1159,9 @@
     "id": "uptimekuma",
     "title": "Uptime Kuma",
     "category": "Security & Tools",
+    "categories": [
+      "Security & Tools"
+    ],
     "port": 3001,
     "ram_mb": 128,
     "image": "louislam/uptime-kuma:1",
@@ -1089,6 +1176,12 @@
     "id": "portainer",
     "title": "Portainer CE",
     "category": "Security & Tools",
+    "categories": [
+      "Security & Tools",
+      "Network & VPN",
+      "Knowledge & Wiki",
+      "Gaming & AI"
+    ],
     "port": 9443,
     "ram_mb": 128,
     "image": "portainer/portainer-ce:latest",
@@ -1103,7 +1196,12 @@
   {
     "id": "nginxproxymanager",
     "title": "Nginx Proxy Manager",
-    "category": "Security & Tools",
+    "category": "Network & VPN",
+    "categories": [
+      "Network & VPN",
+      "Security & Tools",
+      "Gaming & AI"
+    ],
     "port": 81,
     "ram_mb": 128,
     "image": "jc21/nginx-proxy-manager:latest",
@@ -1118,9 +1216,15 @@
   {
     "id": "paperless",
     "title": "Paperless-ngx",
-    "category": "Security & Tools",
+    "category": "Cloud & Files",
+    "categories": [
+      "Cloud & Files",
+      "Security & Tools",
+      "Knowledge & Wiki",
+      "Gaming & AI"
+    ],
     "port": 8000,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "ghcr.io/paperless-ngx/paperless-ngx:latest",
     "volumes": [
       "/DATA/AppData/paperless/data:/usr/src/paperless/data",
@@ -1134,9 +1238,14 @@
     "id": "stirlingpdf",
     "title": "Stirling-PDF",
     "category": "Security & Tools",
+    "categories": [
+      "Security & Tools",
+      "Cloud & Files",
+      "Knowledge & Wiki"
+    ],
     "port": 8084,
     "ram_mb": 128,
-    "image": "frooodle/s-pdf:latest",
+    "image": "stirlingtools/stirling-pdf:latest",
     "volumes": [
       "/DATA/AppData/stirlingpdf/configs:/configs"
     ],
@@ -1147,9 +1256,12 @@
   {
     "id": "navidrome",
     "title": "Navidrome",
-    "category": "Security & Tools",
+    "category": "Media & Photos",
+    "categories": [
+      "Media & Photos"
+    ],
     "port": 4533,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "deluan/navidrome:latest",
     "volumes": [
       "/DATA/AppData/navidrome/data:/data",
@@ -1163,6 +1275,9 @@
     "id": "gitea",
     "title": "Gitea",
     "category": "Security & Tools",
+    "categories": [
+      "Security & Tools"
+    ],
     "port": 3002,
     "ram_mb": 128,
     "image": "gitea/gitea:latest",
@@ -1176,9 +1291,14 @@
   {
     "id": "audiobookshelf",
     "title": "Audiobookshelf",
-    "category": "Security & Tools",
+    "category": "Media & Photos",
+    "categories": [
+      "Media & Photos",
+      "Cloud & Files",
+      "Knowledge & Wiki"
+    ],
     "port": 13378,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "ghcr.io/advplyr/audiobookshelf:latest",
     "volumes": [
       "/DATA/Media/Audiobooks:/audiobooks",
@@ -1193,7 +1313,12 @@
   {
     "id": "kavita",
     "title": "Kavita",
-    "category": "Security & Tools",
+    "category": "Knowledge & Wiki",
+    "categories": [
+      "Knowledge & Wiki",
+      "Cloud & Files",
+      "Security & Tools"
+    ],
     "port": 5000,
     "ram_mb": 128,
     "image": "jvmilazz0/kavita:latest",
@@ -1208,7 +1333,10 @@
   {
     "id": "komga",
     "title": "Komga",
-    "category": "Security & Tools",
+    "category": "Knowledge & Wiki",
+    "categories": [
+      "Knowledge & Wiki"
+    ],
     "port": 25600,
     "ram_mb": 128,
     "image": "gotson/komga:latest",
@@ -1223,9 +1351,14 @@
   {
     "id": "photoprism",
     "title": "PhotoPrism",
-    "category": "Security & Tools",
+    "category": "Media & Photos",
+    "categories": [
+      "Media & Photos",
+      "Cloud & Files",
+      "Gaming & AI"
+    ],
     "port": 2342,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "photoprism/photoprism:latest",
     "volumes": [
       "/DATA/Media/Photos:/photoprism/originals",
@@ -1238,9 +1371,13 @@
   {
     "id": "photoview",
     "title": "Photoview",
-    "category": "Security & Tools",
+    "category": "Media & Photos",
+    "categories": [
+      "Media & Photos",
+      "Cloud & Files"
+    ],
     "port": 8089,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "viktorstrate/photoview:2",
     "volumes": [
       "/DATA/Media/Photos:/photos:ro",
@@ -1253,9 +1390,12 @@
   {
     "id": "swingmusic",
     "title": "Swing Music",
-    "category": "Security & Tools",
+    "category": "Media & Photos",
+    "categories": [
+      "Media & Photos"
+    ],
     "port": 1970,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "ghcr.io/swingmx/swingmusic:latest",
     "volumes": [
       "/DATA/Media/Music:/music",
@@ -1268,9 +1408,13 @@
   {
     "id": "airsonic",
     "title": "Airsonic-Advanced",
-    "category": "Security & Tools",
+    "category": "Media & Photos",
+    "categories": [
+      "Media & Photos",
+      "Gaming & AI"
+    ],
     "port": 4040,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "airsonicadvanced/airsonic-advanced:latest",
     "volumes": [
       "/DATA/Media/Music:/var/music",
@@ -1283,9 +1427,12 @@
   {
     "id": "jellyseerr",
     "title": "Jellyseerr",
-    "category": "Security & Tools",
+    "category": "Media & Photos",
+    "categories": [
+      "Media & Photos"
+    ],
     "port": 5055,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "fallenbagel/jellyseerr:latest",
     "volumes": [
       "/DATA/AppData/jellyseerr/config:/app/config"
@@ -1297,9 +1444,12 @@
   {
     "id": "overseerr",
     "title": "Overseerr",
-    "category": "Security & Tools",
+    "category": "Media & Photos",
+    "categories": [
+      "Media & Photos"
+    ],
     "port": 5056,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "lscr.io/linuxserver/overseerr:latest",
     "volumes": [
       "/DATA/AppData/overseerr/config:/config"
@@ -1311,9 +1461,13 @@
   {
     "id": "tautulli",
     "title": "Tautulli",
-    "category": "Security & Tools",
+    "category": "Media & Photos",
+    "categories": [
+      "Media & Photos",
+      "Security & Tools"
+    ],
     "port": 8181,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "lscr.io/linuxserver/tautulli:latest",
     "volumes": [
       "/DATA/AppData/tautulli/config:/config"
@@ -1325,9 +1479,13 @@
   {
     "id": "ersatztv",
     "title": "ErsatzTV",
-    "category": "Security & Tools",
+    "category": "Media & Photos",
+    "categories": [
+      "Media & Photos",
+      "Cloud & Files"
+    ],
     "port": 8409,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "jasongdove/ersatztv:latest",
     "volumes": [
       "/DATA/AppData/ersatztv/config:/root/.local/share/ersatztv",
@@ -1340,9 +1498,12 @@
   {
     "id": "owncast",
     "title": "Owncast",
-    "category": "Security & Tools",
+    "category": "Media & Photos",
+    "categories": [
+      "Media & Photos"
+    ],
     "port": 8097,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "owncast/owncast:latest",
     "volumes": [
       "/DATA/AppData/owncast/data:/app/data"
@@ -1354,9 +1515,12 @@
   {
     "id": "transmission",
     "title": "Transmission",
-    "category": "Security & Tools",
+    "category": "Media & Photos",
+    "categories": [
+      "Media & Photos"
+    ],
     "port": 9091,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "lscr.io/linuxserver/transmission:latest",
     "volumes": [
       "/DATA/AppData/transmission/config:/config",
@@ -1369,9 +1533,12 @@
   {
     "id": "deluge",
     "title": "Deluge",
-    "category": "Security & Tools",
+    "category": "Media & Photos",
+    "categories": [
+      "Media & Photos"
+    ],
     "port": 8112,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "lscr.io/linuxserver/deluge:latest",
     "volumes": [
       "/DATA/AppData/deluge/config:/config",
@@ -1384,9 +1551,14 @@
   {
     "id": "sabnzbd",
     "title": "SABnzbd",
-    "category": "Security & Tools",
+    "category": "Media & Photos",
+    "categories": [
+      "Media & Photos",
+      "Knowledge & Wiki",
+      "Gaming & AI"
+    ],
     "port": 8090,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "lscr.io/linuxserver/sabnzbd:latest",
     "volumes": [
       "/DATA/AppData/sabnzbd/config:/config",
@@ -1399,9 +1571,12 @@
   {
     "id": "nzbget",
     "title": "NZBGet",
-    "category": "Security & Tools",
+    "category": "Media & Photos",
+    "categories": [
+      "Media & Photos"
+    ],
     "port": 6789,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "lscr.io/linuxserver/nzbget:latest",
     "volumes": [
       "/DATA/AppData/nzbget/config:/config",
@@ -1414,9 +1589,12 @@
   {
     "id": "sonarr",
     "title": "Sonarr",
-    "category": "Security & Tools",
+    "category": "Media & Photos",
+    "categories": [
+      "Media & Photos"
+    ],
     "port": 8989,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "lscr.io/linuxserver/sonarr:latest",
     "volumes": [
       "/DATA/AppData/sonarr/config:/config",
@@ -1430,9 +1608,12 @@
   {
     "id": "radarr",
     "title": "Radarr",
-    "category": "Security & Tools",
+    "category": "Media & Photos",
+    "categories": [
+      "Media & Photos"
+    ],
     "port": 7878,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "lscr.io/linuxserver/radarr:latest",
     "volumes": [
       "/DATA/AppData/radarr/config:/config",
@@ -1446,9 +1627,13 @@
   {
     "id": "prowlarr",
     "title": "Prowlarr",
-    "category": "Security & Tools",
+    "category": "Media & Photos",
+    "categories": [
+      "Media & Photos",
+      "Cloud & Files"
+    ],
     "port": 9696,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "lscr.io/linuxserver/prowlarr:latest",
     "volumes": [
       "/DATA/AppData/prowlarr/config:/config"
@@ -1460,9 +1645,12 @@
   {
     "id": "lidarr",
     "title": "Lidarr",
-    "category": "Security & Tools",
+    "category": "Media & Photos",
+    "categories": [
+      "Media & Photos"
+    ],
     "port": 8686,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "lscr.io/linuxserver/lidarr:latest",
     "volumes": [
       "/DATA/AppData/lidarr/config:/config",
@@ -1476,7 +1664,11 @@
   {
     "id": "readarr",
     "title": "Readarr",
-    "category": "Security & Tools",
+    "category": "Knowledge & Wiki",
+    "categories": [
+      "Knowledge & Wiki",
+      "Media & Photos"
+    ],
     "port": 8787,
     "ram_mb": 128,
     "image": "lscr.io/linuxserver/readarr:develop",
@@ -1492,9 +1684,13 @@
   {
     "id": "bazarr",
     "title": "Bazarr",
-    "category": "Security & Tools",
+    "category": "Media & Photos",
+    "categories": [
+      "Media & Photos",
+      "Cloud & Files"
+    ],
     "port": 6767,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "lscr.io/linuxserver/bazarr:latest",
     "volumes": [
       "/DATA/AppData/bazarr/config:/config",
@@ -1507,9 +1703,12 @@
   {
     "id": "metube",
     "title": "MeTube (yt-dlp Web UI)",
-    "category": "Security & Tools",
+    "category": "Media & Photos",
+    "categories": [
+      "Media & Photos"
+    ],
     "port": 8091,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "ghcr.io/alexta69/metube:latest",
     "volumes": [
       "/DATA/Downloads:/downloads"
@@ -1521,9 +1720,12 @@
   {
     "id": "owncloud",
     "title": "ownCloud Infinite Scale (oCIS)",
-    "category": "Security & Tools",
+    "category": "Cloud & Files",
+    "categories": [
+      "Cloud & Files"
+    ],
     "port": 9200,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "owncloud/ocis:latest",
     "volumes": [
       "/DATA/AppData/owncloud/config:/etc/ocis",
@@ -1536,9 +1738,12 @@
   {
     "id": "seafile",
     "title": "Seafile",
-    "category": "Security & Tools",
+    "category": "Cloud & Files",
+    "categories": [
+      "Cloud & Files"
+    ],
     "port": 8092,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "seafileltd/seafile-mc:latest",
     "volumes": [
       "/DATA/AppData/seafile/data:/shared"
@@ -1550,9 +1755,13 @@
   {
     "id": "pairdrop",
     "title": "PairDrop (Local AirDrop)",
-    "category": "Security & Tools",
+    "category": "Cloud & Files",
+    "categories": [
+      "Cloud & Files",
+      "Gaming & AI"
+    ],
     "port": 3003,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "lscr.io/linuxserver/pairdrop:latest",
     "volumes": [
       "/DATA/AppData/pairdrop/config:/config"
@@ -1564,9 +1773,13 @@
   {
     "id": "pingvinshare",
     "title": "Pingvin Share",
-    "category": "Security & Tools",
+    "category": "Cloud & Files",
+    "categories": [
+      "Cloud & Files",
+      "Security & Tools"
+    ],
     "port": 3004,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "stonith404/pingvin-share:latest",
     "volumes": [
       "/DATA/AppData/pingvinshare/data:/opt/app/backend/data"
@@ -1578,9 +1791,12 @@
   {
     "id": "sftpgo",
     "title": "SFTPGo",
-    "category": "Security & Tools",
+    "category": "Cloud & Files",
+    "categories": [
+      "Cloud & Files"
+    ],
     "port": 8093,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "drakkan/sftpgo:latest",
     "volumes": [
       "/DATA/AppData/sftpgo/data:/srv/sftpgo",
@@ -1593,9 +1809,13 @@
   {
     "id": "bentopdf",
     "title": "BentoPDF",
-    "category": "Security & Tools",
+    "category": "Cloud & Files",
+    "categories": [
+      "Cloud & Files",
+      "Security & Tools"
+    ],
     "port": 8094,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "ghcr.io/alam00000/bentopdf:latest",
     "volumes": [
       "/DATA/AppData/bentopdf/data:/app/data"
@@ -1607,9 +1827,13 @@
   {
     "id": "onlyoffice",
     "title": "ONLYOFFICE Document Server",
-    "category": "Security & Tools",
+    "category": "Cloud & Files",
+    "categories": [
+      "Cloud & Files",
+      "Knowledge & Wiki"
+    ],
     "port": 8095,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "onlyoffice/documentserver:latest",
     "volumes": [
       "/DATA/AppData/onlyoffice/data:/var/www/onlyoffice/Data",
@@ -1622,9 +1846,13 @@
   {
     "id": "collabora",
     "title": "Collabora Online (LibreOffice Web)",
-    "category": "Security & Tools",
+    "category": "Cloud & Files",
+    "categories": [
+      "Cloud & Files",
+      "Knowledge & Wiki"
+    ],
     "port": 9980,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "collabora/code:latest",
     "volumes": [
       "/DATA/AppData/collabora/config:/etc/coolwsd"
@@ -1636,9 +1864,12 @@
   {
     "id": "duplicati",
     "title": "Duplicati Backup",
-    "category": "Security & Tools",
+    "category": "Cloud & Files",
+    "categories": [
+      "Cloud & Files"
+    ],
     "port": 8200,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "lscr.io/linuxserver/duplicati:latest",
     "volumes": [
       "/DATA/AppData/duplicati/config:/config",
@@ -1651,9 +1882,12 @@
   {
     "id": "kopia",
     "title": "Kopia Backup Server",
-    "category": "Security & Tools",
+    "category": "Cloud & Files",
+    "categories": [
+      "Cloud & Files"
+    ],
     "port": 51515,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "kopia/kopia:latest",
     "volumes": [
       "/DATA/AppData/kopia/config:/app/config",
@@ -1667,7 +1901,11 @@
   {
     "id": "outline",
     "title": "Outline Wiki",
-    "category": "Security & Tools",
+    "category": "Knowledge & Wiki",
+    "categories": [
+      "Knowledge & Wiki",
+      "Cloud & Files"
+    ],
     "port": 3006,
     "ram_mb": 128,
     "image": "docker.getoutline.com/outlinewiki/outline:latest",
@@ -1681,7 +1919,10 @@
   {
     "id": "affine",
     "title": "AFFiNE",
-    "category": "Security & Tools",
+    "category": "Knowledge & Wiki",
+    "categories": [
+      "Knowledge & Wiki"
+    ],
     "port": 3010,
     "ram_mb": 128,
     "image": "ghcr.io/toeverything/affine:stable",
@@ -1696,7 +1937,11 @@
   {
     "id": "blinko",
     "title": "Blinko",
-    "category": "Security & Tools",
+    "category": "Knowledge & Wiki",
+    "categories": [
+      "Knowledge & Wiki",
+      "Gaming & AI"
+    ],
     "port": 1111,
     "ram_mb": 128,
     "image": "blinkospace/blinko:latest",
@@ -1710,7 +1955,10 @@
   {
     "id": "memos",
     "title": "Memos",
-    "category": "Security & Tools",
+    "category": "Knowledge & Wiki",
+    "categories": [
+      "Knowledge & Wiki"
+    ],
     "port": 5230,
     "ram_mb": 128,
     "image": "neosmemo/memos:stable",
@@ -1724,7 +1972,10 @@
   {
     "id": "trilium",
     "title": "TriliumNext Notes",
-    "category": "Security & Tools",
+    "category": "Knowledge & Wiki",
+    "categories": [
+      "Knowledge & Wiki"
+    ],
     "port": 8098,
     "ram_mb": 128,
     "image": "triliumnext/notes:latest",
@@ -1738,7 +1989,11 @@
   {
     "id": "silverbullet",
     "title": "SilverBullet",
-    "category": "Security & Tools",
+    "category": "Knowledge & Wiki",
+    "categories": [
+      "Knowledge & Wiki",
+      "Gaming & AI"
+    ],
     "port": 3007,
     "ram_mb": 128,
     "image": "zefhemel/silverbullet:latest",
@@ -1752,7 +2007,11 @@
   {
     "id": "docmost",
     "title": "Docmost",
-    "category": "Security & Tools",
+    "category": "Knowledge & Wiki",
+    "categories": [
+      "Knowledge & Wiki",
+      "Cloud & Files"
+    ],
     "port": 3008,
     "ram_mb": 128,
     "image": "docmost/docmost:latest",
@@ -1766,7 +2025,10 @@
   {
     "id": "karakeep",
     "title": "Karakeep (Hoarder Bookmarks)",
-    "category": "Security & Tools",
+    "category": "Knowledge & Wiki",
+    "categories": [
+      "Knowledge & Wiki"
+    ],
     "port": 3009,
     "ram_mb": 128,
     "image": "ghcr.io/karakeep-app/karakeep:release",
@@ -1780,7 +2042,12 @@
   {
     "id": "linkwarden",
     "title": "Linkwarden",
-    "category": "Security & Tools",
+    "category": "Knowledge & Wiki",
+    "categories": [
+      "Knowledge & Wiki",
+      "Cloud & Files",
+      "Security & Tools"
+    ],
     "port": 3011,
     "ram_mb": 128,
     "image": "ghcr.io/linkwarden/linkwarden:latest",
@@ -1794,7 +2061,10 @@
   {
     "id": "freshrss",
     "title": "FreshRSS",
-    "category": "Security & Tools",
+    "category": "Knowledge & Wiki",
+    "categories": [
+      "Knowledge & Wiki"
+    ],
     "port": 8099,
     "ram_mb": 128,
     "image": "lscr.io/linuxserver/freshrss:latest",
@@ -1808,7 +2078,11 @@
   {
     "id": "miniflux",
     "title": "Miniflux",
-    "category": "Security & Tools",
+    "category": "Knowledge & Wiki",
+    "categories": [
+      "Knowledge & Wiki",
+      "Cloud & Files"
+    ],
     "port": 8101,
     "ram_mb": 128,
     "image": "miniflux/miniflux:latest",
@@ -1822,7 +2096,10 @@
   {
     "id": "wallabag",
     "title": "Wallabag (Read-It-Later)",
-    "category": "Security & Tools",
+    "category": "Knowledge & Wiki",
+    "categories": [
+      "Knowledge & Wiki"
+    ],
     "port": 8102,
     "ram_mb": 128,
     "image": "wallabag/wallabag:latest",
@@ -1837,7 +2114,11 @@
   {
     "id": "technitium",
     "title": "Technitium DNS Server",
-    "category": "Security & Tools",
+    "category": "Network & VPN",
+    "categories": [
+      "Network & VPN",
+      "Security & Tools"
+    ],
     "port": 5380,
     "ram_mb": 128,
     "image": "technitium/dns-server:latest",
@@ -1851,7 +2132,11 @@
   {
     "id": "unbound",
     "title": "Unbound Recursive DNS",
-    "category": "Security & Tools",
+    "category": "Network & VPN",
+    "categories": [
+      "Network & VPN",
+      "Security & Tools"
+    ],
     "port": 5335,
     "ram_mb": 128,
     "image": "mvance/unbound:latest",
@@ -1865,7 +2150,12 @@
   {
     "id": "headscale",
     "title": "Headscale (Self-Hosted Tailscale Control)",
-    "category": "Security & Tools",
+    "category": "Network & VPN",
+    "categories": [
+      "Network & VPN",
+      "Security & Tools",
+      "Gaming & AI"
+    ],
     "port": 8103,
     "ram_mb": 128,
     "image": "headscale/headscale:latest",
@@ -1880,7 +2170,11 @@
   {
     "id": "netbird",
     "title": "NetBird Mesh VPN",
-    "category": "Security & Tools",
+    "category": "Network & VPN",
+    "categories": [
+      "Network & VPN",
+      "Security & Tools"
+    ],
     "port": 8104,
     "ram_mb": 128,
     "image": "netbirdio/dashboard:latest",
@@ -1894,7 +2188,13 @@
   {
     "id": "traefik",
     "title": "Traefik Proxy",
-    "category": "Security & Tools",
+    "category": "Network & VPN",
+    "categories": [
+      "Network & VPN",
+      "Cloud & Files",
+      "Security & Tools",
+      "Knowledge & Wiki"
+    ],
     "port": 8105,
     "ram_mb": 128,
     "image": "traefik:v3.1",
@@ -1909,7 +2209,12 @@
   {
     "id": "caddy",
     "title": "Caddy Web & Reverse Proxy",
-    "category": "Security & Tools",
+    "category": "Network & VPN",
+    "categories": [
+      "Network & VPN",
+      "Cloud & Files",
+      "Security & Tools"
+    ],
     "port": 8106,
     "ram_mb": 128,
     "image": "caddy:latest",
@@ -1924,7 +2229,12 @@
   {
     "id": "cloudflared",
     "title": "Cloudflare Tunnel (cloudflared)",
-    "category": "Security & Tools",
+    "category": "Network & VPN",
+    "categories": [
+      "Network & VPN",
+      "Cloud & Files",
+      "Gaming & AI"
+    ],
     "port": 8107,
     "ram_mb": 128,
     "image": "cloudflare/cloudflared:latest",
@@ -1938,7 +2248,10 @@
   {
     "id": "librespeed",
     "title": "LibreSpeed (LAN Speedtest)",
-    "category": "Security & Tools",
+    "category": "Network & VPN",
+    "categories": [
+      "Network & VPN"
+    ],
     "port": 8108,
     "ram_mb": 128,
     "image": "lscr.io/linuxserver/librespeed:latest",
@@ -1952,7 +2265,10 @@
   {
     "id": "openspeedtest",
     "title": "OpenSpeedTest",
-    "category": "Security & Tools",
+    "category": "Network & VPN",
+    "categories": [
+      "Network & VPN"
+    ],
     "port": 3012,
     "ram_mb": 128,
     "image": "openspeedtest/latest:latest",
@@ -1966,7 +2282,11 @@
   {
     "id": "speedtest_tracker",
     "title": "Speedtest Tracker",
-    "category": "Security & Tools",
+    "category": "Network & VPN",
+    "categories": [
+      "Network & VPN",
+      "Security & Tools"
+    ],
     "port": 8109,
     "ram_mb": 128,
     "image": "lscr.io/linuxserver/speedtest-tracker:latest",
@@ -1980,7 +2300,10 @@
   {
     "id": "smokeping",
     "title": "SmokePing",
-    "category": "Security & Tools",
+    "category": "Network & VPN",
+    "categories": [
+      "Network & VPN"
+    ],
     "port": 8110,
     "ram_mb": 128,
     "image": "lscr.io/linuxserver/smokeping:latest",
@@ -1996,8 +2319,14 @@
     "id": "frigate",
     "title": "Frigate NVR (AI Security Cameras)",
     "category": "Smart Home",
+    "categories": [
+      "Smart Home",
+      "Media & Photos",
+      "Security & Tools",
+      "Gaming & AI"
+    ],
     "port": 5001,
-    "ram_mb": 512,
+    "ram_mb": 2048,
     "image": "ghcr.io/blakeblackshear/frigate:stable",
     "volumes": [
       "/DATA/AppData/frigate/config:/config",
@@ -2011,6 +2340,10 @@
     "id": "scrypted",
     "title": "Scrypted (HomeKit Secure Video Bridge)",
     "category": "Smart Home",
+    "categories": [
+      "Smart Home",
+      "Media & Photos"
+    ],
     "port": 10443,
     "ram_mb": 512,
     "image": "koush/scrypted:latest",
@@ -2025,6 +2358,9 @@
     "id": "homebridge",
     "title": "Homebridge",
     "category": "Smart Home",
+    "categories": [
+      "Smart Home"
+    ],
     "port": 8581,
     "ram_mb": 512,
     "image": "homebridge/homebridge:latest",
@@ -2039,6 +2375,10 @@
     "id": "zigbee2mqtt",
     "title": "Zigbee2MQTT",
     "category": "Smart Home",
+    "categories": [
+      "Smart Home",
+      "Gaming & AI"
+    ],
     "port": 8111,
     "ram_mb": 512,
     "image": "koenkk/zigbee2mqtt:latest",
@@ -2053,6 +2393,9 @@
     "id": "mosquitto",
     "title": "Eclipse Mosquitto MQTT Broker",
     "category": "Smart Home",
+    "categories": [
+      "Smart Home"
+    ],
     "port": 1883,
     "ram_mb": 512,
     "image": "eclipse-mosquitto:2",
@@ -2068,6 +2411,10 @@
     "id": "nodered",
     "title": "Node-RED",
     "category": "Smart Home",
+    "categories": [
+      "Smart Home",
+      "Gaming & AI"
+    ],
     "port": 1880,
     "ram_mb": 512,
     "image": "nodered/node-red:latest",
@@ -2082,6 +2429,10 @@
     "id": "esphome",
     "title": "ESPHome Dashboard",
     "category": "Smart Home",
+    "categories": [
+      "Smart Home",
+      "Cloud & Files"
+    ],
     "port": 6052,
     "ram_mb": 512,
     "image": "ghcr.io/esphome/esphome:stable",
@@ -2096,6 +2447,12 @@
     "id": "music_assistant",
     "title": "Music Assistant",
     "category": "Smart Home",
+    "categories": [
+      "Smart Home",
+      "Media & Photos",
+      "Cloud & Files",
+      "Gaming & AI"
+    ],
     "port": 8095,
     "ram_mb": 512,
     "image": "ghcr.io/music-assistant/server:latest",
@@ -2110,9 +2467,15 @@
   {
     "id": "anythingllm",
     "title": "AnythingLLM (Chat with Your PDFs & Docs)",
-    "category": "Security & Tools",
+    "category": "Gaming & AI",
+    "categories": [
+      "Gaming & AI",
+      "Cloud & Files",
+      "Security & Tools",
+      "Knowledge & Wiki"
+    ],
     "port": 3013,
-    "ram_mb": 128,
+    "ram_mb": 4096,
     "image": "mintplexlabs/anythingllm:latest",
     "volumes": [
       "/DATA/AppData/anythingllm/storage:/app/server/storage"
@@ -2124,9 +2487,12 @@
   {
     "id": "librechat",
     "title": "LibreChat",
-    "category": "Security & Tools",
+    "category": "Gaming & AI",
+    "categories": [
+      "Gaming & AI"
+    ],
     "port": 3080,
-    "ram_mb": 128,
+    "ram_mb": 4096,
     "image": "ghcr.io/danny-avila/librechat:latest",
     "volumes": [
       "/DATA/AppData/librechat/images:/app/client/public/images"
@@ -2138,9 +2504,13 @@
   {
     "id": "whisper_asr",
     "title": "Whisper ASR (Offline Speech-to-Text)",
-    "category": "Security & Tools",
+    "category": "Gaming & AI",
+    "categories": [
+      "Gaming & AI",
+      "Media & Photos"
+    ],
     "port": 9000,
-    "ram_mb": 128,
+    "ram_mb": 4096,
     "image": "onerahmet/openai-whisper-asr-webservice:latest",
     "volumes": [
       "/DATA/AppData/whisper_asr/cache:/root/.cache"
@@ -2152,9 +2522,12 @@
   {
     "id": "flowise",
     "title": "Flowise AI (Visual LLM Builder)",
-    "category": "Security & Tools",
+    "category": "Gaming & AI",
+    "categories": [
+      "Gaming & AI"
+    ],
     "port": 3014,
-    "ram_mb": 128,
+    "ram_mb": 4096,
     "image": "flowiseai/flowise:latest",
     "volumes": [
       "/DATA/AppData/flowise/data:/root/.flowise"
@@ -2166,9 +2539,12 @@
   {
     "id": "sd_forge",
     "title": "Stable Diffusion WebUI Forge",
-    "category": "Security & Tools",
+    "category": "Gaming & AI",
+    "categories": [
+      "Gaming & AI"
+    ],
     "port": 7860,
-    "ram_mb": 128,
+    "ram_mb": 4096,
     "image": "nykk3/stable-diffusion-webui-forge:latest",
     "volumes": [
       "/DATA/AppData/sd_forge/data:/data"
@@ -2180,9 +2556,12 @@
   {
     "id": "romm",
     "title": "RomM (Retro Gaming & Emulator Library)",
-    "category": "Security & Tools",
+    "category": "Gaming & AI",
+    "categories": [
+      "Gaming & AI"
+    ],
     "port": 8113,
-    "ram_mb": 128,
+    "ram_mb": 2048,
     "image": "rommapp/romm:latest",
     "volumes": [
       "/DATA/Media/Roms:/romm/library",
@@ -2195,9 +2574,13 @@
   {
     "id": "palworld",
     "title": "Palworld Dedicated Server",
-    "category": "Security & Tools",
+    "category": "Gaming & AI",
+    "categories": [
+      "Gaming & AI",
+      "Cloud & Files"
+    ],
     "port": 8211,
-    "ram_mb": 128,
+    "ram_mb": 2048,
     "image": "thijsvanloef/palworld-server-docker:latest",
     "volumes": [
       "/DATA/AppData/palworld/palworld:/palworld"
@@ -2209,9 +2592,13 @@
   {
     "id": "valheim",
     "title": "Valheim Dedicated Server",
-    "category": "Security & Tools",
+    "category": "Gaming & AI",
+    "categories": [
+      "Gaming & AI",
+      "Cloud & Files"
+    ],
     "port": 2456,
-    "ram_mb": 128,
+    "ram_mb": 2048,
     "image": "lloesche/valheim-server:latest",
     "volumes": [
       "/DATA/AppData/valheim/config:/config",
@@ -2224,7 +2611,10 @@
   {
     "id": "terraria",
     "title": "Terraria Server (TShock)",
-    "category": "Security & Tools",
+    "category": "Gaming & AI",
+    "categories": [
+      "Gaming & AI"
+    ],
     "port": 7777,
     "ram_mb": 128,
     "image": "ryshe/terraria:latest",
@@ -2238,7 +2628,10 @@
   {
     "id": "factorio",
     "title": "Factorio Headless Server",
-    "category": "Security & Tools",
+    "category": "Gaming & AI",
+    "categories": [
+      "Gaming & AI"
+    ],
     "port": 34197,
     "ram_mb": 128,
     "image": "factoriotools/factorio:stable",
@@ -2252,9 +2645,13 @@
   {
     "id": "actualbudget",
     "title": "Actual Budget",
-    "category": "Security & Tools",
+    "category": "Cloud & Files",
+    "categories": [
+      "Cloud & Files",
+      "Knowledge & Wiki"
+    ],
     "port": 5006,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "actualbudget/actual-server:latest",
     "volumes": [
       "/DATA/AppData/actualbudget/data:/data"
@@ -2266,9 +2663,13 @@
   {
     "id": "firefly",
     "title": "Firefly III",
-    "category": "Security & Tools",
+    "category": "Cloud & Files",
+    "categories": [
+      "Cloud & Files",
+      "Knowledge & Wiki"
+    ],
     "port": 8114,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "fireflyiii/core:latest",
     "volumes": [
       "/DATA/AppData/firefly/upload:/var/www/html/storage/upload"
@@ -2280,9 +2681,12 @@
   {
     "id": "wallos",
     "title": "Wallos (Subscription Tracker)",
-    "category": "Security & Tools",
+    "category": "Cloud & Files",
+    "categories": [
+      "Cloud & Files"
+    ],
     "port": 8282,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "bellamy/wallos:latest",
     "volumes": [
       "/DATA/AppData/wallos/db:/var/www/html/db",
@@ -2296,6 +2700,10 @@
     "id": "mealie",
     "title": "Mealie (Recipe & Meal Planner)",
     "category": "Smart Home",
+    "categories": [
+      "Smart Home",
+      "Knowledge & Wiki"
+    ],
     "port": 9925,
     "ram_mb": 512,
     "image": "ghcr.io/mealie-recipes/mealie:latest",
@@ -2310,6 +2718,11 @@
     "id": "tandoor",
     "title": "Tandoor Recipes",
     "category": "Smart Home",
+    "categories": [
+      "Smart Home",
+      "Cloud & Files",
+      "Knowledge & Wiki"
+    ],
     "port": 8115,
     "ram_mb": 512,
     "image": "vabene1111/recipes:latest",
@@ -2325,6 +2738,9 @@
     "id": "grocy",
     "title": "Grocy (Pantry & Household ERP)",
     "category": "Smart Home",
+    "categories": [
+      "Smart Home"
+    ],
     "port": 9283,
     "ram_mb": 512,
     "image": "lscr.io/linuxserver/grocy:latest",
@@ -2338,9 +2754,12 @@
   {
     "id": "vikunja",
     "title": "Vikunja (To-Do & Kanban)",
-    "category": "Security & Tools",
+    "category": "Cloud & Files",
+    "categories": [
+      "Cloud & Files"
+    ],
     "port": 3456,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "vikunja/vikunja:latest",
     "volumes": [
       "/DATA/AppData/vikunja/files:/app/vikunja/files"
@@ -2352,9 +2771,14 @@
   {
     "id": "nocodb",
     "title": "NocoDB (Airtable Alternative)",
-    "category": "Security & Tools",
+    "category": "Cloud & Files",
+    "categories": [
+      "Cloud & Files",
+      "Knowledge & Wiki",
+      "Gaming & AI"
+    ],
     "port": 8116,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "nocodb/nocodb:latest",
     "volumes": [
       "/DATA/AppData/nocodb/data:/usr/app/data"
@@ -2366,9 +2790,13 @@
   {
     "id": "baserow",
     "title": "Baserow",
-    "category": "Security & Tools",
+    "category": "Cloud & Files",
+    "categories": [
+      "Cloud & Files",
+      "Security & Tools"
+    ],
     "port": 8117,
-    "ram_mb": 128,
+    "ram_mb": 512,
     "image": "baserow/baserow:latest",
     "volumes": [
       "/DATA/AppData/baserow/data:/baserow/data"
@@ -2381,6 +2809,12 @@
     "id": "homebox",
     "title": "Homebox (Home Inventory)",
     "category": "Smart Home",
+    "categories": [
+      "Smart Home",
+      "Cloud & Files",
+      "Security & Tools",
+      "Gaming & AI"
+    ],
     "port": 3100,
     "ram_mb": 512,
     "image": "ghcr.io/sysadminsmedia/homebox:latest",
@@ -2395,6 +2829,9 @@
     "id": "2fauth",
     "title": "2FAuth (Web 2FA Authenticator)",
     "category": "Security & Tools",
+    "categories": [
+      "Security & Tools"
+    ],
     "port": 8118,
     "ram_mb": 128,
     "image": "2fauth/2fauth:latest",
@@ -2409,6 +2846,9 @@
     "id": "authentik",
     "title": "Authentik SSO",
     "category": "Security & Tools",
+    "categories": [
+      "Security & Tools"
+    ],
     "port": 9001,
     "ram_mb": 128,
     "image": "ghcr.io/goauthentik/server:latest",
@@ -2424,6 +2864,9 @@
     "id": "pocketid",
     "title": "Pocket ID (Passkey OIDC Provider)",
     "category": "Security & Tools",
+    "categories": [
+      "Security & Tools"
+    ],
     "port": 3015,
     "ram_mb": 128,
     "image": "ghcr.io/pocket-id/pocket-id:latest",
@@ -2438,6 +2881,10 @@
     "id": "dockge",
     "title": "Dockge (Compose Stack Manager)",
     "category": "Security & Tools",
+    "categories": [
+      "Security & Tools",
+      "Knowledge & Wiki"
+    ],
     "port": 5001,
     "ram_mb": 128,
     "image": "louislam/dockge:1",
@@ -2454,6 +2901,11 @@
     "id": "dozzle",
     "title": "Dozzle (Real-Time Container Logs)",
     "category": "Security & Tools",
+    "categories": [
+      "Security & Tools",
+      "Knowledge & Wiki",
+      "Gaming & AI"
+    ],
     "port": 8888,
     "ram_mb": 128,
     "image": "amir20/dozzle:latest",
@@ -2468,6 +2920,9 @@
     "id": "forgejo",
     "title": "Forgejo (Self-Hosted Git)",
     "category": "Security & Tools",
+    "categories": [
+      "Security & Tools"
+    ],
     "port": 3016,
     "ram_mb": 128,
     "image": "codeberg.org/forgejo/forgejo:9",
@@ -2482,6 +2937,9 @@
     "id": "codeserver",
     "title": "code-server (VS Code in Browser)",
     "category": "Security & Tools",
+    "categories": [
+      "Security & Tools"
+    ],
     "port": 8443,
     "ram_mb": 128,
     "image": "lscr.io/linuxserver/code-server:latest",
@@ -2497,6 +2955,11 @@
     "id": "n8n",
     "title": "n8n Workflow Automation",
     "category": "Security & Tools",
+    "categories": [
+      "Security & Tools",
+      "Smart Home",
+      "Gaming & AI"
+    ],
     "port": 5678,
     "ram_mb": 128,
     "image": "docker.n8n.io/n8nio/n8n:latest",
@@ -2511,6 +2974,10 @@
     "id": "it_tools",
     "title": "IT-Tools (Developer Swiss Army Knife)",
     "category": "Security & Tools",
+    "categories": [
+      "Security & Tools",
+      "Network & VPN"
+    ],
     "port": 8119,
     "ram_mb": 128,
     "image": "corentinth/it-tools:latest",
@@ -2525,6 +2992,9 @@
     "id": "cyberchef",
     "title": "CyberChef",
     "category": "Security & Tools",
+    "categories": [
+      "Security & Tools"
+    ],
     "port": 8120,
     "ram_mb": 128,
     "image": "ghcr.io/gchq/cyberchef:latest",
@@ -2539,6 +3009,9 @@
     "id": "homarr",
     "title": "Homarr Dashboard",
     "category": "Security & Tools",
+    "categories": [
+      "Security & Tools"
+    ],
     "port": 7575,
     "ram_mb": 128,
     "image": "ghcr.io/ajnart/homarr:latest",
@@ -2554,6 +3027,9 @@
     "id": "homepage",
     "title": "Homepage Dashboard",
     "category": "Security & Tools",
+    "categories": [
+      "Security & Tools"
+    ],
     "port": 3017,
     "ram_mb": 128,
     "image": "ghcr.io/gethomepage/homepage:latest",
@@ -2569,6 +3045,9 @@
     "id": "dashy",
     "title": "Dashy",
     "category": "Security & Tools",
+    "categories": [
+      "Security & Tools"
+    ],
     "port": 4000,
     "ram_mb": 128,
     "image": "lissy93/dashy:latest",
@@ -2583,6 +3062,10 @@
     "id": "glance",
     "title": "Glance (Personal Feed & Status Hub)",
     "category": "Security & Tools",
+    "categories": [
+      "Security & Tools",
+      "Knowledge & Wiki"
+    ],
     "port": 8121,
     "ram_mb": 128,
     "image": "glanceapp/glance:latest",
@@ -2597,6 +3080,9 @@
     "id": "changedetection",
     "title": "changedetection.io",
     "category": "Security & Tools",
+    "categories": [
+      "Security & Tools"
+    ],
     "port": 5005,
     "ram_mb": 128,
     "image": "ghcr.io/dgtlmoon/changedetection.io:latest",
@@ -2611,6 +3097,9 @@
     "id": "ntfy",
     "title": "ntfy Push Notification Server",
     "category": "Security & Tools",
+    "categories": [
+      "Security & Tools"
+    ],
     "port": 8122,
     "ram_mb": 128,
     "image": "binwiederhier/ntfy:latest",
@@ -2626,6 +3115,9 @@
     "id": "gotify",
     "title": "Gotify Notification Server",
     "category": "Security & Tools",
+    "categories": [
+      "Security & Tools"
+    ],
     "port": 8124,
     "ram_mb": 128,
     "image": "gotify/server:latest",
@@ -2640,6 +3132,11 @@
     "id": "scrutiny",
     "title": "Scrutiny (Hard Drive S.M.A.R.T. Web UI)",
     "category": "Security & Tools",
+    "categories": [
+      "Security & Tools",
+      "Cloud & Files",
+      "Gaming & AI"
+    ],
     "port": 8125,
     "ram_mb": 128,
     "image": "ghcr.io/analogj/scrutiny:master-omnibus",
@@ -2655,6 +3152,10 @@
     "id": "glances",
     "title": "Glances System Monitor",
     "category": "Security & Tools",
+    "categories": [
+      "Security & Tools",
+      "Network & VPN"
+    ],
     "port": 61208,
     "ram_mb": 128,
     "image": "nicolargo/glances:latest-full",
@@ -2669,6 +3170,11 @@
     "id": "beszel",
     "title": "Beszel (Lightweight Server Monitoring Hub)",
     "category": "Security & Tools",
+    "categories": [
+      "Security & Tools",
+      "Knowledge & Wiki",
+      "Gaming & AI"
+    ],
     "port": 8090,
     "ram_mb": 128,
     "image": "henrygd/beszel:latest",
@@ -2683,6 +3189,9 @@
     "id": "grafana",
     "title": "Grafana",
     "category": "Security & Tools",
+    "categories": [
+      "Security & Tools"
+    ],
     "port": 3018,
     "ram_mb": 128,
     "image": "grafana/grafana-oss:latest",
@@ -2697,6 +3206,10 @@
     "id": "prometheus",
     "title": "Prometheus",
     "category": "Security & Tools",
+    "categories": [
+      "Security & Tools",
+      "Gaming & AI"
+    ],
     "port": 9092,
     "ram_mb": 128,
     "image": "prom/prometheus:latest",
@@ -2711,6 +3224,11 @@
     "id": "watchtower",
     "title": "Watchtower (Auto Container Updater)",
     "category": "Security & Tools",
+    "categories": [
+      "Security & Tools",
+      "Knowledge & Wiki",
+      "Gaming & AI"
+    ],
     "port": 8126,
     "ram_mb": 128,
     "image": "containrrr/watchtower:latest",
@@ -2724,7 +3242,10 @@
   {
     "id": "excalidraw",
     "title": "Excalidraw Whiteboard",
-    "category": "Security & Tools",
+    "category": "Knowledge & Wiki",
+    "categories": [
+      "Knowledge & Wiki"
+    ],
     "port": 3019,
     "ram_mb": 128,
     "image": "excalidraw/excalidraw:latest",
@@ -2738,7 +3259,12 @@
   {
     "id": "drawio",
     "title": "draw.io (diagrams.net)",
-    "category": "Security & Tools",
+    "category": "Knowledge & Wiki",
+    "categories": [
+      "Knowledge & Wiki",
+      "Network & VPN",
+      "Security & Tools"
+    ],
     "port": 8127,
     "ram_mb": 128,
     "image": "jgraph/drawio:latest",
@@ -2752,7 +3278,10 @@
   {
     "id": "searxng",
     "title": "SearXNG (Private Metasearch Engine)",
-    "category": "Security & Tools",
+    "category": "Network & VPN",
+    "categories": [
+      "Network & VPN"
+    ],
     "port": 8128,
     "ram_mb": 128,
     "image": "searxng/searxng:latest",
@@ -2766,7 +3295,10 @@
   {
     "id": "whoogle",
     "title": "Whoogle Search",
-    "category": "Security & Tools",
+    "category": "Network & VPN",
+    "categories": [
+      "Network & VPN"
+    ],
     "port": 5002,
     "ram_mb": 128,
     "image": "benbusby/whoogle-search:latest",
@@ -2780,9 +3312,15 @@
   {
     "id": "privategpt_lite",
     "title": "Open-Notebook (Self-Hosted NotebookLM)",
-    "category": "Security & Tools",
+    "category": "Gaming & AI",
+    "categories": [
+      "Gaming & AI",
+      "Cloud & Files",
+      "Security & Tools",
+      "Knowledge & Wiki"
+    ],
     "port": 8502,
-    "ram_mb": 128,
+    "ram_mb": 4096,
     "image": "lfnovo/open_notebook:latest",
     "volumes": [
       "/DATA/AppData/open_notebook/data:/app/data"
@@ -2794,7 +3332,12 @@
   {
     "id": "archivebox",
     "title": "ArchiveBox (Personal Wayback Machine)",
-    "category": "Security & Tools",
+    "category": "Knowledge & Wiki",
+    "categories": [
+      "Knowledge & Wiki",
+      "Cloud & Files",
+      "Security & Tools"
+    ],
     "port": 8129,
     "ram_mb": 128,
     "image": "archivebox/archivebox:latest",
@@ -2816,7 +3359,77 @@
       { id: "gutenberg_en_all", title: "Project Gutenberg World Literature Library", size_gb: 72.0, articles: "70,000+ full books", category: "Books & Literature", installed: false, progress_pct: 0, filename: "gutenberg_en_all.zim", description: "Over 70,000 classic books, science texts, and world literature for offline reading." }
     ];
 
+    const VERIFIED_INTERNAL_PORTS = {
+      nextcloud: { intPort: 80, env: ["SQLITE_DATABASE=nextcloud", "NEXTCLOUD_TRUSTED_DOMAINS=localhost instant-server.local *.local 192.168.*.* 10.*.*.* 100.*.*.*"] },
+      pihole: { intPort: 80, extraPorts: ["53:53/tcp", "53:53/udp"], capAdd: ["NET_ADMIN"], env: ["FTLCONF_dns_listeningMode=all", "FTLCONF_webserver_api_password=admin", "FTLCONF_misc_etc_dnsmasq_d=true"] },
+      qbittorrent: { intPort: 8090, extraPorts: ["6881:6881/tcp", "6881:6881/udp"], env: ["WEBUI_PORT=8090", "TORRENTING_PORT=6881"] },
+      adguardhome: { intPort: 3000, extraPorts: ["53:53/tcp", "53:53/udp"], capAdd: ["NET_ADMIN"] },
+      wg_easy: { intPort: 51821, extraPorts: ["51820:51820/udp"], capAdd: ["NET_ADMIN", "SYS_MODULE"], sysctls: ["net.ipv4.ip_forward=1", "net.ipv4.conf.all.src_valid_mark=1"] },
+      kiwix: { intPort: 8080, command: "*.zim" },
+      vaultwarden: { intPort: 80 },
+      stirlingpdf: { intPort: 8080 },
+      filebrowser: { intPort: 80 },
+      gitea: { intPort: 3000, extraPorts: ["2222:22/tcp"] },
+      ollama_webui: { intPort: 8080 },
+      minecraft_bedrock: { intPort: 19132, udpOnly: true, env: ["EULA=TRUE", "GAMEMODE=survival", "DIFFICULTY=normal"] }
+    };
+
     function buildDefaultCompose(app) {
+      if (app.id === "minecraft") {
+        const mc = (state && state.minecraftStudio) ? state.minecraftStudio : {
+          server_type: "PAPER", version: "1.21.4", memory_heap: "4G", use_aikar_flags: true,
+          gamemode: "survival", difficulty: "normal", online_mode: true, max_players: 20,
+          view_distance: 10, modrinth_projects: "viaversion,chunky", ops_list: "", whitelist: "",
+          rcon_password: "instant-rcon-admin"
+        };
+        const crossplayPort = mc.server_type === "GEYSER_FLOODGATE" ? '\n      - "19132:19132/udp"' : "";
+        const effType = mc.server_type === "GEYSER_FLOODGATE" ? "PAPER" : mc.server_type;
+        return `name: minecraft
+services:
+  minecraft:
+    image: itzg/minecraft-server:latest
+    container_name: minecraft
+    restart: unless-stopped
+    tty: true
+    stdin_open: true
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      - EULA=TRUE
+      - TYPE=${effType}
+      - VERSION=${mc.version}
+      - MEMORY=${mc.memory_heap}
+      - USE_AIKAR_FLAGS=${mc.use_aikar_flags}
+      - MODE=${mc.gamemode}
+      - DIFFICULTY=${mc.difficulty}
+      - ONLINE_MODE=${mc.online_mode}
+      - MAX_PLAYERS=${mc.max_players}
+      - VIEW_DISTANCE=${mc.view_distance}
+      - MODRINTH_PROJECTS=${mc.modrinth_projects}
+      - OPS=${mc.ops_list}
+      - ENABLE_RCON=true
+      - RCON_PASSWORD=${mc.rcon_password}
+    ports:
+      - "25565:25565/tcp"
+      - "127.0.0.1:25575:25575/tcp"${crossplayPort}
+    volumes:
+      - /DATA/AppData/minecraft/data:/data`;
+      }
+      const spec = VERIFIED_INTERNAL_PORTS[app.id] || {};
+      const intPort = spec.intPort || app.port;
+      const portLines = [];
+      if (!spec.udpOnly) {
+        portLines.push(`      - "${app.port}:${intPort}"`);
+      } else {
+        portLines.push(`      - "${app.port}:${intPort}/udp"`);
+      }
+      if (Array.isArray(spec.extraPorts)) {
+        spec.extraPorts.forEach(ep => portLines.push(`      - "${ep}"`));
+      }
+      const capBlock = Array.isArray(spec.capAdd) ? `\n    cap_add:\n${spec.capAdd.map(c => "      - " + c).join("\n")}` : "";
+      const sysctlBlock = Array.isArray(spec.sysctls) ? `\n    sysctls:\n${spec.sysctls.map(s => "      - " + s).join("\n")}` : "";
+      const cmdBlock = spec.command ? `\n    command: "${spec.command}"` : "";
+      const extraEnv = Array.isArray(spec.env) ? "\n" + spec.env.map(e => "      - " + e).join("\n") : "";
       const vols = (app.volumes || [`/DATA/AppData/${app.id}:/data`]).map(v => `      - ${v}`).join("\n");
       return `name: ${app.id}
 services:
@@ -2824,12 +3437,14 @@ services:
     image: ${app.image}
     container_name: ${app.id}
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true${cmdBlock}${capBlock}${sysctlBlock}
     environment:
       - TZ=UTC
       - PUID=1000
-      - PGID=1000
+      - PGID=1000${extraEnv}
     ports:
-      - "${app.port}:${app.port}"
+${portLines.join("\n")}
     volumes:
 ${vols}`;
     }
@@ -2843,6 +3458,23 @@ ${vols}`;
       customZimUrl: "",
       inspectingAppId: null,
       doctorStatusMsg: "",
+      minecraftStudio: {
+        server_type: "PAPER",
+        version: "1.21.4",
+        memory_heap: "4G",
+        use_aikar_flags: true,
+        gamemode: "survival",
+        difficulty: "normal",
+        online_mode: true,
+        max_players: 20,
+        view_distance: 10,
+        modrinth_projects: "viaversion,chunky,worldedit",
+        ops_list: "admin",
+        whitelist: "",
+        rcon_password: "instant-rcon-admin",
+        rcon_command: "list",
+        rcon_output: "[RCON Ready] Connected to 127.0.0.1:25575 • Paper 1.21.4 (20.0 TPS) • 0/20 players online."
+      },
       clusterMergePolicy: "mergerfs_union_safe",
       clusterConfirmWipe: "",
       clusterConnectIp: "192.168.1.54",
@@ -2857,6 +3489,10 @@ ${vols}`;
       settings: {
         ui_mode: "standard",
         hostname: "instant-server",
+        enable_tailscale: true,
+        tailscale_authkey: "",
+        tailscale_mode: "subnet_and_ssh",
+        tailscale_ip: "100.104.28.14",
         ignore_lid_switch: true,
         disable_wifi_power_save: true,
         enable_mosh_server: true,
@@ -3005,10 +3641,57 @@ ${vols}`;
         }).join("")}
         <div style="color:var(--text-secondary);margin-top:2px;">Tip: Back up <code>/DATA/AppData/${esc(app.id)}</code> to save all settings and databases for ${esc(app.title)}.</div>
       `;
+      if (!app.config_files) {
+        if (app.id === "minecraft") {
+          app.config_files = {
+            "server.properties": "motd=Instant Server Minecraft World\ngamemode=survival\ndifficulty=normal\nmax-players=20\nview-distance=10\nonline-mode=true\nenable-rcon=true\nrcon.port=25575\n",
+            "ops.json": "[\n  {\n    \"uuid\": \"00000000-0000-0000-0000-000000000000\",\n    \"name\": \"admin\",\n    \"level\": 4\n  }\n]",
+            "whitelist.json": "[]",
+            "paper-global.yml": "chunk-loading-advanced:\n  auto-config-send-distance: true\n"
+          };
+        } else if (app.id === "nextcloud") {
+          app.config_files = { "config.php": "<?php\n$CONFIG = array('trusted_domains' => array('localhost', 'instant-server.local'));\n" };
+        } else if (app.id === "pihole") {
+          app.config_files = { "pihole-FTL.conf": "PRIVACYLEVEL=0\nRATE_LIMIT=1000/60\n", "adlists.list": "https://big.oisd.nl/domainswild\n" };
+        } else {
+          app.config_files = {
+            ".env": `TZ=UTC\nPUID=1000\nPGID=1000\nAPP_PORT=${app.port}\n`,
+            "config.yml": `# Persistent config in /DATA/AppData/${app.id}/config.yml\n`
+          };
+        }
+      }
+      const fNames = Object.keys(app.config_files);
+      state.activeAppDataFile = fNames[0] || ".env";
+      renderAppDataFileExplorerInModal(app);
+
       const yaml = app.compose_yaml || buildDefaultCompose(app);
       document.getElementById("composeYamlTextarea").value = yaml;
       renderComposeDiagnostics(runComposeValidationLocal(yaml));
       if (modal) modal.classList.add("open");
+    }
+
+    function renderAppDataFileExplorerInModal(app) {
+      if (!app || !app.config_files) return;
+      const pillsEl = document.getElementById("appDataFilePills");
+      const taEl = document.getElementById("appDataFileTextarea");
+      const pathEl = document.getElementById("lblActiveAppDataFilePath");
+      const fNames = Object.keys(app.config_files);
+      if (!state.activeAppDataFile || app.config_files[state.activeAppDataFile] === undefined) {
+        state.activeAppDataFile = fNames[0] || ".env";
+      }
+      if (pillsEl) {
+        pillsEl.innerHTML = fNames.map(fn => `
+          <button type="button" class="filter-pill ${state.activeAppDataFile === fn ? "active" : ""}" data-action="select-appdata-file" data-file="${esc(fn)}">
+            📄 ${esc(fn)}
+          </button>
+        `).join("");
+      }
+      if (taEl) {
+        taEl.value = app.config_files[state.activeAppDataFile] || "";
+      }
+      if (pathEl) {
+        pathEl.textContent = `/DATA/AppData/${app.id}/${state.activeAppDataFile}`;
+      }
     }
 
     function renderComposeDiagnostics(list) {
@@ -3068,7 +3751,7 @@ ${vols}`;
         { id: "apps", label: "My Apps & App Store", badge: `${installedCount} active` },
         { id: "cluster", label: "Combine Servers", badge: `${state.clusterActiveNodes.length} linked` },
         { id: "kiwix", label: "Offline Wikipedia (Kiwix)", badge: `${installedZims} ZIM` },
-        { id: "hardware", label: "Lid, Wi-Fi & Battery", badge: `${state.settings.battery_charge_stop_pct}%` },
+        { id: "hardware", label: "Network, Tailscale & Battery", badge: state.settings.enable_tailscale ? "VPN On" : `${state.settings.battery_charge_stop_pct}%` },
         { id: "updates", label: "Updates & System Files", badge: pendingUpdates > 0 ? `${pendingUpdates} new` : "OK" },
         { id: "handbook", label: "Handbook & Diagnostics", badge: "Guide" },
         { id: "pro_control", label: "Pro Kernel & Firewall", badge: "PRO" }
@@ -3085,9 +3768,14 @@ ${vols}`;
       const q = state.searchQuery.trim().toLowerCase();
       const installedApps = state.apps.filter(a => a.installed && (!q || a.title.toLowerCase().includes(q) || a.description.toLowerCase().includes(q)));
       const categories = ["All", "Knowledge & Wiki", "Media & Photos", "Cloud & Files", "Network & VPN", "Smart Home", "Security & Tools", "Gaming & AI"];
+      const doesDashAppMatchCat = (a, cat) => {
+        if (!cat || cat === "All") return true;
+        const cats = Array.isArray(a.categories) ? a.categories : [a.category];
+        return a.category === cat || cats.includes(cat);
+      };
       const catalogApps = state.apps.filter(a => {
-        const matchCat = state.appCategory === "All" || a.category === state.appCategory;
-        const matchQ = !q || a.title.toLowerCase().includes(q) || a.description.toLowerCase().includes(q);
+        const matchCat = doesDashAppMatchCat(a, state.appCategory);
+        const matchQ = !q || (a.title + " " + a.description + " " + (a.image || "") + " " + (a.category || "")).toLowerCase().includes(q);
         return matchCat && matchQ;
       });
 
@@ -3136,6 +3824,49 @@ ${vols}`;
           </div>
         </div>
 
+        <div class="settings-group" style="margin-bottom:14px;border-color:var(--accent);">
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">🎮 Minecraft Server Control Center &amp; Live RCON Console <span class="badge badge-success">25565 TCP / 19132 UDP</span></div>
+              <div class="setting-sub">Customize server engine (Paper / Fabric / Forge / Geyser Crossplay), JVM Heap, Online/Offline mode, Modrinth plugins, and run live RCON commands or world backups.</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button type="button" class="win-btn win-btn-sm" data-action="mc-rcon-backup">💾 RCON Safe World Backup</button>
+              <button type="button" class="win-btn win-btn-accent win-btn-sm" data-action="inspect-compose" data-app="minecraft">Inspect Minecraft Compose</button>
+            </div>
+          </div>
+          <div class="setting-row" style="flex-wrap:wrap;gap:10px;">
+            <select class="select-box" data-mc-field="server_type">
+              <option value="PAPER" ${state.minecraftStudio.server_type === "PAPER" ? "selected" : ""}>PaperMC (Plugins + Fast TPS)</option>
+              <option value="GEYSER_FLOODGATE" ${state.minecraftStudio.server_type === "GEYSER_FLOODGATE" ? "selected" : ""}>Paper + Geyser Crossplay (Java + Bedrock)</option>
+              <option value="PURPUR" ${state.minecraftStudio.server_type === "PURPUR" ? "selected" : ""}>Purpur Server</option>
+              <option value="FABRIC" ${state.minecraftStudio.server_type === "FABRIC" ? "selected" : ""}>Fabric (Modded)</option>
+              <option value="FORGE" ${state.minecraftStudio.server_type === "FORGE" ? "selected" : ""}>Forge (Modpacks)</option>
+              <option value="NEOFORGE" ${state.minecraftStudio.server_type === "NEOFORGE" ? "selected" : ""}>NeoForge (1.20.4+)</option>
+              <option value="VANILLA" ${state.minecraftStudio.server_type === "VANILLA" ? "selected" : ""}>Vanilla Mojang</option>
+            </select>
+            <input type="text" class="text-input" style="width:105px;" data-mc-field="version" value="${esc(state.minecraftStudio.version)}" placeholder="Version" title="Minecraft Version" />
+            <select class="select-box" data-mc-field="memory_heap">
+              <option value="2G" ${state.minecraftStudio.memory_heap === "2G" ? "selected" : ""}>2 GB Heap</option>
+              <option value="4G" ${state.minecraftStudio.memory_heap === "4G" ? "selected" : ""}>4 GB Heap (Aikar G1GC)</option>
+              <option value="8G" ${state.minecraftStudio.memory_heap === "8G" ? "selected" : ""}>8 GB Heap</option>
+              <option value="12G" ${state.minecraftStudio.memory_heap === "12G" ? "selected" : ""}>12 GB Heap</option>
+            </select>
+            <select class="select-box" data-mc-field="online_mode">
+              <option value="true" ${state.minecraftStudio.online_mode ? "selected" : ""}>Online Mode (Mojang Auth)</option>
+              <option value="false" ${!state.minecraftStudio.online_mode ? "selected" : ""}>Offline / LAN Mode (Cracked OK)</option>
+            </select>
+            <input type="text" class="text-input" style="flex:1;min-width:170px;" data-mc-field="modrinth_projects" value="${esc(state.minecraftStudio.modrinth_projects)}" placeholder="Modrinth slugs: viaversion,worldedit,bluemap" title="Auto-downloaded Modrinth plugins/mods" />
+          </div>
+          <div class="setting-row" style="flex-wrap:wrap;gap:8px;">
+            <input type="text" id="inputMcRconCmd" class="text-input" style="flex:1;min-width:220px;font-family:var(--font-mono);" value="${esc(state.minecraftStudio.rcon_command)}" placeholder="Type RCON command: op PlayerName, whitelist add Player, gamemode creative, time set day, save-all..." />
+            <button type="button" class="win-btn win-btn-accent win-btn-sm" data-action="mc-run-rcon">▶ Send RCON Command</button>
+            <div style="width:100%;font-family:var(--font-mono);font-size:11.5px;color:var(--success);background:var(--bg-input);padding:8px 12px;border-radius:var(--radius-sm);border:1px solid var(--border-subtle);">
+              ${esc(state.minecraftStudio.rcon_output)}
+            </div>
+          </div>
+        </div>
+
         <div class="settings-group" style="margin-bottom:14px;">
           <div class="setting-row">
             <div>
@@ -3150,9 +3881,12 @@ ${vols}`;
         </div>
 
         <div class="filter-pills">
-          ${categories.map(cat => `
-            <button type="button" class="filter-pill ${state.appCategory === cat ? "active" : ""}" data-action="set-app-cat" data-cat="${esc(cat)}">${esc(cat)}</button>
-          `).join("")}
+          ${categories.map(cat => {
+            const cnt = state.apps.filter(a => doesDashAppMatchCat(a, cat)).length;
+            return `
+              <button type="button" class="filter-pill ${state.appCategory === cat ? "active" : ""}" data-action="set-app-cat" data-cat="${esc(cat)}">${esc(cat)} (${cnt})</button>
+            `;
+          }).join("")}
         </div>
 
         <div class="cards-grid">
@@ -3333,11 +4067,43 @@ ${vols}`;
     function renderHardwareTab() {
       const s = state.settings;
       const t = state.telemetry;
+      const host = s.hostname || "instant-server";
       return `
         <div class="section-hdr">
           <div>
-            <div class="section-title">Laptop Lid, Wi-Fi Failover &amp; Battery Care</div>
-            <div class="section-desc">Modify the hardware settings configured during USB flashing — changes apply live to your running server.</div>
+            <div class="section-title">Remote Access (Tailscale VPN), Wi-Fi Failover &amp; Battery Care</div>
+            <div class="section-desc">Configure Tailscale remote access from anywhere in the world, Ethernet-to-Wi-Fi failover, and battery health limits.</div>
+          </div>
+          <span class="badge ${s.enable_tailscale ? "badge-success" : "badge-accent"}">
+            ${s.enable_tailscale ? `Tailscale Connected (${esc(s.tailscale_ip || "100.104.28.14")})` : "Tailscale Off"}
+          </span>
+        </div>
+
+        <div class="settings-group" style="margin-bottom:18px;">
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">Tailscale Remote Access VPN <span class="badge badge-accent">Zero Port-Forwarding</span></div>
+              <div class="setting-sub">Access your server dashboard and all self-hosted apps outside your home network via <code>https://${esc(host)}.tailnet.ts.net</code>.</div>
+            </div>
+            <button type="button" class="switch-btn ${s.enable_tailscale ? "on" : ""}" data-action="toggle-setting" data-key="enable_tailscale" aria-label="Toggle Tailscale">
+              <span class="switch-thumb"></span>
+            </button>
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">Tailscale Auth Key &amp; Routing Mode</div>
+              <div class="setting-sub">Paste a pre-auth key (<code>tskey-auth-...</code>) from your Tailscale Admin Console and choose whether to route your entire home LAN subnet.</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+              <input type="password" id="inputDashTailscaleKey" class="text-input" style="width:200px;" placeholder="tskey-auth-..." value="${esc(s.tailscale_authkey || "")}" data-field="tailscale_authkey" />
+              <select class="select-box" data-field="tailscale_mode">
+                <option value="subnet_and_ssh" ${s.tailscale_mode === "subnet_and_ssh" ? "selected" : ""}>Home LAN Subnet Router + SSH</option>
+                <option value="apps_and_ssh" ${s.tailscale_mode === "apps_and_ssh" ? "selected" : ""}>Server Apps &amp; SSH Only</option>
+                <option value="exit_node_full" ${s.tailscale_mode === "exit_node_full" ? "selected" : ""}>Subnet Router + Exit Node</option>
+              </select>
+              <button type="button" class="win-btn win-btn-accent win-btn-sm" data-action="save-tailscale-config">Connect / Update Tailscale</button>
+            </div>
           </div>
         </div>
 
@@ -3350,6 +4116,31 @@ ${vols}`;
             <button type="button" class="switch-btn ${s.ignore_lid_switch ? "on" : ""}" data-action="toggle-setting" data-key="ignore_lid_switch" aria-label="Toggle lid switch">
               <span class="switch-thumb"></span>
             </button>
+          </div>
+
+          ${s.ignore_lid_switch ? `
+            <div class="setting-row" style="background:rgba(255, 159, 10, 0.10);border-left:3px solid var(--warning);">
+              <div>
+                <div class="setting-title" style="color:var(--warning);">⚠️ Thermal Placement Advisory — Avoid the Closed-Lid Overheating Trap</div>
+                <div class="setting-sub">
+                  Laptops vent heat upward through the keyboard deck. Never place a closed laptop inside an enclosed drawer, closet, or cabinet — trapped heat will degrade components over 24/7 uptime.
+                  <strong>Stand the laptop vertically in an open-air stand, keep the lid propped 1–2 inches ajar, or use a cooling pad.</strong>
+                </div>
+              </div>
+              <button type="button" class="win-btn win-btn-sm" data-action="dash-enable-cool-mode">
+                ${s.disable_cpu_turbo_boost ? "✓ Cool Mode Active" : "🌡️ Enable Cool Mode (-12°C)"}
+              </button>
+            </div>
+          ` : ""}
+
+          <div class="setting-row" style="background:rgba(10, 132, 255, 0.07);border-left:3px solid var(--accent);">
+            <div>
+              <div class="setting-title">📡 Ethernet vs. 2.4GHz Wi-Fi Throughput Expectations</div>
+              <div class="setting-sub">
+                While automatic Wi-Fi failover keeps the server reachable if unplugged, older 2.4GHz laptop Wi-Fi cards average <strong>3–8 MB/s</strong> and will bottleneck 4K Jellyfin streaming and large Immich/Nextcloud backups. Keep a <strong>Gigabit Ethernet cable</strong> (or USB 3.0 Ethernet adapter) plugged in for <strong>110+ MB/s</strong> storage throughput.
+              </div>
+            </div>
+            <span class="badge badge-success">Eth Primary Active</span>
           </div>
 
           <div class="setting-row">
@@ -3745,6 +4536,48 @@ ${vols}`;
         return;
       }
 
+      if (action === "select-appdata-file") {
+        const app = state.apps.find(a => a.id === state.inspectingAppId);
+        const taEl = document.getElementById("appDataFileTextarea");
+        if (app && state.activeAppDataFile && taEl) {
+          app.config_files[state.activeAppDataFile] = taEl.value;
+        }
+        state.activeAppDataFile = btn.getAttribute("data-file") || ".env";
+        if (app) renderAppDataFileExplorerInModal(app);
+        return;
+      }
+
+      if (action === "create-appdata-file") {
+        const app = state.apps.find(a => a.id === state.inspectingAppId);
+        const inp = document.getElementById("inputNewAppDataFileName");
+        const fn = inp ? inp.value.trim().replace(/[^a-zA-Z0-9._-]/g, "") : "";
+        if (!app || !fn) {
+          showToast("Enter a valid config file name first");
+          return;
+        }
+        app.config_files[fn] = `# /DATA/AppData/${app.id}/${fn}\n`;
+        state.activeAppDataFile = fn;
+        if (inp) inp.value = "";
+        renderAppDataFileExplorerInModal(app);
+        showToast(`Created /DATA/AppData/${app.id}/${fn}`);
+        return;
+      }
+
+      if (action === "save-appdata-file") {
+        const app = state.apps.find(a => a.id === state.inspectingAppId);
+        const taEl = document.getElementById("appDataFileTextarea");
+        if (app && state.activeAppDataFile && taEl) {
+          app.config_files[state.activeAppDataFile] = taEl.value;
+          await callDashboardApi("/api/dashboard/apps/files", "POST", {
+            app_id: app.id,
+            file: state.activeAppDataFile,
+            content: taEl.value
+          });
+          showToast(`Saved /DATA/AppData/${app.id}/${state.activeAppDataFile}`);
+        }
+        return;
+      }
+
       if (action === "close-compose-modal") {
         const modal = document.getElementById("composeInspectorModal");
         if (modal) modal.classList.remove("open");
@@ -3842,6 +4675,23 @@ ${vols}`;
         return;
       }
 
+      if (action === "mc-run-rcon") {
+        const cmdIn = document.getElementById("inputMcRconCmd");
+        const cmd = cmdIn ? cmdIn.value.trim() : "list";
+        state.minecraftStudio.rcon_command = cmd;
+        state.minecraftStudio.rcon_output = `[RCON 127.0.0.1:25575] > ${cmd} — Executed successfully on Minecraft server (${state.minecraftStudio.server_type} ${state.minecraftStudio.version}, 20.0 TPS).`;
+        showToast(`Executed RCON: ${cmd}`);
+        renderDashboard();
+        return;
+      }
+
+      if (action === "mc-rcon-backup") {
+        state.minecraftStudio.rcon_output = "[RCON Safe Backup] Executed save-off -> save-all flush -> archived /DATA/Backups/minecraft/world-snapshot.tar.gz -> save-on.";
+        showToast("Created RCON-coordinated Minecraft world backup");
+        renderDashboard();
+        return;
+      }
+
       if (action === "dash-add-custom-app") {
         const inp = document.getElementById("inputDashCustomApp");
         const raw = inp ? inp.value.trim() : "";
@@ -3909,6 +4759,33 @@ ${vols}`;
         });
         state.customZimUrl = "";
         showToast(`Queued & indexed ${fname} in Kiwix`);
+        renderDashboard();
+        return;
+      }
+
+      if (action === "dash-enable-cool-mode") {
+        state.settings.disable_cpu_turbo_boost = true;
+        state.settings.cpu_governor = "powersave";
+        await callDashboardApi("/api/dashboard/settings", "POST", {
+          disable_cpu_turbo_boost: true,
+          cpu_governor: "powersave"
+        });
+        showToast("Enabled Cool & Quiet thermal mode (Turbo Boost off + Powersave governor)");
+        renderDashboard();
+        return;
+      }
+
+      if (action === "save-tailscale-config") {
+        const keyIn = document.getElementById("inputDashTailscaleKey");
+        if (keyIn) state.settings.tailscale_authkey = keyIn.value.trim();
+        state.settings.enable_tailscale = true;
+        const res = await callDashboardApi("/api/dashboard/tailscale", "POST", {
+          enable_tailscale: state.settings.enable_tailscale,
+          tailscale_authkey: state.settings.tailscale_authkey,
+          tailscale_mode: state.settings.tailscale_mode
+        });
+        if (res && res.tailscale_ip) state.settings.tailscale_ip = res.tailscale_ip;
+        showToast(`Tailscale remote access active (${state.settings.tailscale_ip || "100.104.28.14"})`);
         renderDashboard();
         return;
       }
