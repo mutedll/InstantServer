@@ -22,7 +22,7 @@ const (
 	fatSectorsPerTable   = 32                                           // 32 * 512 = 16,384 bytes (8,192 FAT16 entries)
 	fatDataStartSector   = fatReservedSectors + (fatNumTables * fatSectorsPerTable) + fatRootDirSectors
 	fatTotalSectors      = fatDataStartSector + (fatTotalClusters * fatSectorsPerCluster)
-	fatTotalImageBytes   = fatTotalSectors * fatBytesPerSector // ~16.8 MB FAT16 volume
+	fatTotalImageBytes   = fatTotalSectors * fatBytesPerSector // ~16.8 MB default FAT16 volume
 )
 
 type fatStagedFile struct {
@@ -64,8 +64,6 @@ func makeShort83Name(name string, index int) [11]byte {
 	if cBase == "" {
 		cBase = "FILE"
 	}
-	// If the filename is an exact 8.3 match without hyphens/lowercase issues, preserve it;
-	// otherwise generate a collision-free ~N short alias paired with VFAT LFN entries.
 	if name == strings.ToLower(name) && len(base) <= 8 && len(ext) <= 3 && !strings.Contains(name, "-") && len(cBase) == len(base) && len(cExt) == len(ext) {
 		for i := 0; i < len(cBase) && i < 8; i++ {
 			out[i] = cBase[i]
@@ -125,12 +123,59 @@ func buildLFNEntries(longName string, shortName [11]byte) [][32]byte {
 	return entries
 }
 
+func shouldSkipNonCidataFile(name string) bool {
+	lower := strings.ToLower(strings.TrimSpace(name))
+	for _, ext := range []string{".iso", ".img", ".dmg", ".part", ".exe", ".bin"} {
+		if strings.HasSuffix(lower, ext) {
+			return true
+		}
+	}
+	return false
+}
+
 // BuildCidataFAT16Image creates a standard-compliant FAT16 (vfat) partition image
 // labeled "CIDATA" containing all root cloud-init files (user-data, meta-data,
 // instant-server-env.conf, laptop_hardening.sh, server_dashboard.html, etc.)
 // so Ubuntu subiquity / cloud-init NoCloud discovers and mounts it automatically on boot.
 func BuildCidataFAT16Image(stageDir string) ([]byte, error) {
-	img := make([]byte, fatTotalImageBytes)
+	entries, err := os.ReadDir(stageDir)
+	if err != nil {
+		return nil, err
+	}
+	var files []fatStagedFile
+	totalRequiredClusters := 0
+	for _, ent := range entries {
+		if ent.IsDir() || shouldSkipNonCidataFile(ent.Name()) {
+			continue
+		}
+		raw, rErr := os.ReadFile(filepath.Join(stageDir, ent.Name()))
+		if rErr == nil {
+			files = append(files, fatStagedFile{RelName: ent.Name(), Data: raw})
+			if len(raw) > 0 {
+				totalRequiredClusters += (len(raw) + fatBytesPerCluster - 1) / fatBytesPerCluster
+			}
+		}
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].RelName < files[j].RelName })
+
+	// Dynamically size the FAT16 volume so it is always >= 4100 clusters (strict FAT16)
+	// and never overflows even when large custom payloads are staged.
+	totalClusters := fatTotalClusters
+	if totalRequiredClusters+64 > totalClusters {
+		totalClusters = totalRequiredClusters + 64
+	}
+	if totalClusters > 65520 {
+		totalClusters = 65520
+	}
+	sectorsPerTable := ((totalClusters+2)*2 + fatBytesPerSector - 1) / fatBytesPerSector
+	if sectorsPerTable < fatSectorsPerTable {
+		sectorsPerTable = fatSectorsPerTable
+	}
+	dataStartSector := fatReservedSectors + (fatNumTables * sectorsPerTable) + fatRootDirSectors
+	totalSectors := dataStartSector + (totalClusters * fatSectorsPerCluster)
+	totalImageBytes := totalSectors * fatBytesPerSector
+
+	img := make([]byte, totalImageBytes)
 
 	// 1. Format Boot Sector (BIOS Parameter Block) at Sector 0
 	boot := img[0:fatBytesPerSector]
@@ -143,11 +188,11 @@ func BuildCidataFAT16Image(stageDir string) ([]byte, error) {
 	binary.LittleEndian.PutUint16(boot[17:19], fatRootDirEntries)
 	binary.LittleEndian.PutUint16(boot[19:21], 0) // TotalSectors16 = 0 (use TotalSectors32)
 	boot[21] = 0xF8                               // Fixed/removable media descriptor
-	binary.LittleEndian.PutUint16(boot[22:24], fatSectorsPerTable)
+	binary.LittleEndian.PutUint16(boot[22:24], uint16(sectorsPerTable))
 	binary.LittleEndian.PutUint16(boot[24:26], 63)  // Sectors per track
 	binary.LittleEndian.PutUint16(boot[26:28], 255) // Heads
 	binary.LittleEndian.PutUint32(boot[28:32], 0)   // Hidden sectors
-	binary.LittleEndian.PutUint32(boot[32:36], uint32(fatTotalSectors))
+	binary.LittleEndian.PutUint32(boot[32:36], uint32(totalSectors))
 	boot[36] = 0x80 // Drive number
 	boot[38] = 0x29 // Extended boot signature
 	binary.LittleEndian.PutUint32(boot[39:43], 0x20261108)
@@ -158,17 +203,19 @@ func BuildCidataFAT16Image(stageDir string) ([]byte, error) {
 
 	// 2. Initialize FAT #1 and FAT #2 reserved cluster entries 0 and 1
 	fat1Offset := fatReservedSectors * fatBytesPerSector
-	fat2Offset := (fatReservedSectors + fatSectorsPerTable) * fatBytesPerSector
+	fat2Offset := (fatReservedSectors + sectorsPerTable) * fatBytesPerSector
 	setFATEntry := func(cluster uint16, val uint16) {
 		pos := int(cluster) * 2
-		binary.LittleEndian.PutUint16(img[fat1Offset+pos:fat1Offset+pos+2], val)
-		binary.LittleEndian.PutUint16(img[fat2Offset+pos:fat2Offset+pos+2], val)
+		if fat1Offset+pos+2 <= len(img) && fat2Offset+pos+2 <= len(img) {
+			binary.LittleEndian.PutUint16(img[fat1Offset+pos:fat1Offset+pos+2], val)
+			binary.LittleEndian.PutUint16(img[fat2Offset+pos:fat2Offset+pos+2], val)
+		}
 	}
 	setFATEntry(0, 0xFFF8)
 	setFATEntry(1, 0xFFFF)
 
 	// 3. Initialize Root Directory with Volume Label entry ("CIDATA     ", ATTR_VOLUME_ID = 0x08)
-	rootDirOffset := (fatReservedSectors + fatNumTables*fatSectorsPerTable) * fatBytesPerSector
+	rootDirOffset := (fatReservedSectors + fatNumTables*sectorsPerTable) * fatBytesPerSector
 	dirCursor := rootDirOffset
 	writeDirEntry := func(entry [32]byte) {
 		if dirCursor+32 <= rootDirOffset+(fatRootDirSectors*fatBytesPerSector) {
@@ -182,23 +229,7 @@ func BuildCidataFAT16Image(stageDir string) ([]byte, error) {
 	volEntry[11] = 0x08 // ATTR_VOLUME_ID
 	writeDirEntry(volEntry)
 
-	// 4. Collect files from stageDir
-	entries, err := os.ReadDir(stageDir)
-	if err != nil {
-		return nil, err
-	}
-	var files []fatStagedFile
-	for _, ent := range entries {
-		if ent.IsDir() {
-			continue
-		}
-		raw, rErr := os.ReadFile(filepath.Join(stageDir, ent.Name()))
-		if rErr == nil {
-			files = append(files, fatStagedFile{RelName: ent.Name(), Data: raw})
-		}
-	}
-	sort.Slice(files, func(i, j int) bool { return files[i].RelName < files[j].RelName })
-
+	// 4. Write staged files into FAT16 data clusters
 	nextCluster := uint16(2)
 	for idx, f := range files {
 		shortName := makeShort83Name(f.RelName, idx+1)
@@ -219,13 +250,16 @@ func BuildCidataFAT16Image(stageDir string) ([]byte, error) {
 				} else {
 					setFATEntry(curCluster, curCluster+1)
 				}
-				dataOffset := (fatDataStartSector * fatBytesPerSector) + int(curCluster-2)*fatBytesPerCluster
+				dataOffset := (dataStartSector * fatBytesPerSector) + int(curCluster-2)*fatBytesPerCluster
 				startByte := c * fatBytesPerCluster
 				endByte := startByte + fatBytesPerCluster
 				if endByte > len(f.Data) {
 					endByte = len(f.Data)
 				}
-				copy(img[dataOffset:dataOffset+(endByte-startByte)], f.Data[startByte:endByte])
+				chunkLen := endByte - startByte
+				if dataOffset >= 0 && dataOffset+chunkLen <= len(img) {
+					copy(img[dataOffset:dataOffset+chunkLen], f.Data[startByte:endByte])
+				}
 			}
 		}
 

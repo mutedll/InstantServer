@@ -296,6 +296,7 @@ func TestSha512CryptAndAutoinstallChrootSafety(t *testing.T) {
 
 func TestBuildCidataFAT16ImageAndGPTInjection(t *testing.T) {
 	stageDir := t.TempDir()
+	diskDir := t.TempDir()
 	cfg := ServerProfileConfig{
 		Hostname:             "instant-server",
 		Username:             "admin",
@@ -325,8 +326,8 @@ func TestBuildCidataFAT16ImageAndGPTInjection(t *testing.T) {
 	}
 
 	// Stream synthetic ISO + CIDATA FAT16 image into virtual USB disk and verify GPT Partition #2 injection
-	isoPath := filepath.Join(stageDir, "boot.iso")
-	usbPath := filepath.Join(stageDir, "usb_disk.img")
+	isoPath := filepath.Join(diskDir, "boot.iso")
+	usbPath := filepath.Join(diskDir, "usb_disk.img")
 	isoBytes := make([]byte, 64*1024)
 	copy(isoBytes[512:520], []byte("EFI PART"))
 	binary.LittleEndian.PutUint32(isoBytes[512+12:512+16], 92)

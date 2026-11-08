@@ -26,24 +26,24 @@ type AppSpec struct {
 }
 
 type MinecraftServerConfig struct {
-	ServerType         string `json:"server_type"`          // PAPER, PURPUR, FABRIC, FORGE, NEOFORGE, VANILLA, GEYSER_FLOODGATE
-	Version            string `json:"version"`              // LATEST, 1.21.4, 1.20.4, etc.
-	MemoryHeap         string `json:"memory_heap"`          // 2G, 4G, 6G, 8G, 12G, 16G
-	UseAikarFlags      bool   `json:"use_aikar_flags"`      // -XX:+UseG1GC Aikar's flags
-	Gamemode           string `json:"gamemode"`             // survival, creative, adventure
-	Difficulty         string `json:"difficulty"`           // peaceful, easy, normal, hard
-	OnlineMode         bool   `json:"online_mode"`          // true = Mojang auth, false = offline/LAN
-	MaxPlayers         int    `json:"max_players"`          // default 20
-	ViewDistance       int    `json:"view_distance"`        // default 10
-	SimulationDistance int    `json:"simulation_distance"`  // default 10
-	LevelSeed          string `json:"level_seed"`           // optional world seed
-	MOTD               string `json:"motd"`                 // server list description
-	OpsList            string `json:"ops_list"`             // comma-separated admin usernames
-	Whitelist          string `json:"whitelist"`            // comma-separated allowed players
-	ModrinthProjects   string `json:"modrinth_projects"`    // comma-separated Modrinth slugs (e.g. worldedit,lithium,bluemap)
-	EnableRCON         bool   `json:"enable_rcon"`          // port 25575 inside docker / localhost
-	RCONPassword       string `json:"rcon_password"`        // admin RCON password
-	EnableBackups      bool   `json:"enable_backups"`       // itzg/mc-backup sidecar
+	ServerType         string `json:"server_type"`         // PAPER, PURPUR, FABRIC, FORGE, NEOFORGE, VANILLA, GEYSER_FLOODGATE
+	Version            string `json:"version"`             // LATEST, 1.21.4, 1.20.4, etc.
+	MemoryHeap         string `json:"memory_heap"`         // 2G, 4G, 6G, 8G, 12G, 16G
+	UseAikarFlags      bool   `json:"use_aikar_flags"`     // -XX:+UseG1GC Aikar's flags
+	Gamemode           string `json:"gamemode"`            // survival, creative, adventure
+	Difficulty         string `json:"difficulty"`          // peaceful, easy, normal, hard
+	OnlineMode         bool   `json:"online_mode"`         // true = Mojang auth, false = offline/LAN
+	MaxPlayers         int    `json:"max_players"`         // default 20
+	ViewDistance       int    `json:"view_distance"`       // default 10
+	SimulationDistance int    `json:"simulation_distance"` // default 10
+	LevelSeed          string `json:"level_seed"`          // optional world seed
+	MOTD               string `json:"motd"`                // server list description
+	OpsList            string `json:"ops_list"`            // comma-separated admin usernames
+	Whitelist          string `json:"whitelist"`           // comma-separated allowed players
+	ModrinthProjects   string `json:"modrinth_projects"`   // comma-separated Modrinth slugs (e.g. worldedit,lithium,bluemap)
+	EnableRCON         bool   `json:"enable_rcon"`         // port 25575 inside docker / localhost
+	RCONPassword       string `json:"rcon_password"`       // admin RCON password
+	EnableBackups      bool   `json:"enable_backups"`      // itzg/mc-backup sidecar
 }
 
 func DefaultMinecraftConfig() MinecraftServerConfig {
@@ -449,7 +449,7 @@ services:
     container_name: immich_redis
     restart: unless-stopped
   immich_postgres:
-    image: docker.io/tensorchord/pgvecto-rs:pg16-v0.2.0
+    image: ghcr.io/immich-app/postgres:17-vectorchord0.4.3-pgvectors0.3.0
     container_name: immich_postgres
     restart: unless-stopped
     environment:

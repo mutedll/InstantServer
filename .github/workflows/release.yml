@@ -22,9 +22,9 @@ jobs:
         include:
           - os: windows-2025
             binary_name: InstantServer-Windows.exe
-          - os: macos-15-intel
+          - os: macos-26-intel
             binary_name: InstantServer-macOS.dmg
-          - os: ubuntu-24.04
+          - os: ubuntu-26.04
             binary_name: InstantServer-Linux
 
     steps:
@@ -73,23 +73,32 @@ jobs:
           [ -f "laptop_hardening.sh" ] && [ ! -f "src/instant_server/scripts/laptop_hardening.sh" ] && cp "laptop_hardening.sh" "src/instant_server/scripts/laptop_hardening.sh" || true
           sed -i 's/\r$//' src/instant_server/scripts/laptop_hardening.sh 2>/dev/null || true
 
-          # Self-heal any accidental multiline double-quoted string in usb/flasher_test.go
-          if [ -f "usb/flasher_test.go" ]; then
-            python3 -c '
-          p = "usb/flasher_test.go"
-          s = open(p, "r", encoding="utf-8").read()
-          s = s.replace("\"motd=Custom Server Properties\nonline-mode=false\n\"", "\"motd=Custom Server Properties\\nonline-mode=false\\n\"")
-          s = s.replace("\"motd=Custom Server Properties\r\nonline-mode=false\r\n\"", "\"motd=Custom Server Properties\\nonline-mode=false\\n\"")
-          s = s.replace("[]byte(\"#!/usr/bin/env bash\n\")", "[]byte(\"#!/usr/bin/env bash\\n\")")
-          s = s.replace("[]byte(\"#!/usr/bin/env bash\r\n\")", "[]byte(\"#!/usr/bin/env bash\\n\")")
-          open(p, "w", encoding="utf-8").write(s)
+          # Self-heal any legacy test/FAT16 bounds or string formatting in usb/
+          python3 -c '
+          import os
+          ft = "usb/flasher_test.go"
+          if os.path.exists(ft):
+              s = open(ft, "r", encoding="utf-8").read()
+              s = s.replace("\"motd=Custom Server Properties\nonline-mode=false\n\"", "\"motd=Custom Server Properties\\nonline-mode=false\\n\"")
+              s = s.replace("\"motd=Custom Server Properties\r\nonline-mode=false\r\n\"", "\"motd=Custom Server Properties\\nonline-mode=false\\n\"")
+              s = s.replace("[]byte(\"#!/usr/bin/env bash\n\")", "[]byte(\"#!/usr/bin/env bash\\n\")")
+              s = s.replace("[]byte(\"#!/usr/bin/env bash\r\n\")", "[]byte(\"#!/usr/bin/env bash\\n\")")
+              s = s.replace("isoPath := filepath.Join(stageDir, \"boot.iso\")", "diskDir := t.TempDir()\n\tisoPath := filepath.Join(diskDir, \"boot.iso\")")
+              s = s.replace("usbPath := filepath.Join(stageDir, \"usb_disk.img\")", "usbPath := filepath.Join(diskDir, \"usb_disk.img\")")
+              open(ft, "w", encoding="utf-8").write(s)
+          cf = "usb/cidata_fat.go"
+          if os.path.exists(cf):
+              c = open(cf, "r", encoding="utf-8").read()
+              c = c.replace("if ent.IsDir() {", "if ent.IsDir() || strings.HasSuffix(ent.Name(), \".img\") || strings.HasSuffix(ent.Name(), \".iso\") {")
+              c = c.replace("copy(img[dataOffset:dataOffset+(endByte-startByte)], f.Data[startByte:endByte])", "if dataOffset >= 0 && dataOffset+(endByte-startByte) <= len(img) { copy(img[dataOffset:dataOffset+(endByte-startByte)], f.Data[startByte:endByte]) }")
+              open(cf, "w", encoding="utf-8").write(c)
           '
-          fi
 
           # Synchronize internal subpackage import paths with go.mod module name
           if [ ! -f "go.mod" ]; then
             go mod init github.com/InstantServer/InstantServer
           fi
+          sed -i.bak 's/^go 1\.22$/go 1.26.0/' go.mod && rm -f go.mod.bak
           MOD_NAME=$(awk '/^module /{print $2}' go.mod | tr -d '\r')
           if [ -z "$MOD_NAME" ]; then
             MOD_NAME="github.com/InstantServer/InstantServer"
