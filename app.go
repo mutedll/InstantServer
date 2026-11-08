@@ -44,6 +44,31 @@ func NewApp(assets embed.FS) *App {
 	}
 }
 
+func resolveWritableDataDir() string {
+	candidates := []string{
+		filepath.Join(".", "Instant_Server_Data"),
+	}
+	if exePath, err := os.Executable(); err == nil {
+		candidates = append(candidates, filepath.Join(filepath.Dir(exePath), "Instant_Server_Data"))
+	}
+	if cfgDir, err := os.UserConfigDir(); err == nil {
+		candidates = append(candidates, filepath.Join(cfgDir, "InstantServer", "Instant_Server_Data"))
+	}
+	candidates = append(candidates, filepath.Join(os.TempDir(), "Instant_Server_Data"))
+
+	for _, dir := range candidates {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			continue
+		}
+		probe := filepath.Join(dir, ".write_probe")
+		if err := os.WriteFile(probe, []byte("ok"), 0600); err == nil {
+			_ = os.Remove(probe)
+			return dir
+		}
+	}
+	return filepath.Join(os.TempDir(), "Instant_Server_Data")
+}
+
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 }
@@ -110,8 +135,7 @@ func (a *App) AddCustomApp(payload map[string]interface{}) map[string]interface{
 }
 
 func (a *App) SaveConfig(profile usb.ServerProfileConfig) map[string]interface{} {
-	dataDir := filepath.Join(".", "Instant_Server_Data")
-	_ = os.MkdirAll(dataDir, 0755)
+	dataDir := resolveWritableDataDir()
 	cfgPath := filepath.Join(dataDir, "instant-server-config.json")
 	raw, _ := json.MarshalIndent(profile, "", "  ")
 	_ = os.WriteFile(cfgPath, raw, 0600)
@@ -122,7 +146,8 @@ func (a *App) SaveConfig(profile usb.ServerProfileConfig) map[string]interface{}
 }
 
 func (a *App) LoadConfig() map[string]interface{} {
-	cfgPath := filepath.Join(".", "Instant_Server_Data", "instant-server-config.json")
+	dataDir := resolveWritableDataDir()
+	cfgPath := filepath.Join(dataDir, "instant-server-config.json")
 	raw, err := os.ReadFile(cfgPath)
 	if err != nil {
 		return map[string]interface{}{"exists": false, "path": cfgPath}
@@ -188,14 +213,15 @@ func (a *App) FlashUSBDevice(profile usb.ServerProfileConfig, isoPath string) ma
 			a.mu.Unlock()
 		}()
 
+		baseDataDir := resolveWritableDataDir()
 		hardeningBytes, _ := a.assets.ReadFile("src/instant_server/scripts/laptop_hardening.sh")
 		dashBytes, _ := a.assets.ReadFile("src/instant_server/ui/server_dashboard.html")
-		stagingDir := filepath.Join(".", "Instant_Server_Data", "cidata_stage")
+		stagingDir := filepath.Join(baseDataDir, "cidata_stage")
 		_, _ = usb.StageCIDATAPayload(stagingDir, profile, hardeningBytes, dashBytes)
 
 		resolvedISO := strings.TrimSpace(isoPath)
 		if resolvedISO == "" || func() bool { _, e := os.Stat(resolvedISO); return e != nil }() {
-			cacheDir := filepath.Join(".", "Instant_Server_Data", "iso_cache")
+			cacheDir := filepath.Join(baseDataDir, "iso_cache")
 			dlPath, dlErr := usb.DownloadISOWithResume(
 				ctx,
 				profile.UbuntuRelease,

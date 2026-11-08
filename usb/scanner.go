@@ -36,15 +36,30 @@ func EvaluateTripleLockSafety(bus string, removable bool, sizeGB float64, mountp
 	}
 	for _, mp := range mountpoints {
 		norm := strings.ToUpper(strings.TrimSpace(mp))
-		if norm == "/" || norm == "/BOOT" || norm == "/BOOT/EFI" || norm == "/SYSTEM" || strings.HasPrefix(norm, "C:") {
+		if norm == "/" || norm == "/BOOT" || norm == "/BOOT/EFI" || norm == "/HOME" || norm == "/VAR" || norm == "/SYSTEM" || strings.HasPrefix(norm, "/SYSTEM/VOLUMES") || strings.HasPrefix(norm, "C:") {
 			reasons = append(reasons, "System OS partition ("+mp+") is hardware-protected")
 		}
 	}
-	lowNode := strings.ToLower(deviceNode)
-	if lowNode == `\\.\physicaldrive0` || lowNode == "/dev/sda" || lowNode == "/dev/nvme0n1" || lowNode == "/dev/disk0" {
-		reasons = append(reasons, "Primary system boot disk (Disk 0) is protected")
+	lowNode := strings.ToLower(strings.TrimSpace(deviceNode))
+	if lowNode == `\\.\physicaldrive0` || lowNode == "/dev/sda" || lowNode == "/dev/nvme0n1" || lowNode == "/dev/disk0" || lowNode == "/dev/disk1" || lowNode == "/dev/rdisk0" || lowNode == "/dev/rdisk1" {
+		reasons = append(reasons, "Primary system boot disk is hardware-protected")
 	}
 	return len(reasons) == 0, reasons
+}
+
+func parseLinuxProcMounts(devPrefix string) []string {
+	raw, err := os.ReadFile("/proc/mounts")
+	if err != nil {
+		return nil
+	}
+	var mounts []string
+	for _, line := range strings.Split(string(raw), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) >= 2 && strings.HasPrefix(fields[0], devPrefix) {
+			mounts = append(mounts, fields[1])
+		}
+	}
+	return mounts
 }
 
 func ScanRemovableUSBDrives() []USBDeviceCandidate {
@@ -56,7 +71,7 @@ func ScanRemovableUSBDrives() []USBDeviceCandidate {
 		if err == nil {
 			for idx, entry := range entries {
 				name := entry.Name()
-				if strings.HasPrefix(name, "loop") || strings.HasPrefix(name, "ram") || strings.HasPrefix(name, "zram") {
+				if strings.HasPrefix(name, "loop") || strings.HasPrefix(name, "ram") || strings.HasPrefix(name, "zram") || strings.HasPrefix(name, "dm-") {
 					continue
 				}
 				sysDir := filepath.Join("/sys/block", name)
@@ -78,13 +93,93 @@ func ScanRemovableUSBDrives() []USBDeviceCandidate {
 					bus = "nvme"
 				}
 				devNode := "/dev/" + name
-				var mounts []string
-				if name == "sda" || name == "nvme0n1" {
+				mounts := parseLinuxProcMounts(devNode)
+				if (name == "sda" || name == "nvme0n1") && len(mounts) == 0 {
 					mounts = []string{"/"}
 				}
 				passed, reasons := EvaluateTripleLockSafety(bus, removable, sizeGB, mounts, devNode)
 				candidates = append(candidates, USBDeviceCandidate{
 					DeviceID:         "dev_" + strconv.Itoa(idx),
+					DeviceNode:       devNode,
+					Model:            model,
+					SizeGB:           float64(int(sizeGB*10)) / 10.0,
+					Bus:              bus,
+					Removable:        removable,
+					Mountpoints:      mounts,
+					TripleLockPassed: passed,
+					BlockReasons:     reasons,
+				})
+			}
+		}
+
+	case "darwin":
+		out, err := exec.Command("diskutil", "list").Output()
+		if err == nil {
+			for idx, line := range strings.Split(string(out), "\n") {
+				trimmed := strings.TrimSpace(line)
+				if !strings.HasPrefix(trimmed, "/dev/disk") {
+					continue
+				}
+				fields := strings.Fields(trimmed)
+				devNode := fields[0]
+				infoOut, infoErr := exec.Command("diskutil", "info", devNode).Output()
+				if infoErr != nil {
+					continue
+				}
+				infoStr := string(infoOut)
+				model := "macOS Storage Media"
+				bus := "internal"
+				removable := false
+				var sizeGB float64
+				var mounts []string
+				for _, il := range strings.Split(infoStr, "\n") {
+					kv := strings.SplitN(il, ":", 2)
+					if len(kv) != 2 {
+						continue
+					}
+					k := strings.TrimSpace(kv[0])
+					v := strings.TrimSpace(kv[1])
+					switch k {
+					case "Device / Media Name", "Media Name":
+						if v != "" {
+							model = v
+						}
+					case "Protocol":
+						if strings.Contains(strings.ToLower(v), "usb") {
+							bus = "usb"
+						} else if v != "" {
+							bus = strings.ToLower(v)
+						}
+					case "Removable Media":
+						if strings.EqualFold(v, "Removable") || strings.EqualFold(v, "Yes") {
+							removable = true
+						}
+					case "Device Location":
+						if strings.EqualFold(v, "External") && bus == "usb" {
+							removable = true
+						}
+					case "Disk Size", "Total Size":
+						// Format example: "32.0 GB (32017047552 Bytes) ..."
+						if openIdx := strings.Index(v, "("); openIdx >= 0 {
+							sub := v[openIdx+1:]
+							if spIdx := strings.Index(sub, " "); spIdx > 0 {
+								if bVal, bErr := strconv.ParseUint(strings.TrimSpace(sub[:spIdx]), 10, 64); bErr == nil {
+									sizeGB = float64(bVal) / (1024.0 * 1024.0 * 1024.0)
+								}
+							}
+						}
+					case "Mount Point":
+						if v != "" && !strings.EqualFold(v, "Not applicable (no file system)") {
+							mounts = append(mounts, v)
+						}
+					}
+				}
+				if devNode == "/dev/disk0" || devNode == "/dev/disk1" {
+					mounts = append(mounts, "/System/Volumes/Data")
+				}
+				passed, reasons := EvaluateTripleLockSafety(bus, removable, sizeGB, mounts, devNode)
+				candidates = append(candidates, USBDeviceCandidate{
+					DeviceID:         "mac_disk_" + strconv.Itoa(idx),
 					DeviceNode:       devNode,
 					Model:            model,
 					SizeGB:           float64(int(sizeGB*10)) / 10.0,

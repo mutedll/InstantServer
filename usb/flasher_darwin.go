@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"strings"
 	"syscall"
+	"time"
 )
 
 type darwinRawDisk struct {
@@ -31,6 +32,7 @@ func unlockMacOSDiskArbitration(devicePath string) error {
 		if out, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("IS-USB-306: diskutil unmountDisk force failed on %s (%s): %w", baseDisk, strings.TrimSpace(string(out)), err)
 		}
+		time.Sleep(150 * time.Millisecond)
 	}
 	return nil
 }
@@ -46,7 +48,23 @@ func OpenRawDisk(devicePath string) (RawDiskHandle, error) {
 		flags |= syscall.O_EXCL
 	}
 
-	f, err := os.OpenFile(rawPath, flags, 0600)
+	var f *os.File
+	var err error
+	for attempt := 0; attempt < 5; attempt++ {
+		f, err = os.OpenFile(rawPath, flags, 0600)
+		if err == nil {
+			break
+		}
+		if strings.HasPrefix(rawPath, "/dev/rdisk") {
+			_ = unlockMacOSDiskArbitration(devicePath)
+			time.Sleep(time.Duration(120*(attempt+1)) * time.Millisecond)
+		} else {
+			break
+		}
+	}
+	if err != nil && strings.HasPrefix(rawPath, "/dev/rdisk") {
+		f, err = os.OpenFile(rawPath, os.O_RDWR, 0600)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("IS-USB-301: failed to open macOS raw character device %s: %w", rawPath, err)
 	}

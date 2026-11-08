@@ -112,6 +112,11 @@ func TestTripleLockSafetyValidation(t *testing.T) {
 		t.Fatalf("expected system NVMe disk 0 to be blocked by Triple-Lock")
 	}
 
+	passedMacSys, reasonsMacSys := EvaluateTripleLockSafety("usb", true, 256.0, []string{"/System/Volumes/Data"}, "/dev/disk1")
+	if passedMacSys || len(reasonsMacSys) == 0 {
+		t.Fatalf("expected macOS APFS synthesized disk1 /System/Volumes/Data to be blocked by Triple-Lock")
+	}
+
 	passedUSB, reasonsUSB := EvaluateTripleLockSafety("usb", true, 32.0, []string{"D:\\"}, `\\.\PhysicalDrive2`)
 	if !passedUSB || len(reasonsUSB) != 0 {
 		t.Fatalf("expected valid 32GB removable USB drive to pass Triple-Lock, got reasons: %v", reasonsUSB)
@@ -239,23 +244,21 @@ func TestSha512CryptAndAutoinstallChrootSafety(t *testing.T) {
 	}
 
 	cfg := ServerProfileConfig{
-		Hostname:              "homelab-pro",
-		Username:              "nihal",
-		Password:              "MySuperSecretPass123!",
-		WifiSSID:              "HomeFiber5G",
-		WifiPassword:          "WifiSecret99!",
-		EnableUSBTethering:    true,
-		InstallMode:           "dual_boot",
-		DualBootAllocationGB:  1024,
-		SelectedApps:          []string{"minecraft", "nextcloud", "pihole"},
+		Hostname:             "homelab-pro",
+		Username:             "nihal",
+		Password:             "MySuperSecretPass123!",
+		WifiSSID:             "HomeFiber5G",
+		WifiPassword:         "WifiSecret99!",
+		EnableUSBTethering:   true,
+		InstallMode:          "dual_boot",
+		DualBootAllocationGB: 1024,
+		SelectedApps:         []string{"minecraft", "nextcloud", "pihole"},
 		AppOverrides: map[string]AppOverride{
 			"minecraft": {
 				HostPort:    25565,
 				MemoryLimit: "6g",
 				ConfigFiles: map[string]string{
-					"server.properties": "motd=Custom Server Properties
-online-mode=false
-",
+					"server.properties": "motd=Custom Server Properties\nonline-mode=false\n",
 				},
 			},
 		},
@@ -277,8 +280,7 @@ online-mode=false
 	}
 
 	stageDir := t.TempDir()
-	written, err := StageCIDATAPayload(stageDir, cfg, []byte("#!/usr/bin/env bash
-"), []byte("<html></html>"))
+	written, err := StageCIDATAPayload(stageDir, cfg, []byte("#!/usr/bin/env bash\n"), []byte("<html></html>"))
 	if err != nil {
 		t.Fatalf("StageCIDATAPayload failed: %v", err)
 	}

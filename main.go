@@ -20,14 +20,32 @@ import (
 //go:embed all:src/instant_server/ui all:src/instant_server/scripts
 var embeddedAssets embed.FS
 
+func isDirWritable(dir string) bool {
+	if err := os.MkdirAll(dir, 0777); err != nil {
+		return false
+	}
+	probe := filepath.Join(dir, ".write_probe")
+	if err := os.WriteFile(probe, []byte("ok"), 0666); err != nil {
+		return false
+	}
+	_ = os.Remove(probe)
+	return true
+}
+
 func resolveIsolatedWebviewDataPath() string {
-	exePath, err := os.Executable()
-	if err == nil {
+	if exePath, err := os.Executable(); err == nil {
 		exeDir := filepath.Dir(exePath)
 		portableCache := filepath.Join(exeDir, "Instant_Server_Data", "webview2_runtime_cache")
-		if mkErr := os.MkdirAll(portableCache, 0777); mkErr == nil {
+		if isDirWritable(portableCache) {
 			_ = os.Chmod(portableCache, 0777)
 			return portableCache
+		}
+	}
+	if cfgDir, err := os.UserConfigDir(); err == nil {
+		userCache := filepath.Join(cfgDir, "InstantServer", "webview2_runtime_cache")
+		if isDirWritable(userCache) {
+			_ = os.Chmod(userCache, 0777)
+			return userCache
 		}
 	}
 	fallbackTmp := filepath.Join(os.TempDir(), "InstantServer_WebView2_SharedCache")

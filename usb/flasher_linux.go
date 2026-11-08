@@ -6,6 +6,7 @@ package usb
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -31,7 +32,9 @@ func unmountLinuxPartitions(devicePath string) {
 		if part == devicePath {
 			continue
 		}
+		_ = exec.Command("udisksctl", "unmount", "-b", part, "--no-user-interaction").Run()
 		_ = syscall.Unmount(part, syscall.MNT_DETACH)
+		_ = exec.Command("umount", "-l", part).Run()
 	}
 }
 
@@ -50,6 +53,10 @@ func OpenRawDisk(devicePath string) (RawDiskHandle, error) {
 
 	f, err := os.OpenFile(cleanPath, flags, 0600)
 	if err != nil {
+		// Retry O_DIRECT without O_EXCL in case udisks2/udev briefly holds a probe reference
+		if fDirect, dErr := os.OpenFile(cleanPath, os.O_RDWR|syscall.O_DIRECT, 0600); dErr == nil {
+			return &linuxRawDisk{file: fDirect, devicePath: cleanPath, directIO: true}, nil
+		}
 		// Fallback for tmpfs/loop test filesystems that do not support O_DIRECT
 		fFallback, fbErr := os.OpenFile(cleanPath, os.O_RDWR, 0600)
 		if fbErr != nil {

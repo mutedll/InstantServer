@@ -18,9 +18,11 @@ type EscalationResult struct {
 
 func IsProcessElevated() bool {
 	if runtime.GOOS == "windows" {
-		f, err := os.Open(`\\.\PHYSICALDRIVE0`)
-		if err == nil {
+		if f, err := os.Open(`\\.\PHYSICALDRIVE0`); err == nil {
 			_ = f.Close()
+			return true
+		}
+		if err := exec.Command("fltmc").Run(); err == nil {
 			return true
 		}
 		return false
@@ -50,7 +52,14 @@ func RequestNativePrivilegeEscalation(helperCommand []string) EscalationResult {
 	switch runtime.GOOS {
 	case "linux":
 		if pkexecPath, err := exec.LookPath("pkexec"); err == nil {
-			cmd := exec.Command(pkexecPath, args...)
+			pkArgs := []string{"env"}
+			for _, envKey := range []string{"DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"} {
+				if val := os.Getenv(envKey); val != "" {
+					pkArgs = append(pkArgs, fmt.Sprintf("%s=%s", envKey, val))
+				}
+			}
+			pkArgs = append(pkArgs, args...)
+			cmd := exec.Command(pkexecPath, pkArgs...)
 			cmd.Env = os.Environ()
 			if startErr := cmd.Start(); startErr == nil {
 				return EscalationResult{

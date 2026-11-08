@@ -2,9 +2,9 @@ name: CI Verification Suite
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
   pull_request:
-    branches: [main]
+    branches: [main, master]
   workflow_dispatch:
 
 jobs:
@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-2025, macos-latest]
+        os: [ubuntu-24.04, windows-2025, macos-15-intel]
 
     steps:
       - name: Checkout Repository
@@ -60,6 +60,19 @@ jobs:
             [ -f "$ujf" ] && [ ! -f "src/instant_server/ui/$ujf" ] && cp "$ujf" "src/instant_server/ui/$ujf" || true
           done
           [ -f "laptop_hardening.sh" ] && [ ! -f "src/instant_server/scripts/laptop_hardening.sh" ] && cp "laptop_hardening.sh" "src/instant_server/scripts/laptop_hardening.sh" || true
+
+          # Self-heal any accidental multiline double-quoted string in usb/flasher_test.go
+          if [ -f "usb/flasher_test.go" ]; then
+            python3 -c '
+          p = "usb/flasher_test.go"
+          s = open(p, "r", encoding="utf-8").read()
+          s = s.replace("\"motd=Custom Server Properties\nonline-mode=false\n\"", "\"motd=Custom Server Properties\\nonline-mode=false\\n\"")
+          s = s.replace("\"motd=Custom Server Properties\r\nonline-mode=false\r\n\"", "\"motd=Custom Server Properties\\nonline-mode=false\\n\"")
+          s = s.replace("[]byte(\"#!/usr/bin/env bash\n\")", "[]byte(\"#!/usr/bin/env bash\\n\")")
+          s = s.replace("[]byte(\"#!/usr/bin/env bash\r\n\")", "[]byte(\"#!/usr/bin/env bash\\n\")")
+          open(p, "w", encoding="utf-8").write(s)
+          '
+          fi
 
           # Ensure go.mod exists and synchronize internal subpackage import paths with go.mod module name
           if [ ! -f "go.mod" ]; then
