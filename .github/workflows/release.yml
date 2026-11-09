@@ -146,6 +146,11 @@ jobs:
               c = c.replace("if ent.IsDir() {", "if ent.IsDir() || strings.HasSuffix(ent.Name(), \".img\") || strings.HasSuffix(ent.Name(), \".iso\") {")
               c = c.replace("copy(img[dataOffset:dataOffset+(endByte-startByte)], f.Data[startByte:endByte])", "if dataOffset >= 0 && dataOffset+(endByte-startByte) <= len(img) { copy(img[dataOffset:dataOffset+(endByte-startByte)], f.Data[startByte:endByte]) }")
               open(cf, "w", encoding="utf-8").write(c)
+          mg = "main.go"
+          if os.path.exists(mg):
+              m = open(mg, "r", encoding="utf-8").read()
+              m = m.replace("\t\tIcon:      iconBytes,\n", "")
+              open(mg, "w", encoding="utf-8").write(m)
           '
 
           # Synchronize internal subpackage import paths with go.mod module name
@@ -186,6 +191,8 @@ jobs:
             mkdir -p build/dmg_staging
             if [ -d "build/bin/InstantServer.app" ]; then
               cp -R "build/bin/InstantServer.app" build/dmg_staging/
+            elif [ -d "build/bin/Instant Server.app" ]; then
+              cp -R "build/bin/Instant Server.app" build/dmg_staging/
             else
               cp build/bin/InstantServer build/dmg_staging/
             fi

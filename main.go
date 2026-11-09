@@ -16,6 +16,7 @@ import (
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/linux"
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -75,7 +76,7 @@ func isISGlyphPixel(nx, ny float64) bool {
 }
 
 // buildInstantServerIconPNG renders the "IS" (Instant Server) emblem as an RGBA PNG
-// for the native window titlebar, taskbar, and system tray.
+// for the native window titlebar, dock/panel, and About dialog.
 func buildInstantServerIconPNG(size int) []byte {
 	if size <= 0 {
 		size = 256
@@ -177,7 +178,6 @@ func main() {
 		Height:    600,
 		MinWidth:  720,
 		MinHeight: 460,
-		Icon:      iconBytes,
 		AssetServer: &assetserver.Options{
 			Handler: app.AssetAndAPIRouter(),
 		},
@@ -218,6 +218,12 @@ func main() {
 				Message: "Zero-Touch Bootable Ubuntu LTS Homelab & USB Provisioning Engine",
 				Icon:    iconBytes,
 			},
+		},
+		Linux: &linux.Options{
+			Icon:                iconBytes,
+			WindowIsTranslucent: false,
+			WebviewGpuPolicy:    linux.WebviewGpuPolicyAlways,
+			ProgramName:         "InstantServer",
 		},
 	})
 	if err != nil {
