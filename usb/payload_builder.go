@@ -35,13 +35,19 @@ type ServerProfileConfig struct {
 	DeviceFormFactor            string                 `json:"device_form_factor"`
 	DashboardChoice             string                 `json:"dashboard_choice"`
 	DashboardPort               int                    `json:"dashboard_port"`
+	EnableAutoUpdates           bool                   `json:"enable_auto_updates"`
+	EnableIPhoneAutoBackup      bool                   `json:"enable_iphone_auto_backup"`
+	IPhoneBackupMode            string                 `json:"iphone_backup_mode,omitempty"`
 	SelectedApps                []string               `json:"selected_apps"`
 	CustomApps                  []CustomAppEntry       `json:"custom_apps"`
 	MinecraftConfig             *MinecraftServerConfig `json:"minecraft_config,omitempty"`
 	AppOverrides                map[string]AppOverride `json:"app_overrides,omitempty"`
+	CustomConfigFiles           map[string]string      `json:"custom_config_files,omitempty"`
+	CustomPostInstallScript     string                 `json:"custom_post_install_script,omitempty"`
 	InstallMode                 string                 `json:"install_mode"`
 	DualBootAllocationGB        int                    `json:"dual_boot_Allocation_gb"`
 	ConfirmEraseMainDrive       bool                   `json:"confirm_erase_main_drive"`
+	ConfirmWipeServerData       string                 `json:"confirm_wipe_server_data,omitempty"`
 	UbuntuRelease               string                 `json:"ubuntu_release"`
 	StorageLayout               string                 `json:"storage_layout"`
 	BootMode                    string                 `json:"boot_mode"`
@@ -60,6 +66,7 @@ type ServerProfileConfig struct {
 	EnableTCPBBR                bool                   `json:"enable_tcp_bbr"`
 	VMSwappiness                int                    `json:"vm_swappiness"`
 	InotifyMaxWatches           int                    `json:"inotify_max_watches"`
+	CustomISOPath               string                 `json:"custom_iso_path,omitempty"`
 	SelectedUSBDevice           string                 `json:"selected_usb_device"`
 }
 
@@ -122,23 +129,27 @@ func Sha512Crypt(password string, salt string) string {
 	altHash.Write(key)
 	altSum := altHash.Sum(nil)
 
-	ctxHash := sha512.New()
-	ctxHash.Write(key)
-	ctxHash.Write(saltBytes)
+	mainHash := sha512.New()
+	mainHash.Write(key)
+	mainHash.Write(saltBytes)
 	for cnt := keyLen; cnt > 64; cnt -= 64 {
-		ctxHash.Write(altSum)
+		mainHash.Write(altSum)
 	}
 	if keyLen > 0 {
-		ctxHash.Write(altSum[:keyLen%64])
+		rem := keyLen % 64
+		if rem == 0 {
+			rem = 64
+		}
+		mainHash.Write(altSum[:rem])
 	}
 	for cnt := keyLen; cnt > 0; cnt >>= 1 {
 		if (cnt & 1) != 0 {
-			ctxHash.Write(altSum)
+			mainHash.Write(altSum)
 		} else {
-			ctxHash.Write(key)
+			mainHash.Write(key)
 		}
 	}
-	digestA := ctxHash.Sum(nil)
+	digestA := mainHash.Sum(nil)
 
 	dpHash := sha512.New()
 	for i := 0; i < keyLen; i++ {
@@ -184,7 +195,6 @@ func Sha512Crypt(password string, salt string) string {
 	}
 
 	var b strings.Builder
-	b.Grow(120)
 	b.WriteString("$6$")
 	b.WriteString(cleanSalt)
 	b.WriteByte('$')
@@ -240,6 +250,9 @@ func ValidateProfileConfig(cfg ServerProfileConfig) error {
 	}
 	if cfg.InstallMode == "auto_erase" && !cfg.ConfirmEraseMainDrive {
 		return errors.New("IS-CFG-005: Auto-erase mode requires explicit confirmation")
+	}
+	if cfg.InstallMode == "reinstall_wipe_data" && !cfg.ConfirmEraseMainDrive && cfg.ConfirmWipeServerData != "WIPE-SERVER-DATA" {
+		return errors.New("IS-CFG-006: Reinstalling without retaining server data requires explicit WIPE-SERVER-DATA confirmation")
 	}
 	if cfg.ClusterMode != "" && cfg.ClusterMode != "standalone" && cfg.ClusterStoragePolicy == "wipe_secondary_expand" {
 		if !strings.HasPrefix(cfg.ClusterConfirmWipeSecondary, "WIPE-") {
@@ -381,7 +394,6 @@ func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
 		}
 	}
 
-	// Build Netplan v2 dual-homing network configuration (Ethernet metric 100 + Wi-Fi failover metric 600 + USB tethering)
 	ethSection := `      eth_lan:
         match:
           name: "en*"
@@ -442,8 +454,14 @@ func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
           "%s":%s`, safeSSID, authLine)
 	}
 
+	// Always inhibit sleep/suspend and ignore laptop lid close inside the live Ubuntu installer environment
+	liveNoSleepCmds := `    - systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target 2>/dev/null || true
+    - mkdir -p /etc/systemd/logind.conf.d && printf "[Login]\nHandleLidSwitch=ignore\nHandleLidSwitchExternalPower=ignore\nHandleLidSwitchDocked=ignore\nIdleAction=ignore\n" > /etc/systemd/logind.conf.d/00-live-nosleep.conf && systemctl restart systemd-logind 2>/dev/null || true`
+
 	var earlyCommandsBlock string
 	var storageBlock string
+	var extraLateCommands string
+
 	switch cfg.InstallMode {
 	case "dual_boot":
 		allocGB := cfg.DualBootAllocationGB
@@ -451,8 +469,9 @@ func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
 			allocGB = 45
 		}
 		earlyCommandsBlock = fmt.Sprintf(`  early-commands:
+%s
     - bash /cdrom/cidata/dynamic_dualboot_storage.sh %d 2>/dev/null || bash /cdrom/dynamic_dualboot_storage.sh %d 2>/dev/null || true
-`, allocGB, allocGB)
+`, liveNoSleepCmds, allocGB, allocGB)
 		storageBlock = fmt.Sprintf(`  storage:
     config:
       - type: disk
@@ -488,18 +507,64 @@ func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
         id: instant-root-mnt
         device: instant-root-fmt
         path: /`, allocGB)
+
+	case "reinstall_keep_data":
+		earlyCommandsBlock = fmt.Sprintf(`  early-commands:
+%s
+    - bash /cdrom/cidata/reinstall_preserve_data.sh backup 2>/dev/null || bash /cdrom/reinstall_preserve_data.sh backup 2>/dev/null || true
+`, liveNoSleepCmds)
+		storageBlock = fmt.Sprintf(`  storage:
+    layout:
+      name: %s
+      match:
+        size: largest`, layout)
+		extraLateCommands = "\n    - bash /cdrom/cidata/reinstall_preserve_data.sh restore 2>/dev/null || bash /cdrom/reinstall_preserve_data.sh restore 2>/dev/null || true"
+
+	case "reinstall_wipe_data":
+		earlyCommandsBlock = fmt.Sprintf(`  early-commands:
+%s
+`, liveNoSleepCmds)
+		storageBlock = fmt.Sprintf(`  storage:
+    layout:
+      name: %s
+      match:
+        size: largest`, layout)
+
+	case "offline_updater_usb":
+		earlyCommandsBlock = fmt.Sprintf(`  early-commands:
+%s
+    - bash /cdrom/cidata/offline_updater_apply.sh 2>/dev/null || bash /cdrom/offline_updater_apply.sh 2>/dev/null || true
+`, liveNoSleepCmds)
+		storageBlock = `  # Offline Updater USB: updates existing server dashboard, scripts, and app stacks without formatting`
+
+	case "repair_rescue_usb":
+		earlyCommandsBlock = fmt.Sprintf(`  early-commands:
+%s
+    - bash /cdrom/cidata/emergency_repair_reset.sh 2>/dev/null || bash /cdrom/emergency_repair_reset.sh 2>/dev/null || true
+`, liveNoSleepCmds)
+		storageBlock = `  # Live Repair & Password Reset Mode: repairs bootloader/filesystem and resets credentials without formatting`
+
 	case "interactive_select":
+		earlyCommandsBlock = fmt.Sprintf(`  early-commands:
+%s
+`, liveNoSleepCmds)
 		storageBlock = `  interactive-sections:
     - storage`
-	case "repair_rescue_usb":
-		storageBlock = `  # Live Repair & Rescue Mode: boots into diagnostic tools without formatting target drive`
+
 	case "secondary_drive":
+		earlyCommandsBlock = fmt.Sprintf(`  early-commands:
+%s
+`, liveNoSleepCmds)
 		storageBlock = fmt.Sprintf(`  storage:
     layout:
       name: %s
       match:
         path: /dev/sdb`, layout)
+
 	default:
+		earlyCommandsBlock = fmt.Sprintf(`  early-commands:
+%s
+`, liveNoSleepCmds)
 		storageBlock = fmt.Sprintf(`  storage:
     layout:
       name: %s
@@ -524,10 +589,10 @@ autoinstall:
 %s%s
   late-commands:
     - mkdir -p /target/opt/instant-server
-    - cp -rf /cdrom/cidata/* /target/opt/instant-server/ 2>/dev/null || cp -rf /cdrom/* /target/opt/instant-server/ 2>/dev/null || true
+    - cp -rf /cdrom/cidata/* /target/opt/instant-server/ 2>/dev/null || cp -rf /cdrom/* /target/opt/instant-server/ 2>/dev/null || true%s
     - curtin in-target -- chmod +x /opt/instant-server/laptop_hardening.sh
     - curtin in-target -- bash /opt/instant-server/laptop_hardening.sh
-`, host, user, hashedPass, sshKeysBlock, ethSection, usbTetherSection, wifiSection, earlyCommandsBlock, storageBlock)
+`, host, user, hashedPass, sshKeysBlock, ethSection, usbTetherSection, wifiSection, earlyCommandsBlock, storageBlock, extraLateCommands)
 }
 
 func GenerateTargetEnvConf(cfg ServerProfileConfig) string {
@@ -581,6 +646,10 @@ func GenerateTargetEnvConf(cfg ServerProfileConfig) string {
 	if tsMode == "" {
 		tsMode = "subnet_and_ssh"
 	}
+	iphoneMode := strings.TrimSpace(cfg.IPhoneBackupMode)
+	if iphoneMode == "" {
+		iphoneMode = "all_three"
+	}
 	enableCockpit := cfg.DashboardChoice == "both" || cfg.DashboardChoice == "cockpit" || cfg.DashboardChoice == ""
 	enableCasaOS := cfg.DashboardChoice == "both" || cfg.DashboardChoice == "casaos" || cfg.DashboardChoice == ""
 
@@ -597,6 +666,9 @@ INSTANT_ENABLE_CASAOS=%q
 INSTANT_ENABLE_DOCKER="1"
 INSTANT_ENABLE_CUSTOM_DASHBOARD="1"
 INSTANT_DASHBOARD_PORT=%q
+INSTANT_ENABLE_AUTO_UPDATES=%q
+INSTANT_ENABLE_IPHONE_BACKUP=%q
+INSTANT_IPHONE_BACKUP_MODE=%q
 INSTANT_ENABLE_TAILSCALE=%q
 INSTANT_TAILSCALE_AUTHKEY=%q
 INSTANT_TAILSCALE_MODE=%q
@@ -604,6 +676,7 @@ INSTANT_CLUSTER_MODE=%q
 INSTANT_CLUSTER_POLICY=%q
 INSTANT_CPU_GOVERNOR=%q
 INSTANT_DISABLE_TURBO=%q
+INSTANT_INSTALL_MODE=%q
 INSTANT_SELECTED_APPS=%q
 `,
 		host,
@@ -617,6 +690,9 @@ INSTANT_SELECTED_APPS=%q
 		bool01(enableCockpit),
 		bool01(enableCasaOS),
 		strconv.Itoa(dashPort),
+		bool01(cfg.EnableAutoUpdates),
+		bool01(cfg.EnableIPhoneAutoBackup),
+		iphoneMode,
 		bool01(cfg.EnableTailscale),
 		strings.TrimSpace(cfg.TailscaleAuthKey),
 		tsMode,
@@ -624,6 +700,7 @@ INSTANT_SELECTED_APPS=%q
 		clusterPol,
 		gov,
 		bool01(cfg.DisableCPUTurboBoost),
+		cfg.InstallMode,
 		strings.Join(cfg.SelectedApps, ","),
 	)
 }
@@ -643,6 +720,20 @@ func StageCIDATAPayload(targetDir string, cfg ServerProfileConfig, hardeningScri
 	}
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
 		return nil, err
+	}
+
+	// If iPhone Auto-Backup is enabled, ensure Immich photo backup is included in SelectedApps
+	if cfg.EnableIPhoneAutoBackup {
+		hasImmich := false
+		for _, a := range cfg.SelectedApps {
+			if a == "immich" {
+				hasImmich = true
+				break
+			}
+		}
+		if !hasImmich {
+			cfg.SelectedApps = append(cfg.SelectedApps, "immich")
+		}
 	}
 
 	var writtenFiles []string
@@ -674,6 +765,93 @@ echo "[instant-server] Inspecting target disk for non-destructive ${REQ_GB}G dua
 	if err := writeItem("dynamic_dualboot_storage.sh", NormalizeShellScriptLF(dualBootHelper), 0755); err != nil {
 		return nil, err
 	}
+
+	// Reinstall While Retaining Server Data helper script
+	reinstallPreserveScript := []byte(`#!/usr/bin/env bash
+set -euo pipefail
+ACTION="${1:-backup}"
+STAGE_BACKUP="/run/instant-preserved-data"
+mkdir -p "$STAGE_BACKUP" /mnt/existing_os
+if [ "$ACTION" = "backup" ]; then
+    for part in $(lsblk -lnpo NAME,FSTYPE | awk '$2 ~ /ext4|btrfs|xfs/ {print $1}'); do
+        if mount -o ro "$part" /mnt/existing_os 2>/dev/null; then
+            if [ -d "/mnt/existing_os/DATA" ]; then
+                echo "[instant-server] Backing up existing /DATA from $part..."
+                cp -a /mnt/existing_os/DATA "$STAGE_BACKUP/" 2>/dev/null || true
+            fi
+            if [ -d "/mnt/existing_os/opt/instant-server" ]; then
+                cp -a /mnt/existing_os/opt/instant-server "$STAGE_BACKUP/" 2>/dev/null || true
+            fi
+            umount /mnt/existing_os 2>/dev/null || true
+        fi
+    done
+elif [ "$ACTION" = "restore" ]; then
+    if [ -d "$STAGE_BACKUP/DATA" ]; then
+        mkdir -p /target/DATA
+        cp -a "$STAGE_BACKUP/DATA/." /target/DATA/ 2>/dev/null || true
+        echo "[instant-server] Restored preserved /DATA to reinstalled server."
+    fi
+fi
+`)
+	if err := writeItem("reinstall_preserve_data.sh", NormalizeShellScriptLF(reinstallPreserveScript), 0755); err != nil {
+		return nil, err
+	}
+
+	// Offline Updater USB helper script (for local-only / air-gapped servers)
+	offlineUpdaterScript := []byte(`#!/usr/bin/env bash
+set -euo pipefail
+SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TARGET_ROOT="/"
+if [ -d "/target/opt/instant-server" ]; then
+    TARGET_ROOT="/target"
+elif [ ! -d "/opt/instant-server" ]; then
+    mkdir -p /mnt/target_os
+    for part in $(lsblk -lnpo NAME,FSTYPE | awk '$2 ~ /ext4|btrfs|xfs/ {print $1}'); do
+        if mount "$part" /mnt/target_os 2>/dev/null; then
+            if [ -d "/mnt/target_os/opt/instant-server" ]; then
+                TARGET_ROOT="/mnt/target_os"
+                break
+            fi
+            umount /mnt/target_os 2>/dev/null || true
+        fi
+    done
+fi
+mkdir -p "${TARGET_ROOT}/opt/instant-server" "${TARGET_ROOT}/DATA/AppData"
+cp -rf "${SRC_DIR}/server_dashboard.html" "${TARGET_ROOT}/opt/instant-server/" 2>/dev/null || true
+cp -rf "${SRC_DIR}/laptop_hardening.sh" "${TARGET_ROOT}/opt/instant-server/" 2>/dev/null || true
+if [ -d "${SRC_DIR}/casaos_apps" ]; then
+    cp -rf "${SRC_DIR}/casaos_apps/"* "${TARGET_ROOT}/DATA/AppData/" 2>/dev/null || true
+fi
+systemctl restart instant-server-dashboard.service 2>/dev/null || true
+echo "[instant-server] Offline USB update applied to ${TARGET_ROOT}."
+`)
+	if err := writeItem("offline_updater_apply.sh", NormalizeShellScriptLF(offlineUpdaterScript), 0755); err != nil {
+		return nil, err
+	}
+
+	// Emergency Repair & Password Reset USB helper script
+	hashedPass := Sha512Crypt(cfg.Password, "instantserverlts")
+	repairResetScript := fmt.Sprintf(`#!/usr/bin/env bash
+set -euo pipefail
+TARGET_USER=%q
+NEW_HASH=%q
+mkdir -p /mnt/repair_os
+for part in $(lsblk -lnpo NAME,FSTYPE | awk '$2 == "ext4" {print $1}'); do
+    e2fsck -fy "$part" 2>/dev/null || true
+    if mount "$part" /mnt/repair_os 2>/dev/null; then
+        if [ -f "/mnt/repair_os/etc/shadow" ]; then
+            chroot /mnt/repair_os /bin/bash -c "printf '%%s:%%s\n' '$TARGET_USER' '$NEW_HASH' | chpasswd -e" 2>/dev/null || true
+            chroot /mnt/repair_os /bin/bash -c "ufw allow 22/tcp && ufw allow 8088/tcp && fail2ban-client unban --all" 2>/dev/null || true
+            echo "[instant-server] Reset password for $TARGET_USER and repaired filesystem on $part."
+        fi
+        umount /mnt/repair_os 2>/dev/null || true
+    fi
+done
+`, cfg.Username, hashedPass)
+	if err := writeItem("emergency_repair_reset.sh", NormalizeShellScriptLF([]byte(repairResetScript)), 0755); err != nil {
+		return nil, err
+	}
+
 	envConf := []byte(GenerateTargetEnvConf(cfg))
 	if err := writeItem("instant-server-env.conf", envConf, 0600); err != nil {
 		return nil, err
@@ -694,6 +872,18 @@ echo "[instant-server] Inspecting target disk for non-destructive ${REQ_GB}G dua
 			return nil, err
 		}
 	}
+	if strings.TrimSpace(cfg.CustomPostInstallScript) != "" {
+		if err := writeItem("custom_post_install.sh", NormalizeShellScriptLF([]byte(cfg.CustomPostInstallScript)), 0755); err != nil {
+			return nil, err
+		}
+	}
+	for customPath, customContent := range cfg.CustomConfigFiles {
+		safeName := strings.ReplaceAll(strings.Trim(customPath, "/\\"), "/", "__")
+		if safeName != "" {
+			_ = writeItem(filepath.Join("custom_system_configs", safeName), []byte(customContent), 0644)
+		}
+	}
+
 	for _, appID := range cfg.SelectedApps {
 		cleanID := strings.TrimSpace(appID)
 		if cleanID == "" || strings.HasPrefix(cleanID, "custom_") {

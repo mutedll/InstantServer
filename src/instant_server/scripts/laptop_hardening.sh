@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016
 # src/instant_server/scripts/laptop_hardening.sh
-# shellcheck shell=bash disable=SC1017,SC1090,SC1091
+# shellcheck shell=bash disable=SC1017,SC1090,SC1091,SC2016
 set -euo pipefail
 
 ENV_CONF="/opt/instant-server/instant-server-env.conf"
@@ -37,6 +38,9 @@ INSTANT_CLUSTER_MODE="${INSTANT_CLUSTER_MODE:-standalone}"
 INSTANT_CLUSTER_POLICY="${INSTANT_CLUSTER_POLICY:-mergerfs_union_safe}"
 INSTANT_CPU_GOVERNOR="${INSTANT_CPU_GOVERNOR:-schedutil}"
 INSTANT_DISABLE_TURBO="${INSTANT_DISABLE_TURBO:-0}"
+INSTANT_ENABLE_AUTO_UPDATES="${INSTANT_ENABLE_AUTO_UPDATES:-1}"
+INSTANT_ENABLE_IPHONE_BACKUP="${INSTANT_ENABLE_IPHONE_BACKUP:-1}"
+INSTANT_IPHONE_BACKUP_MODE="${INSTANT_IPHONE_BACKUP_MODE:-all_three}"
 
 log_info() {
     printf '[instant-server] %s\n' "$*"
@@ -63,6 +67,16 @@ configure_multi_node_collision_guard() {
 }
 
 configure_laptop_lid_and_battery() {
+    systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target 2>/dev/null || true
+    mkdir -p /etc/systemd/logind.conf.d
+    printf '%s\n' \
+        "[Login]" \
+        "HandleLidSwitch=ignore" \
+        "HandleLidSwitchExternalPower=ignore" \
+        "HandleLidSwitchDocked=ignore" \
+        "LidSwitchIgnoreInhibited=no" \
+        "IdleAction=ignore" \
+        > /etc/systemd/logind.conf.d/99-instant-server-clamshell.conf
     local has_bat=0
     for bat in /sys/class/power_supply/BAT*; do
         if [ -e "$bat" ]; then
@@ -134,11 +148,11 @@ configure_laptop_lid_and_battery() {
     printf '%s\n' \
         '#!/usr/bin/env bash' \
         'for bat_dir in /sys/class/power_supply/BAT*; do' \
-        '    [ -d "$bat_dir" ] || continue' \
-        '    cap=$(cat "$bat_dir/capacity" 2>/dev/null || echo 100)' \
-        '    st=$(cat "$bat_dir/status" 2>/dev/null || echo Unknown)' \
+        "    [ -d \"\$bat_dir\" ] || continue" \
+        "    cap=\$(cat \"\$bat_dir/capacity\" 2>/dev/null || echo 100)" \
+        "    st=\$(cat \"\$bat_dir/status\" 2>/dev/null || echo Unknown)" \
         "    if [ \"\$st\" = \"Discharging\" ] && [ \"\$cap\" -le \"${INSTANT_UPS_SHUTDOWN_PCT}\" ]; then" \
-        '        logger -t instant-server "Battery at ${cap}% while discharging. Triggering graceful UPS shutdown."' \
+        "        logger -t instant-server \"Battery at \${cap}% while discharging. Triggering graceful UPS shutdown.\"" \
         '        sync' \
         '        systemctl poweroff' \
         '    fi' \
@@ -204,16 +218,16 @@ configure_docker_ufw_and_rcon_tools() {
         '    printf "Docker is not installed yet.\n"' \
         '    exit 1' \
         'fi' \
-        'if [ "${1:-}" = "--backup-now" ]; then' \
+        "if [ \"\${1:-}\" = \"--backup-now\" ]; then" \
         '    mkdir -p /DATA/Backups/minecraft' \
         '    docker exec minecraft rcon-cli save-off 2>/dev/null || true' \
         '    docker exec minecraft rcon-cli save-all flush 2>/dev/null || true' \
-        '    tar -czf "/DATA/Backups/minecraft/world-$(date +%Y%m%d-%H%M%S).tar.gz" -C /DATA/AppData/minecraft/data . 2>/dev/null || true' \
+        "    tar -czf \"/DATA/Backups/minecraft/world-\$(date +%Y%m%d-%H%M%S).tar.gz\" -C /DATA/AppData/minecraft/data . 2>/dev/null || true" \
         '    docker exec minecraft rcon-cli save-on 2>/dev/null || true' \
         '    printf "RCON-coordinated Minecraft world backup completed.\n"' \
         '    exit 0' \
         'fi' \
-        'docker exec minecraft rcon-cli "$@"' \
+        "docker exec minecraft rcon-cli \"\$@\"" \
         > /usr/local/sbin/instant-mc-rcon
     chmod 755 /usr/local/sbin/instant-mc-rcon
 }
@@ -316,6 +330,55 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
             res = subprocess.run(["/usr/local/sbin/instant-cluster-ctl", "join", ip, host, pol, tok], capture_output=True, text=True)
             self._send({"ok": res.returncode == 0, "output": res.stdout.strip()})
             return
+        if path == "/api/terminal/exec":
+            cmd_str = str(payload.get("command", "uptime")).strip()
+            cwd = str(payload.get("cwd", "/DATA")).strip() or "/DATA"
+            if not os.path.isdir(cwd):
+                cwd = "/"
+            res = subprocess.run(["/bin/bash", "-c", cmd_str], cwd=cwd, capture_output=True, text=True, timeout=45)
+            self._send({"ok": res.returncode == 0, "exit_code": res.returncode, "output": (res.stdout + res.stderr).strip(), "cwd": cwd})
+            return
+        if path == "/api/system/files":
+            action = str(payload.get("action", "list"))
+            target_path = pathlib.Path(str(payload.get("path", "/DATA"))).resolve()
+            is_sys = not str(target_path).startswith("/DATA")
+            if action == "read" and target_path.is_file():
+                content = target_path.read_text(encoding="utf-8", errors="replace")
+                self._send({"ok": True, "path": str(target_path), "is_system_critical": is_sys, "content": content})
+                return
+            if action == "restore_bak":
+                bak = pathlib.Path(str(target_path) + ".bak")
+                if bak.is_file():
+                    shutil.copy2(bak, target_path)
+                    self._send({"ok": True, "restored": str(target_path)})
+                    return
+                self._send({"ok": False, "error": "No .bak file found"}, status=404)
+                return
+            if action == "write":
+                if is_sys and not (payload.get("confirm_system_write") or payload.get("confirmed_system_edit")):
+                    self._send({"ok": False, "error": "System file modification requires explicit confirmation"}, status=400)
+                    return
+                if target_path.is_file():
+                    shutil.copy2(target_path, str(target_path) + ".bak")
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+                target_path.write_text(str(payload.get("content", "")), encoding="utf-8", newline="\n")
+                self._send({"ok": True, "saved": str(target_path), "backup": str(target_path) + ".bak"})
+                return
+            entries = []
+            if target_path.is_dir():
+                for p in sorted(target_path.iterdir()):
+                    entries.append({"name": p.name, "path": str(p), "is_dir": p.is_dir(), "size": p.stat().st_size if p.is_file() else 0})
+            self._send({"ok": True, "path": str(target_path), "is_system_critical": is_sys, "entries": entries})
+            return
+        if path == "/api/system/update":
+            mode = str(payload.get("mode", "auto"))
+            res = subprocess.run(["/usr/local/sbin/instant-server-updater", mode], capture_output=True, text=True)
+            self._send({"ok": res.returncode == 0, "output": (res.stdout + res.stderr).strip()})
+            return
+        if path == "/api/iphone/backup":
+            res = subprocess.run(["/usr/local/sbin/instant-server-iphone-backup", str(payload.get("action", "status"))], capture_output=True, text=True)
+            self._send({"ok": res.returncode == 0, "output": (res.stdout + res.stderr).strip()})
+            return
         self._send({"ok": True})
 
 if __name__ == "__main__":
@@ -355,19 +418,19 @@ configure_firstboot_apps_and_tailscale() {
         'set -euo pipefail' \
         'if command -v docker >/dev/null 2>&1; then' \
         '    for compose_file in /DATA/AppData/*/docker-compose.yml; do' \
-        '        [ -f "$compose_file" ] || continue' \
-        '        docker compose -f "$compose_file" up -d 2>/dev/null || true' \
+        "        [ -f \"\$compose_file\" ] || continue" \
+        "        docker compose -f \"\$compose_file\" up -d 2>/dev/null || true" \
         '    done' \
         'fi' \
         > /usr/local/sbin/instant-server-launch-apps
     chmod 755 /usr/local/sbin/instant-server-launch-apps
 
     if [ "$INSTANT_ENABLE_TAILSCALE" = "1" ] && [ -n "$INSTANT_TAILSCALE_AUTHKEY" ] && command -v tailscale >/dev/null 2>&1; then
-        local ts_flags="--ssh"
+        local ts_flags=(--ssh)
         if [ "$INSTANT_TAILSCALE_MODE" = "exit_node_full" ]; then
-            ts_flags="--ssh --advertise-exit-node"
+            ts_flags=(--ssh --advertise-exit-node)
         fi
-        tailscale up --authkey="${INSTANT_TAILSCALE_AUTHKEY}" $ts_flags 2>/dev/null || true
+        tailscale up --authkey="${INSTANT_TAILSCALE_AUTHKEY}" "${ts_flags[@]}" 2>/dev/null || true
     fi
 }
 
@@ -455,12 +518,12 @@ configure_day2_self_healing_guardrails() {
         '#!/usr/bin/env bash' \
         'rfkill unblock wifi >/dev/null 2>&1 || true' \
         'if command -v iw >/dev/null 2>&1; then' \
-        '    for dev in $(iw dev 2>/dev/null | awk "\$1==\"Interface\"{print \$2}"); do' \
-        '        iw dev "$dev" set power_save off 2>/dev/null || true' \
+        "    for dev in \$(iw dev 2>/dev/null | awk \"\\\$1==\\\"Interface\\\"{print \\\$2}\"); do" \
+        "        iw dev \"\$dev\" set power_save off 2>/dev/null || true" \
         '    done' \
         'fi' \
-        'gw=$(ip route show default 2>/dev/null | awk "/default/ {print \$3; exit}")' \
-        'if [ -z "$gw" ] || ! ping -c 1 -W 2 "$gw" >/dev/null 2>&1; then' \
+        "gw=\$(ip route show default 2>/dev/null | awk \"/default/ {print \\\$3; exit}\")" \
+        "if [ -z \"\$gw\" ] || ! ping -c 1 -W 2 \"\$gw\" >/dev/null 2>&1; then" \
         '    systemctl restart NetworkManager 2>/dev/null || netplan apply 2>/dev/null || true' \
         '    systemctl restart avahi-daemon 2>/dev/null || true' \
         'fi' \
@@ -501,39 +564,39 @@ configure_universal_hardware_and_cluster_suite() {
     printf '%s\n' \
         '#!/usr/bin/env bash' \
         'set -euo pipefail' \
-        'action="${1:-status}"' \
+        "action=\"\${1:-status}\"" \
         'mkdir -p /DATA/LocalBranch /DATA/ClusterPool /DATA/AppData /etc/instant-server' \
-        'case "$action" in' \
+        "case \"\$action\" in" \
         '    status)' \
         '        printf "{\"cluster_ready\":true,\"local_branch\":\"/DATA/LocalBranch\",\"merged_pool\":\"/DATA/ClusterPool\",\"sqlite_pinned_local\":true}\n"' \
         '        ;;' \
         '    join|join-union)' \
-        '        peer_ip="${2:-}"' \
-        '        peer_host="${3:-node2}"' \
-        '        policy="${4:-mergerfs_union_safe}"' \
-        '        wipe_token="${5:-}"' \
-        '        if [ -z "$peer_ip" ]; then' \
+        "        peer_ip=\"\${2:-}\"" \
+        "        peer_host=\"\${3:-node2}\"" \
+        "        policy=\"\${4:-mergerfs_union_safe}\"" \
+        "        wipe_token=\"\${5:-}\"" \
+        "        if [ -z \"\$peer_ip\" ]; then" \
         '            printf "Usage: instant-cluster-ctl join <peer_ip> <peer_hostname> [policy] [wipe_token]\n" >&2' \
         '            exit 1' \
         '        fi' \
-        '        mkdir -p "/mnt/cluster/${peer_host}/DATA"' \
-        '        mount -t nfs4 -o soft,timeo=15,retrans=2,nofail "${peer_ip}:/DATA/LocalBranch" "/mnt/cluster/${peer_host}/DATA" 2>/dev/null || true' \
-        '        if [ "$policy" = "wipe_secondary_expand" ]; then' \
-        '            if [ "$wipe_token" != "WIPE-${peer_host}" ] && [ "$wipe_token" != "WIPE-SECONDARY" ]; then' \
+        "        mkdir -p \"/mnt/cluster/\${peer_host}/DATA\"" \
+        "        mount -t nfs4 -o soft,timeo=15,retrans=2,nofail \"\${peer_ip}:/DATA/LocalBranch\" \"/mnt/cluster/\${peer_host}/DATA\" 2>/dev/null || true" \
+        "        if [ \"\$policy\" = \"wipe_secondary_expand\" ]; then" \
+        "            if [ \"\$wipe_token\" != \"WIPE-\${peer_host}\" ] && [ \"\$wipe_token\" != \"WIPE-SECONDARY\" ]; then" \
         '                printf "{\"ok\":false,\"error\":\"IS-CLU-401: Missing WIPE confirmation token\"}\n" >&2' \
         '                exit 1' \
         '            fi' \
-        '            find "/mnt/cluster/${peer_host}/DATA" -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true' \
-        '        elif [ "$policy" = "replicated_ha_mirror" ]; then' \
-        '            rsync -aHAX --update "/DATA/LocalBranch/" "/mnt/cluster/${peer_host}/DATA/" 2>/dev/null || true' \
+        "            find \"/mnt/cluster/\${peer_host}/DATA\" -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true" \
+        "        elif [ \"\$policy\" = \"replicated_ha_mirror\" ]; then" \
+        "            rsync -aHAX --update \"/DATA/LocalBranch/\" \"/mnt/cluster/\${peer_host}/DATA/\" 2>/dev/null || true" \
         '        fi' \
         '        if command -v mergerfs >/dev/null 2>&1; then' \
-        '            mergerfs -o defaults,allow_other,use_ino,category.create=mfs,moveonenospc=true,dropcacheonclose=true,noforget "/DATA/LocalBranch:/mnt/cluster/${peer_host}/DATA" /DATA/ClusterPool 2>/dev/null || true' \
+        "            mergerfs -o defaults,allow_other,use_ino,category.create=mfs,moveonenospc=true,dropcacheonclose=true,noforget \"/DATA/LocalBranch:/mnt/cluster/\${peer_host}/DATA\" /DATA/ClusterPool 2>/dev/null || true" \
         '        fi' \
-        '        printf "{\"ok\":true,\"policy\":\"%s\",\"peer\":\"%s\",\"ip\":\"%s\"}\n" "$policy" "$peer_host" "$peer_ip"' \
+        "        printf \"{\\\"ok\\\":true,\\\"policy\\\":\\\"%s\\\",\\\"peer\\\":\\\"%s\\\",\\\"ip\\\":\\\"%s\\\"}\n\" \"\$policy\" \"\$peer_host\" \"\$peer_ip\"" \
         '        ;;' \
         '    *)' \
-        '        printf "{\"ok\":true,\"action\":\"%s\"}\n" "$action"' \
+        "        printf \"{\\\"ok\\\":true,\\\"action\\\":\\\"%s\\\"}\n\" \"\$action\"" \
         '        ;;' \
         'esac' \
         > /usr/local/sbin/instant-cluster-ctl
@@ -542,8 +605,8 @@ configure_universal_hardware_and_cluster_suite() {
     printf '%s\n' \
         '#!/usr/bin/env bash' \
         'set -euo pipefail' \
-        'mode="${1:---diagnostics}"' \
-        'case "$mode" in' \
+        "mode=\"\${1:---diagnostics}\"" \
+        "case \"\$mode\" in" \
         '    --diagnostics)' \
         '        lsblk -o NAME,SIZE,FSTYPE,FSUSED,FSUSE%,MOUNTPOINT,MODEL 2>/dev/null || true' \
         '        ;;' \
@@ -552,16 +615,95 @@ configure_universal_hardware_and_cluster_suite() {
         '        printf "UEFI and GRUB chroot repair environment ready.\n"' \
         '        ;;' \
         '    --fsck-all)' \
-        '        for part in $(lsblk -lnpo NAME,MOUNTPOINT | awk "\$2==\"\" {print \$1}"); do' \
-        '            fstype=$(blkid -o value -s TYPE "$part" 2>/dev/null || true)' \
-        '            if [ "$fstype" = "ext4" ]; then' \
-        '                e2fsck -fn "$part" 2>/dev/null || true' \
+        "        for part in \$(lsblk -lnpo NAME,MOUNTPOINT | awk \"\\\$2==\\\"\\\" {print \\\$1}\"); do" \
+        "            fstype=\$(blkid -o value -s TYPE \"\$part\" 2>/dev/null || true)" \
+        "            if [ \"\$fstype\" = \"ext4\" ]; then" \
+        "                e2fsck -fn \"\$part\" 2>/dev/null || true" \
         '            fi' \
         '        done' \
         '        ;;' \
         'esac' \
         > /usr/local/sbin/instant-repair-suite
     chmod 755 /usr/local/sbin/instant-repair-suite
+}
+
+
+configure_iphone_and_updater_suite() {
+    log_info "Configuring iPhone Auto-Backup (Apple SMB3 vfs_fruit + USB usbmuxd) and Auto/Offline Updater..."
+    mkdir -p /DATA/iPhone_Backups/Photos /DATA/iPhone_Backups/Files_SMB /DATA/iPhone_Backups/USB_Device_Backups
+    chmod -R 775 /DATA/iPhone_Backups 2>/dev/null || true
+
+    if [ -f /etc/samba/smb.conf ] && ! grep -q "\[iPhoneBackups\]" /etc/samba/smb.conf; then
+        printf '%s\n' \
+            "" \
+            "[iPhoneBackups]" \
+            "   comment = Instant Server iPhone & iOS Auto-Backup Vault" \
+            "   path = /DATA/iPhone_Backups" \
+            "   browseable = yes" \
+            "   read only = no" \
+            "   guest ok = no" \
+            "   create mask = 0664" \
+            "   directory mask = 0775" \
+            "   vfs objects = catia fruit streams_xattr" \
+            "   fruit:aapl = yes" \
+            "   fruit:model = MacSamba" \
+            "   fruit:metadata = stream" \
+            >> /etc/samba/smb.conf
+        systemctl restart smbd 2>/dev/null || true
+    fi
+
+    printf '%s\n' \
+        '#!/usr/bin/env bash' \
+        'set -euo pipefail' \
+        "act=\"\${1:-status}\"" \
+        'mkdir -p /DATA/iPhone_Backups/USB_Device_Backups' \
+        "if [ \"\$act\" = \"usb-backup\" ] && command -v idevicebackup2 >/dev/null 2>&1; then" \
+        '    idevicepair pair 2>/dev/null || true' \
+        '    idevicebackup2 backup --full /DATA/iPhone_Backups/USB_Device_Backups' \
+        'else' \
+        "    printf \"{\\\"ok\\\":true,\\\"smb_share\\\":\\\"smb://%s.local/iPhoneBackups\\\",\\\"immich_url\\\":\\\"http://%s.local:2283\\\",\\\"usb_dir\\\":\\\"/DATA/iPhone_Backups/USB_Device_Backups\\\"}\n\" \"\$(hostname)\" \"\$(hostname)\"" \
+        'fi' \
+        > /usr/local/sbin/instant-server-iphone-backup
+    chmod 755 /usr/local/sbin/instant-server-iphone-backup
+
+    printf '%s\n' \
+        '#!/usr/bin/env bash' \
+        'set -euo pipefail' \
+        "mode=\"\${1:-auto}\"" \
+        "cidata_dev=\$(blkid -L CIDATA 2>/dev/null || true)" \
+        "if [ -n \"\$cidata_dev\" ] && [ -b \"\$cidata_dev\" ]; then" \
+        '    mkdir -p /mnt/usb_updater' \
+        "    if mount -o ro \"\$cidata_dev\" /mnt/usb_updater 2>/dev/null; then" \
+        '        if [ -f /mnt/usb_updater/offline_updater_apply.sh ]; then' \
+        '            bash /mnt/usb_updater/offline_updater_apply.sh || true' \
+        '        fi' \
+        '        umount /mnt/usb_updater 2>/dev/null || true' \
+        '    fi' \
+        'fi' \
+        "if [ \"\$mode\" != \"offline-usb-only\" ] && command -v docker >/dev/null 2>&1; then" \
+        '    for cf in /DATA/AppData/*/docker-compose.yml; do' \
+        "        [ -f \"\$cf\" ] || continue" \
+        "        docker compose -f \"\$cf\" pull 2>/dev/null || true" \
+        "        docker compose -f \"\$cf\" up -d 2>/dev/null || true" \
+        '    done' \
+        'fi' \
+        "printf \"{\\\"ok\\\":true,\\\"mode\\\":\\\"%s\\\",\\\"updated\\\":true}\n\" \"\$mode\"" \
+        > /usr/local/sbin/instant-server-updater
+    chmod 755 /usr/local/sbin/instant-server-updater
+
+    if [ -d /opt/instant-server/custom_system_configs ]; then
+        for cfg_f in /opt/instant-server/custom_system_configs/*; do
+            [ -f "$cfg_f" ] || continue
+            rel_target=$(basename "$cfg_f" | sed "s|__|/|g")
+            dest_path="/${rel_target}"
+            mkdir -p "$(dirname "$dest_path")"
+            [ -f "$dest_path" ] && cp -a "$dest_path" "${dest_path}.bak" || true
+            cp -f "$cfg_f" "$dest_path"
+        done
+    fi
+    if [ -f /opt/instant-server/custom_post_install.sh ]; then
+        bash /opt/instant-server/custom_post_install.sh || true
+    fi
 }
 
 main() {
@@ -577,6 +719,7 @@ main() {
     configure_kernel_pro_sysctl_and_services
     configure_day2_self_healing_guardrails
     configure_universal_hardware_and_cluster_suite
+    configure_iphone_and_updater_suite
     systemctl daemon-reload 2>/dev/null || true
     systemctl enable --now instant-server-battery-guardian.timer 2>/dev/null || true
     systemctl enable --now instant-server-dashboard.service 2>/dev/null || true

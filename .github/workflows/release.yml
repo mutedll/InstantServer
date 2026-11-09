@@ -44,7 +44,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config build-essential
 
-      - name: Prepare Directory Layout & Run Go Unit Tests
+      - name: Prepare Directory Layout, Generate IS App Icons & Run Go Unit Tests
         shell: bash
         run: |
           set -euo pipefail
@@ -72,6 +72,60 @@ jobs:
           done
           [ -f "laptop_hardening.sh" ] && [ ! -f "src/instant_server/scripts/laptop_hardening.sh" ] && cp "laptop_hardening.sh" "src/instant_server/scripts/laptop_hardening.sh" || true
           sed -i 's/\r$//' src/instant_server/scripts/laptop_hardening.sh 2>/dev/null || true
+
+          # Generate crisp "IS" (Instant Server) build/appicon.png (512x512) and build/windows/icon.ico
+          # so Wails embeds the IS logo instead of the default Wails "W" icon
+          python3 -c '
+          import struct, zlib
+          def render_is_icon_png(size):
+              rows = []
+              radius, border, margin = int(size * 0.21), max(2, int(size * 0.045)), max(1, int(size * 0.03))
+              def in_rr(x, y, x0, y0, x1, y1, r):
+                  if x < x0 or x >= x1 or y < y0 or y >= y1: return False
+                  if x0 + r <= x < x1 - r or y0 + r <= y < y1 - r: return True
+                  cx = x0 + r if x < x0 + r else x1 - r - 1
+                  cy = y0 + r if y < y0 + r else y1 - r - 1
+                  return (x - cx) ** 2 + (y - cy) ** 2 <= r ** 2
+              def is_glyph(nx, ny):
+                  if 0.26 <= ny <= 0.335 and 0.20 <= nx <= 0.44: return True
+                  if 0.665 <= ny <= 0.74 and 0.20 <= nx <= 0.44: return True
+                  if 0.26 <= ny <= 0.74 and 0.285 <= nx <= 0.355: return True
+                  if 0.26 <= ny <= 0.335 and 0.50 <= nx <= 0.80: return True
+                  if 0.26 <= ny <= 0.538 and 0.50 <= nx <= 0.575: return True
+                  if 0.462 <= ny <= 0.538 and 0.50 <= nx <= 0.80: return True
+                  if 0.462 <= ny <= 0.74 and 0.725 <= nx <= 0.80: return True
+                  if 0.665 <= ny <= 0.74 and 0.50 <= nx <= 0.80: return True
+                  return False
+              x0, y0, x1, y1 = margin, margin, size - margin, size - margin
+              ix0, iy0, ix1, iy1, ir = x0 + border, y0 + border, x1 - border, y1 - border, max(2, radius - border)
+              for y in range(size):
+                  row = bytearray([0])
+                  ny = y / float(size)
+                  b_val = min(255, int(0x36 + (1.0 - ny) * 14))
+                  for x in range(size):
+                      nx = x / float(size)
+                      if not in_rr(x, y, x0, y0, x1, y1, radius): row.extend((0, 0, 0, 0))
+                      elif not in_rr(x, y, ix0, iy0, ix1, iy1, ir): row.extend((0x31, 0xA8, 0xFF, 255))
+                      elif is_glyph(nx, ny): row.extend((0x66, 0xC4, 0xFF, 255))
+                      else: row.extend((0x00, 0x1E, b_val, 255))
+                  rows.append(bytes(row))
+              raw = b"".join(rows)
+              def chunk(ct, d):
+                  c = ct + d
+                  return struct.pack(">I", len(d)) + c + struct.pack(">I", zlib.crc32(c) & 0xFFFFFFFF)
+              return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 6, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b"")
+          sizes = (256, 64, 48, 32, 16)
+          pngs = [render_is_icon_png(s) for s in sizes]
+          hdr = struct.pack("<HHH", 0, 1, len(sizes))
+          off = 6 + 16 * len(sizes)
+          dirs = []
+          for s, p in zip(sizes, pngs):
+              w = 0 if s >= 256 else s
+              dirs.append(struct.pack("<BBBBHHII", w, w, 0, 0, 1, 32, len(p), off))
+              off += len(p)
+          open("build/appicon.png", "wb").write(render_is_icon_png(512))
+          open("build/windows/icon.ico", "wb").write(hdr + b"".join(dirs) + b"".join(pngs))
+          '
 
           # Self-heal any legacy test/FAT16 bounds or string formatting in usb/
           python3 -c '
@@ -144,7 +198,7 @@ jobs:
           ls -lh dist/
 
       - name: Upload Release Binary Artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.binary_name }}
           path: dist/${{ matrix.binary_name }}
@@ -152,7 +206,10 @@ jobs:
 
       - name: Publish to GitHub Release (on Tag Push)
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/${{ matrix.binary_name }}
-          generate_release_notes: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG_NAME="${GITHUB_REF_NAME}"
+          gh release view "$TAG_NAME" >/dev/null 2>&1 || gh release create "$TAG_NAME" --title "$TAG_NAME" --generate-notes
+          gh release upload "$TAG_NAME" "dist/${{ matrix.binary_name }}" --clobber

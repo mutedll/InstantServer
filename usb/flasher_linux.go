@@ -17,6 +17,19 @@ const (
 	linuxBLKRRPART = 0x125f
 )
 
+// AcquireHostWakeLock inhibits systemd sleep/idle/lid-switch while an ISO download
+// or raw USB DMA flash operation is running.
+func AcquireHostWakeLock() func() {
+	cmd := exec.Command("systemd-inhibit", "--what=idle:sleep:handle-lid-switch", "--who=InstantServer", "--why=Flashing bootable USB", "sleep", "7200")
+	if err := cmd.Start(); err == nil && cmd.Process != nil {
+		return func() {
+			_ = cmd.Process.Kill()
+			_, _ = cmd.Process.Wait()
+		}
+	}
+	return func() {}
+}
+
 type linuxRawDisk struct {
 	file       *os.File
 	devicePath string

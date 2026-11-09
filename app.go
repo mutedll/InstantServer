@@ -5,6 +5,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -39,7 +40,7 @@ func NewApp(assets embed.FS) *App {
 			"status":  "IDLE",
 			"percent": 0,
 			"paused":  false,
-			"events":  []interface{}{},
+			"events":  []map[string]interface{}{},
 		},
 	}
 }
@@ -71,6 +72,49 @@ func resolveWritableDataDir() string {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	wailsRuntime.WindowCenter(ctx)
+}
+
+func (a *App) FitWindowToScreen(availW int, availH int) map[string]interface{} {
+	if a.ctx == nil || availW <= 0 || availH <= 0 {
+		return map[string]interface{}{"ok": false}
+	}
+	targetW := int(float64(availW) * 0.86)
+	if targetW > 1120 {
+		targetW = 1120
+	}
+	if targetW > availW-40 {
+		targetW = availW - 40
+	}
+	if targetW < 720 {
+		targetW = 720
+	}
+
+	targetH := int(float64(availH) * 0.84)
+	if targetH > 720 {
+		targetH = 720
+	}
+	if targetH > availH-52 {
+		targetH = availH - 52
+	}
+	if targetH < 460 {
+		targetH = 460
+	}
+
+	wailsRuntime.WindowSetSize(a.ctx, targetW, targetH)
+	wailsRuntime.WindowCenter(a.ctx)
+	return map[string]interface{}{
+		"ok":     true,
+		"width":  targetW,
+		"height": targetH,
+	}
+}
+
+func (a *App) ToggleMaximizeWindow() map[string]interface{} {
+	if a.ctx != nil {
+		wailsRuntime.WindowToggleMaximise(a.ctx)
+	}
+	return map[string]interface{}{"ok": true}
 }
 
 func (a *App) IsFlashing() bool {
@@ -173,6 +217,23 @@ func (a *App) PollBuildStatus() map[string]interface{} {
 	return out
 }
 
+func (a *App) appendEventLog(startTime time.Time, eventName string, msg string) {
+	elapsed := int(time.Since(startTime).Seconds())
+	if elapsed < 0 {
+		elapsed = 0
+	}
+	ts := fmt.Sprintf("[%02d:%02d] %s", elapsed/60, elapsed%60, msg)
+	a.mu.Lock()
+	evs, _ := a.lastStatus["events"].([]map[string]interface{})
+	evs = append(evs, map[string]interface{}{
+		"event":          eventName,
+		"message":        msg,
+		"formatted_line": ts,
+	})
+	a.lastStatus["events"] = evs
+	a.mu.Unlock()
+}
+
 func (a *App) FlashUSBDevice(profile usb.ServerProfileConfig, isoPath string) map[string]interface{} {
 	if err := usb.ValidateProfileConfig(profile); err != nil {
 		return map[string]interface{}{"started": false, "reason": err.Error()}
@@ -199,13 +260,14 @@ func (a *App) FlashUSBDevice(profile usb.ServerProfileConfig, isoPath string) ma
 		"status":  "RUNNING",
 		"percent": 6,
 		"paused":  false,
-		"events":  []interface{}{},
+		"events":  []map[string]interface{}{},
 	}
 	a.mu.Unlock()
 
 	_ = a.SaveConfig(profile)
 
 	go func() {
+		startTime := time.Now()
 		defer func() {
 			a.mu.Lock()
 			a.flashing = false
@@ -217,10 +279,22 @@ func (a *App) FlashUSBDevice(profile usb.ServerProfileConfig, isoPath string) ma
 		hardeningBytes, _ := a.assets.ReadFile("src/instant_server/scripts/laptop_hardening.sh")
 		dashBytes, _ := a.assets.ReadFile("src/instant_server/ui/server_dashboard.html")
 		stagingDir := filepath.Join(baseDataDir, "cidata_stage")
-		_, _ = usb.StageCIDATAPayload(stagingDir, profile, hardeningBytes, dashBytes)
+		stagedFiles, stageErr := usb.StageCIDATAPayload(stagingDir, profile, hardeningBytes, dashBytes)
+		if stageErr != nil {
+			a.mu.Lock()
+			a.lastStatus["status"] = "FAILED"
+			a.lastStatus["error"] = stageErr.Error()
+			a.mu.Unlock()
+			return
+		}
+		a.appendEventLog(startTime, "STAGE_CIDATA", fmt.Sprintf("Staged %d cloud-init & CasaOS app file(s) for FAT16 CIDATA partition", len(stagedFiles)))
 
 		resolvedISO := strings.TrimSpace(isoPath)
+		if resolvedISO == "" {
+			resolvedISO = strings.TrimSpace(profile.CustomISOPath)
+		}
 		if resolvedISO == "" || func() bool { _, e := os.Stat(resolvedISO); return e != nil }() {
+			a.appendEventLog(startTime, "ISO_CHECK", fmt.Sprintf("Resolving Ubuntu Server %s LTS ISO mirror & local cache...", profile.UbuntuRelease))
 			cacheDir := filepath.Join(baseDataDir, "iso_cache")
 			dlPath, dlErr := usb.DownloadISOWithResume(
 				ctx,
@@ -230,8 +304,12 @@ func (a *App) FlashUSBDevice(profile usb.ServerProfileConfig, isoPath string) ma
 				func(ev usb.FlashProgressEvent) {
 					a.mu.Lock()
 					a.lastStatus["status"] = "RUNNING"
-					a.lastStatus["percent"] = 10 + (ev.Percent*30)/100
+					a.lastStatus["percent"] = 10 + (ev.Percent*35)/100
 					a.lastStatus["paused"] = a.pauseGate.IsPaused()
+					a.lastStatus["active_progress"] = map[string]interface{}{
+						"message":       ev.Message,
+						"terminal_line": fmt.Sprintf("⟳ Downloading Ubuntu ISO: %d%% │ %s", ev.Percent, ev.Message),
+					}
 					a.mu.Unlock()
 					if a.ctx != nil {
 						wailsRuntime.EventsEmit(a.ctx, "flash:progress", ev)
@@ -249,8 +327,12 @@ func (a *App) FlashUSBDevice(profile usb.ServerProfileConfig, isoPath string) ma
 				return
 			}
 			resolvedISO = dlPath
+			a.appendEventLog(startTime, "ISO_READY", fmt.Sprintf("Ubuntu Server ISO ready: %s", filepath.Base(resolvedISO)))
+		} else {
+			a.appendEventLog(startTime, "ISO_LOCAL", fmt.Sprintf("Using local ISO file: %s", resolvedISO))
 		}
 
+		a.appendEventLog(startTime, "USB_OPEN", fmt.Sprintf("Opening raw USB block device %s with 4MB page-aligned DMA...", profile.SelectedUSBDevice))
 		finalEv, err := usb.StreamISOAndCidataToRawDisk(
 			ctx,
 			resolvedISO,
@@ -262,8 +344,12 @@ func (a *App) FlashUSBDevice(profile usb.ServerProfileConfig, isoPath string) ma
 			func(ev usb.FlashProgressEvent) {
 				a.mu.Lock()
 				a.lastStatus["status"] = "RUNNING"
-				a.lastStatus["percent"] = ev.Percent
+				a.lastStatus["percent"] = 48 + (ev.Percent*50)/100
 				a.lastStatus["paused"] = a.pauseGate.IsPaused()
+				a.lastStatus["active_progress"] = map[string]interface{}{
+					"message":       ev.Message,
+					"terminal_line": fmt.Sprintf("⟳ Writing Raw USB DMA: %d%% │ %s (CRC32 %s)", ev.Percent, ev.Message, ev.CRC32Hex),
+				}
 				a.mu.Unlock()
 				if a.ctx != nil {
 					wailsRuntime.EventsEmit(a.ctx, "flash:progress", ev)
@@ -284,9 +370,19 @@ func (a *App) FlashUSBDevice(profile usb.ServerProfileConfig, isoPath string) ma
 			return
 		}
 
+		a.appendEventLog(startTime, "USB_VERIFIED", fmt.Sprintf("Flashed & verified SHA-256 (%s) + FAT16 CIDATA partition on %s", finalEv.SHA256Hex[:16]+"...", profile.SelectedUSBDevice))
 		a.mu.Lock()
 		a.lastStatus["status"] = "COMPLETED"
 		a.lastStatus["percent"] = 100
+		a.lastStatus["active_progress"] = nil
+		a.lastStatus["result"] = map[string]interface{}{
+			"usb_provision": map[string]interface{}{
+				"target_device": profile.SelectedUSBDevice,
+				"copied_files":  stagedFiles,
+				"sha256":        finalEv.SHA256Hex,
+				"crc32":         finalEv.CRC32Hex,
+			},
+		}
 		a.mu.Unlock()
 		if a.ctx != nil && finalEv != nil {
 			wailsRuntime.EventsEmit(a.ctx, "flash:complete", finalEv)
@@ -362,6 +458,17 @@ func (a *App) AssetAndAPIRouter() http.Handler {
 	mux.HandleFunc("/api/host", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, a.ProbeHost())
 	})
+	mux.HandleFunc("/api/fit-window", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			AvailWidth  int `json:"avail_width"`
+			AvailHeight int `json:"avail_height"`
+		}
+		readJSONBody(r, &body)
+		writeJSON(w, a.FitWindowToScreen(body.AvailWidth, body.AvailHeight))
+	})
+	mux.HandleFunc("/api/toggle-maximize", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, a.ToggleMaximizeWindow())
+	})
 	mux.HandleFunc("/api/elevate", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, a.ElevateAdmin())
 	})
@@ -384,7 +491,7 @@ func (a *App) AssetAndAPIRouter() http.Handler {
 	mux.HandleFunc("/api/flash", func(w http.ResponseWriter, r *http.Request) {
 		var cfg usb.ServerProfileConfig
 		readJSONBody(r, &cfg)
-		writeJSON(w, a.FlashUSBDevice(cfg, ""))
+		writeJSON(w, a.FlashUSBDevice(cfg, cfg.CustomISOPath))
 	})
 	mux.HandleFunc("/api/pause", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, a.PauseFlashing())

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -51,6 +52,36 @@ var OfficialUbuntuMirrors = map[string]UbuntuReleaseMirror{
 	},
 }
 
+var isoHrefRegex = regexp.MustCompile(`href="(ubuntu-[0-9.]+(?:-beta)?-live-server-amd64\.iso)"`)
+
+func discoverLiveISOFromReleaseIndex(ctx context.Context, release string) (string, string) {
+	for _, rel := range []string{release, "24.04", "22.04"} {
+		if rel == "" {
+			continue
+		}
+		baseURL := "https://releases.ubuntu.com/" + rel + "/"
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL, nil)
+		if err != nil {
+			continue
+		}
+		client := &http.Client{Timeout: 8 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			continue
+		}
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 256*1024))
+		_ = resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			matches := isoHrefRegex.FindStringSubmatch(string(body))
+			if len(matches) >= 2 {
+				fn := matches[1]
+				return fn, baseURL + fn
+			}
+		}
+	}
+	return "", ""
+}
+
 func ComputeFileSHA256(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -82,7 +113,11 @@ func DownloadISOWithResume(
 	pauseGate *PauseGate,
 	onProgress func(FlashProgressEvent),
 ) (string, error) {
-	mirror, ok := OfficialUbuntuMirrors[strings.TrimSpace(release)]
+	releaseWakeLock := AcquireHostWakeLock()
+	defer releaseWakeLock()
+
+	cleanRel := strings.TrimSpace(release)
+	mirror, ok := OfficialUbuntuMirrors[cleanRel]
 	if !ok {
 		mirror = OfficialUbuntuMirrors["26.04"]
 	}
@@ -112,32 +147,48 @@ func DownloadISOWithResume(
 	}
 
 	client := &http.Client{Timeout: 0}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, mirror.PrimaryURL, nil)
-	if err != nil {
-		return "", err
-	}
-	if existingOffset > 0 {
-		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", existingOffset))
+	tryOpenURL := func(url string) (*http.Response, error) {
+		req, rErr := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if rErr != nil {
+			return nil, rErr
+		}
+		if existingOffset > 0 {
+			req.Header.Set("Range", fmt.Sprintf("bytes=%d-", existingOffset))
+		}
+		return client.Do(req)
 	}
 
-	resp, err := client.Do(req)
+	resp, err := tryOpenURL(mirror.PrimaryURL)
 	if err != nil || (resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent) {
 		if resp != nil {
 			_ = resp.Body.Close()
 		}
-		reqFallback, fbErr := http.NewRequestWithContext(ctx, http.MethodGet, mirror.MirrorURL, nil)
-		if fbErr != nil {
-			return "", fmt.Errorf("IS-ISO-106: failed reaching Ubuntu release mirror: %w", err)
+		if dynFile, dynURL := discoverLiveISOFromReleaseIndex(ctx, cleanRel); dynURL != "" {
+			mirror.Filename = dynFile
+			finalPath = filepath.Join(cacheDir, dynFile)
+			partPath = finalPath + ".part"
+			if st, sErr := os.Stat(partPath); sErr == nil {
+				existingOffset = st.Size()
+			} else {
+				existingOffset = 0
+			}
+			resp, err = tryOpenURL(dynURL)
 		}
-		if existingOffset > 0 {
-			reqFallback.Header.Set("Range", fmt.Sprintf("bytes=%d-", existingOffset))
+	}
+	if err != nil || resp == nil || (resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent) {
+		if resp != nil {
+			_ = resp.Body.Close()
 		}
-		resp, err = client.Do(reqFallback)
+		resp, err = tryOpenURL(mirror.MirrorURL)
 		if err != nil {
 			return "", fmt.Errorf("IS-ISO-106: Ubuntu mirror download failed: %w", err)
 		}
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
+		return "", fmt.Errorf("IS-ISO-106: Ubuntu release mirror returned HTTP %d", resp.StatusCode)
+	}
 
 	flags := os.O_CREATE | os.O_WRONLY
 	if resp.StatusCode == http.StatusPartialContent && existingOffset > 0 {

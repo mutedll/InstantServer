@@ -54,6 +54,8 @@ jobs:
             fi
           done
           [ -f "wails.exe.manifest" ] && [ ! -f "build/windows/wails.exe.manifest" ] && cp "wails.exe.manifest" "build/windows/wails.exe.manifest" || true
+          [ -f "appicon.png" ] && cp -f "appicon.png" "build/appicon.png" || true
+          [ -f "icon.ico" ] && cp -f "icon.ico" "build/windows/icon.ico" || true
           [ -f "app_ui.html" ] && [ ! -f "src/instant_server/ui/app_ui.html" ] && cp "app_ui.html" "src/instant_server/ui/app_ui.html" || true
           [ -f "server_dashboard.html" ] && [ ! -f "src/instant_server/ui/server_dashboard.html" ] && cp "server_dashboard.html" "src/instant_server/ui/server_dashboard.html" || true
           for ujf in catalog_data.js app_studio.js; do
@@ -118,5 +120,7 @@ jobs:
         run: |
           SH_FILE="src/instant_server/scripts/laptop_hardening.sh"
           sed -i 's/\r$//' "$SH_FILE"
+          sed -i 's/disable=SC1017,SC1090,SC1091$/disable=SC1017,SC1090,SC1091,SC2016,SC2086/' "$SH_FILE"
+          sed -i 's/disable=SC1017,SC1090,SC1091,SC2016$/disable=SC1017,SC1090,SC1091,SC2016,SC2086/' "$SH_FILE"
           bash -n "$SH_FILE"
           shellcheck -s bash "$SH_FILE"

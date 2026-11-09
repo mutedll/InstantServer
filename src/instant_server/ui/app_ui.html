@@ -1504,6 +1504,26 @@
         grid-template-columns: 1fr;
       }
     }
+
+    @media (max-height: 760px) {
+      .window-titlebar {
+        height: 42px;
+        padding: 0 12px;
+      }
+      .setup-shell {
+        padding: 8px 12px;
+      }
+      .setup-top-tabs {
+        min-height: 42px;
+        padding: 4px 12px 0;
+      }
+      .setup-body {
+        padding: 12px 16px;
+      }
+      .setup-footer {
+        padding: 10px 16px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -1538,6 +1558,7 @@
         <button class="win-btn" id="btnThemeToggle" title="Switch Light / Dark theme">
           <span id="themeToggleLabel">☀ Light</span>
         </button>
+        <button class="win-btn" id="btnToggleMaximize" data-action="toggle-maximize-window" title="Maximize or Restore Window">⛶</button>
       </div>
     </header>
 
@@ -3997,6 +4018,12 @@
       storageInputRaw: "45",
       storageInputError: "",
       confirm_erase_main_drive: false,
+      confirm_wipe_server_data: false,
+      enable_iphone_auto_backup: true,
+      iphone_backup_mode: "all_three",
+      custom_config_path: "/etc/samba/smb-custom.conf",
+      custom_config_body: "# Custom server configuration file\n",
+      custom_config_files: {},
       ubuntu_release: "26.04",
       storage_layout: "direct",
       boot_mode: "auto",
@@ -4084,6 +4111,8 @@
         if (window.go && window.go.main && window.go.main.App) {
           const wailsApp = window.go.main.App;
           if (endpoint === "host" && wailsApp.ProbeHost) return await wailsApp.ProbeHost();
+          if (endpoint === "fit-window" && wailsApp.FitWindowToScreen && payload) return await wailsApp.FitWindowToScreen(payload.avail_width || 1280, payload.avail_height || 720);
+          if (endpoint === "toggle-maximize" && wailsApp.ToggleMaximizeWindow) return await wailsApp.ToggleMaximizeWindow();
           if (endpoint === "elevate" && wailsApp.ElevateAdmin) return await wailsApp.ElevateAdmin();
           if (endpoint === "usb" && wailsApp.ScanUSBDevices) return await wailsApp.ScanUSBDevices();
           if (endpoint === "load-config" && wailsApp.LoadConfig) return await wailsApp.LoadConfig();
@@ -4191,6 +4220,10 @@
         install_mode: state.install_mode,
         dual_boot_Allocation_gb: Number(state.dual_boot_Allocation_gb) || 45,
         confirm_erase_main_drive: state.confirm_erase_main_drive,
+        confirm_wipe_server_data: state.confirm_wipe_server_data ? "WIPE-SERVER-DATA" : "",
+        enable_iphone_auto_backup: !!state.enable_iphone_auto_backup,
+        iphone_backup_mode: state.iphone_backup_mode || "all_three",
+        custom_config_files: state.custom_config_files || {},
         ubuntu_release: String(state.ubuntu_release),
         storage_layout: state.storage_layout,
         boot_mode: state.boot_mode,
@@ -4293,6 +4326,19 @@
     }
 
     async function initAppStartup() {
+      try {
+        await callBackend("fit-window", "POST", {
+          avail_width: Number(window.screen && window.screen.availWidth) || 1280,
+          avail_height: Number(window.screen && window.screen.availHeight) || 720
+        });
+      } catch (_e) {}
+      const maxBtn = document.getElementById("btnToggleMaximize");
+      if (maxBtn && !maxBtn._bound) {
+        maxBtn._bound = true;
+        maxBtn.addEventListener("click", () => {
+          callBackend("toggle-maximize", "POST", {});
+        });
+      }
       let loadedFromDisk = false;
 
       if (window.__INSTANT_SERVER_BOOT_CONFIG__ && window.__INSTANT_SERVER_BOOT_CONFIG__.exists && window.__INSTANT_SERVER_BOOT_CONFIG__.config) {
@@ -4425,6 +4471,9 @@
       }
       if (state.install_mode === "auto_erase" && !state.confirm_erase_main_drive) {
         missing.push("Confirm 'I know what I'm doing' for Erase Main Drive mode, or switch to Dual-Boot.");
+      }
+      if (state.install_mode === "reinstall_wipe_data" && !state.confirm_wipe_server_data) {
+        missing.push("Confirm wiping all existing server data for Factory Reinstall mode, or switch to Reinstall While Retaining Data.");
       }
       if (state.cluster_mode !== "standalone" && state.cluster_storage_policy === "wipe_secondary_expand" && !state.confirm_wipe_secondary) {
         missing.push("Confirm erasing the second computer's files, or switch to 'Keep all files on both computers'.");
@@ -4705,6 +4754,11 @@
         localStorage.setItem("instant_server_saved_config", JSON.stringify(payload));
       } catch (_e) {}
 
+      try {
+        if (navigator.wakeLock && navigator.wakeLock.request) {
+          navigator.wakeLock.request("screen").catch(() => {});
+        }
+      } catch (_wl) {}
       state.flashing = true;
       state.flashPaused = false;
       state.flashCancelled = false;
@@ -5808,6 +5862,46 @@ ${storageSnippet}
           </div>
         </div>
 
+        <div class="win-card" style="flex-direction:column;align-items:stretch;gap:10px;border:1px solid var(--accent);">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+            <div class="card-left">
+              <div class="card-icon">📱</div>
+              <div class="card-text">
+                <div class="card-title">iPhone &amp; iOS Auto-Backup Vault <span class="badge badge-accent">Plug &amp; Play</span></div>
+                <div class="card-desc">Automatically configures Camera Roll background sync (Immich), iOS "Files" &amp; Shortcuts Wi-Fi SMB3 vault (Apple vfs_fruit), and USB cable full iPhone backup (libimobiledevice)</div>
+              </div>
+            </div>
+            <div class="card-right" style="gap:10px;flex-wrap:wrap;">
+              ${renderComboBox("iphone_backup_mode", [
+                { value: "all_three", label: "All 3: Camera Roll + iOS Files Wi-Fi + USB Cable" },
+                { value: "immich_and_files_smb", label: "Wi-Fi Only (Immich Photos + iOS Files SMB3)" },
+                { value: "usb_libimobiledevice", label: "USB Cable Full Device Backup Only" }
+              ])}
+              ${renderSwitch("toggle-iphone-backup", state.enable_iphone_auto_backup)}
+            </div>
+          </div>
+          <div style="font-size:12px;color:var(--text-secondary);display:${state.enable_iphone_auto_backup ? "block" : "none"};">
+            <strong>How it works on your iPhone:</strong> (1) Open the <strong>Files</strong> app on iPhone → Tap <strong>⋯ → Connect to Server</strong> → Enter <code>smb://${esc(state.hostname || "instant-server")}.local/iPhoneBackups</code>, (2) Install the <strong>Immich</strong> app pointed to <code>http://${esc(state.hostname || "instant-server")}.local:2283</code> for automatic background camera roll backup, or (3) Plug your iPhone into any server USB port for full encrypted local backups.
+          </div>
+        </div>
+
+        <div class="win-card" style="flex-direction:column;align-items:stretch;gap:10px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+            <div class="card-left">
+              <div class="card-icon">🛠️</div>
+              <div class="card-text">
+                <div class="card-title">Custom Server Config Files &amp; Post-Install Automation</div>
+                <div class="card-desc">Inject any custom /etc or /DATA config file or first-boot script directly onto the server (${Object.keys(state.custom_config_files || {}).length} custom file(s) staged)</div>
+              </div>
+            </div>
+            <div class="card-right" style="gap:8px;flex-wrap:wrap;">
+              <input class="win-input" style="min-width:210px;" data-field="custom_config_path" value="${esc(state.custom_config_path)}" placeholder="/etc/samba/smb-custom.conf" />
+              <button type="button" class="win-btn win-btn-accent win-btn-sm" data-action="save-custom-sys-config">+ Stage Config File</button>
+            </div>
+          </div>
+          <textarea class="win-input" rows="3" style="width:100%;font-family:var(--font-mono);font-size:12px;" data-field="custom_config_body" placeholder="Paste custom config file contents or script here...">${esc(state.custom_config_body)}</textarea>
+        </div>
+
         <div class="win-card">
           <div class="card-left">
             <div class="card-icon">🔄</div>
@@ -5857,11 +5951,13 @@ ${storageSnippet}
 
     function buildStorageSection() {
       const modes = [
-        { id: "dual_boot", icon: "⚖", title: "Dual-Boot alongside existing OS", desc: "Keeps your computer's original Windows or Linux system intact", badge: "Safe Default" },
-        { id: "auto_erase", icon: "🧹", title: "Automatically erase main drive", desc: "Formats the main internal drive and dedicates 100% of space to the server", badge: "Requires confirmation" },
-        { id: "interactive_select", icon: "🖱", title: "Select after plugging in", desc: "Lets you pick the drive or partition on screen during install", badge: "" },
-        { id: "secondary_drive", icon: "💽", title: "Secondary drive only", desc: "Installs onto a second internal drive and leaves the primary drive untouched", badge: "" },
-        { id: "repair_rescue_usb", icon: "🩺", title: "Repair & rescue mode (Fix startup or recover files)", desc: "Boots into a live rescue toolkit to fix boot errors, check disks, or copy files off a broken PC without erasing it", badge: "Does not erase drive" }
+        { id: "dual_boot", icon: "⚖", title: "Dual-Boot alongside existing OS", desc: "Keeps your computer's original Windows or Linux system intact (15 GB – 64 TB)", badge: "Safe Default" },
+        { id: "auto_erase", icon: "🧹", title: "Fresh Server Install (Erase main drive)", desc: "Formats the main internal drive and dedicates 100% of space to the server", badge: "Requires confirmation" },
+        { id: "reinstall_keep_data", icon: "♻️", title: "Reinstall OS while retaining server data (/DATA & apps preserved)", desc: "Backs up existing /DATA, photos, Nextcloud, and app configs before reinstalling Ubuntu LTS and restores them automatically", badge: "Preserves /DATA" },
+        { id: "reinstall_wipe_data", icon: "🔥", title: "Reinstall OS without retaining server data (Factory reset wipe)", desc: "Erases all existing server data, apps, and partitions for a clean factory reset", badge: "Requires WIPE confirmation" },
+        { id: "offline_updater_usb", icon: "📦", title: "Offline Updater USB (For local-only / air-gapped servers)", desc: "Creates an offline update USB stick that updates the Web Control Center, scripts, and app stacks without internet", badge: "Zero-Internet Update" },
+        { id: "repair_rescue_usb", icon: "🔑", title: "Emergency Repair & Password Reset USB", desc: "Resets forgotten admin/SSH/dashboard password to the password set in Tab 1, repairs GRUB/EFI boot, and runs e2fsck without erasing files", badge: "Does not erase drive" },
+        { id: "secondary_drive", icon: "💽", title: "Secondary drive only", desc: "Installs onto a second internal drive and leaves the primary drive untouched", badge: "" }
       ];
 
       const displaySizeLabel = state.dual_boot_Allocation_gb >= 1024 && (state.dual_boot_Allocation_gb % 1024 === 0)
@@ -5922,6 +6018,29 @@ ${storageSnippet}
             <input type="checkbox" data-action="toggle-confirm-erase" ${state.confirm_erase_main_drive ? "checked" : ""} style="accent-color:var(--danger);width:16px;height:16px;" />
             <span>I know what I'm doing — erase the target computer's main internal drive</span>
           </label>
+        </div>
+      ` : state.install_mode === "reinstall_wipe_data" ? `
+        <div class="notice-banner notice-banner-warning" id="bannerReinstallWipe">
+          <div style="font-weight:600;color:var(--danger);">⚠️ Factory Reset Warning: This will permanently erase all existing server data (/DATA), containers, and backups</div>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:4px;">
+            <input type="checkbox" data-action="toggle-confirm-wipe-server-data" ${state.confirm_wipe_server_data ? "checked" : ""} style="accent-color:var(--danger);width:16px;height:16px;" />
+            <span>I confirm erasing all existing server data (WIPE-SERVER-DATA) and performing a clean factory reinstall</span>
+          </label>
+        </div>
+      ` : state.install_mode === "reinstall_keep_data" ? `
+        <div class="notice-banner" style="border-color:var(--success);">
+          <div style="font-weight:600;">♻️ Safe OS Reinstall Mode Active</div>
+          <div style="font-size:12px;">Existing <code>/DATA</code> (Photos, Nextcloud, Minecraft worlds, AppData) and <code>/opt/instant-server</code> are backed up prior to OS formatting and restored automatically after Ubuntu LTS finishes installing.</div>
+        </div>
+      ` : state.install_mode === "offline_updater_usb" ? `
+        <div class="notice-banner" style="border-color:var(--accent);">
+          <div style="font-weight:600;">📦 Offline Air-Gapped Updater USB Mode Active</div>
+          <div style="font-size:12px;">Plug this USB into your running local server (or boot from it) to update the Web Dashboard, hardening scripts, and Docker Compose app stacks without needing internet access.</div>
+        </div>
+      ` : state.install_mode === "repair_rescue_usb" ? `
+        <div class="notice-banner" style="border-color:var(--success);">
+          <div style="font-weight:600;">🔑 Emergency Repair &amp; Password Reset Mode Active</div>
+          <div style="font-size:12px;">Booting from this USB automatically resets the password for <strong>${esc(state.username || "admin")}</strong> to the password entered in Tab 1, runs <code>e2fsck -fy</code> on ext4 partitions, and clears UFW/Fail2ban lockouts without erasing your data.</div>
         </div>
       ` : "";
 
@@ -6128,6 +6247,34 @@ ${storageSnippet}
               <input type="checkbox" data-action="toggle-confirm-usb-erase" ${state.confirm_usb_erase ? "checked" : ""} style="accent-color:var(--accent);width:16px;height:16px;" />
               <span>Format the selected USB drive and write the bootable Ubuntu Server ISO + pre-selected apps</span>
             </label>
+          </div>
+
+          
+          <div class="win-card" style="flex-direction:column;align-items:stretch;gap:10px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+              <div class="card-left">
+                <div class="card-icon">📖</div>
+                <div class="card-text">
+                  <div class="card-title">How to Boot From USB &amp; Reset Forgotten Passwords (Quick Guide)</div>
+                  <div class="card-desc">Press the Boot Menu key repeatedly right after powering on the target laptop/PC • Sleep is automatically inhibited during install</div>
+                </div>
+              </div>
+              <span class="badge badge-accent">No Monitor Needed After Boot Selection</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px;font-size:12px;">
+              <div style="padding:8px 10px;border-radius:8px;background:var(--card-bg-secondary);border:1px solid var(--border-subtle);">
+                <strong>Lenovo / ThinkPad / Dell / Acer:</strong> Tap <code>F12</code> repeatedly at power-on (BIOS Setup: <code>F2</code> or <code>F1</code>)
+              </div>
+              <div style="padding:8px 10px;border-radius:8px;background:var(--card-bg-secondary);border:1px solid var(--border-subtle);">
+                <strong>HP (Pavilion / EliteBook / Omen):</strong> Tap <code>F9</code> or <code>Esc → F9</code> at power-on (BIOS Setup: <code>F10</code>)
+              </div>
+              <div style="padding:8px 10px;border-radius:8px;background:var(--card-bg-secondary);border:1px solid var(--border-subtle);">
+                <strong>ASUS / MSI / Desktop Boards:</strong> Tap <code>F8</code> or <code>Esc</code> (ASUS), <code>F11</code> (MSI), <code>F12</code> (Gigabyte)
+              </div>
+              <div style="padding:8px 10px;border-radius:8px;background:var(--card-bg-secondary);border:1px solid var(--border-subtle);">
+                <strong>Forgot Server Password?</strong> Pick <em>Emergency Repair &amp; Password Reset USB</em> above, set a new password in Tab 1, flash, and boot once
+              </div>
+            </div>
           </div>
 
           ${renderExpander("storage", "Advanced options", advHtml)}
@@ -7105,6 +7252,26 @@ ${storageSnippet}
         return;
       } else if (action === "toggle-confirm-usb-erase") {
         state.confirm_usb_erase = !!target.checked;
+        return;
+      } else if (action === "toggle-confirm-wipe-server-data") {
+        state.confirm_wipe_server_data = !!target.checked;
+        return;
+      } else if (action === "toggle-iphone-backup") {
+        state.enable_iphone_auto_backup = !state.enable_iphone_auto_backup;
+        if (state.enable_iphone_auto_backup && !state.selected_apps.includes("immich")) {
+          state.selected_apps.push("immich");
+        }
+        renderApp();
+        return;
+      } else if (action === "save-custom-sys-config") {
+        const p = (state.custom_config_path || "").trim();
+        if (!p.startsWith("/")) {
+          showToast("Enter an absolute target path starting with / (e.g. /etc/samba/smb-custom.conf)");
+          return;
+        }
+        state.custom_config_files[p] = state.custom_config_body || "";
+        showToast(`Staged custom config file ${p} for USB provisioning`);
+        renderApp();
         return;
       } else if (action === "toggle-mc-online-mode") {
         state.mc_online_mode = !!target.checked;

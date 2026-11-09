@@ -22,7 +22,23 @@ const (
 	fsctlAllowExtendedDasdIO = 0x00090083
 	ioctlDeleteDriveLayout   = 0x0007C040
 	ioctlDiskUpdateProps     = 0x00070140
+
+	esContinuous       = 0x80000000
+	esSystemRequired   = 0x00000001
+	esDisplayRequired  = 0x00000002
+	esAwayModeRequired = 0x00000040
 )
+
+// AcquireHostWakeLock prevents Windows from entering sleep, standby, or idle suspend
+// while an ISO download or raw USB DMA flash operation is running.
+func AcquireHostWakeLock() func() {
+	k32 := syscall.NewLazyDLL("kernel32.dll")
+	proc := k32.NewProc("SetThreadExecutionState")
+	_, _, _ = proc.Call(uintptr(esContinuous | esSystemRequired | esDisplayRequired | esAwayModeRequired))
+	return func() {
+		_, _, _ = proc.Call(uintptr(esContinuous))
+	}
+}
 
 type windowsRawDisk struct {
 	file          *os.File
@@ -106,7 +122,7 @@ func OpenRawDisk(devicePath string) (RawDiskHandle, error) {
 	if !strings.HasPrefix(upperPath, `\\.\PHYSICALDRIVE`) {
 		f, err := os.OpenFile(cleanPath, os.O_RDWR, 0600)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("IS-USB-301: no physical USB drive found at %s (plug in a removable USB flash drive and click Refresh Drives): %w", cleanPath, err)
 		}
 		return &windowsRawDisk{
 			file:       f,

@@ -117,19 +117,50 @@ func IsPointerPageAligned(buf []byte, align int) bool {
 	return uintptr(unsafe.Pointer(&buf[0]))%uintptr(align) == 0
 }
 
+type grubPatchPair struct {
+	needle []byte
+	repl   []byte
+}
+
+var grubCmdlinePatchPairs = []grubPatchPair{
+	{
+		needle: []byte("quiet splash ---"),
+		repl:   []byte("autoinstall  ---"),
+	},
+	{
+		needle: []byte("set gfxpayload=keep\n\tlinux\t/casper/vmlinuz  ---"),
+		repl:   []byte("linux\t/casper/vmlinuz autoinstall quiet     ---"),
+	},
+	{
+		needle: []byte("set gfxpayload=keep\n\tlinux\t/casper/vmlinuz ---"),
+		repl:   []byte("linux\t/casper/vmlinuz autoinstall quiet    ---"),
+	},
+	{
+		needle: []byte("set gfxpayload=keep\n  linux /casper/vmlinuz ---"),
+		repl:   []byte("  linux /casper/vmlinuz autoinstall quiet   ---"),
+	},
+	{
+		needle: []byte("set timeout=30"),
+		repl:   []byte("set timeout=02"),
+	},
+}
+
 func PatchGrubKernelCmdlineInPlace(buf []byte) int {
-	longNeedle := []byte("quiet splash ---")
-	longRepl := []byte("autoinstall  ---")
 	count := 0
-	idx := 0
-	for {
-		pos := bytes.Index(buf[idx:], longNeedle)
-		if pos < 0 {
-			break
+	for _, pair := range grubCmdlinePatchPairs {
+		if len(pair.needle) != len(pair.repl) {
+			continue
 		}
-		copy(buf[idx+pos:idx+pos+len(longRepl)], longRepl)
-		idx += pos + len(longNeedle)
-		count++
+		idx := 0
+		for {
+			pos := bytes.Index(buf[idx:], pair.needle)
+			if pos < 0 {
+				break
+			}
+			copy(buf[idx+pos:idx+pos+len(pair.repl)], pair.repl)
+			idx += pos + len(pair.needle)
+			count++
+		}
 	}
 	return count
 }
@@ -163,6 +194,9 @@ func StreamISOAndCidataToRawDisk(
 	pauseGate *PauseGate,
 	onProgress func(FlashProgressEvent),
 ) (*FlashProgressEvent, error) {
+	releaseWakeLock := AcquireHostWakeLock()
+	defer releaseWakeLock()
+
 	srcFile, err := os.Open(isoPath)
 	if err != nil {
 		return nil, fmt.Errorf("IS-ISO-101: failed to open source ISO %s: %w", isoPath, err)
@@ -386,6 +420,27 @@ func RelocateGPTAndWriteCidataPartition(disk RawDiskHandle, isoBytes uint64, cid
 		for idx, ch := range []uint16{'C', 'I', 'D', 'A', 'T', 'A'} {
 			binary.LittleEndian.PutUint16(ent[56+idx*2:58+idx*2], ch)
 		}
+	}
+
+	// Also populate Hybrid MBR Partition Slot #4 (offset 494..510 in LBA 0) if empty
+	// so Legacy BIOS / CSM systems also discover the FAT16 CIDATA partition.
+	mbrSlot4 := tableBuf[494:510]
+	mbrSlotEmpty := true
+	for _, b := range mbrSlot4 {
+		if b != 0 {
+			mbrSlotEmpty = false
+			break
+		}
+	}
+	if mbrSlotEmpty && cidataStartLBA <= 0xFFFFFFFF && cidataSectors <= 0xFFFFFFFF {
+		mbrSlot4[0] = 0x00 // Non-bootable data partition
+		mbrSlot4[1], mbrSlot4[2], mbrSlot4[3] = 0xFE, 0xFF, 0xFF
+		mbrSlot4[4] = 0x0E // FAT16 LBA (Win95 OSR2+)
+		mbrSlot4[5], mbrSlot4[6], mbrSlot4[7] = 0xFE, 0xFF, 0xFF
+		binary.LittleEndian.PutUint32(mbrSlot4[8:12], uint32(cidataStartLBA))
+		binary.LittleEndian.PutUint32(mbrSlot4[12:16], uint32(cidataSectors))
+		tableBuf[510] = 0x55
+		tableBuf[511] = 0xAA
 	}
 
 	// Update LastUsableLBA (offset 48) and BackupLBA (offset 32) if needed

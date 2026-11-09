@@ -386,3 +386,88 @@ func TestMultiServiceImmichPaperlessAndV6Migrations(t *testing.T) {
 		t.Fatalf("expected qBittorrent WEBUI_PORT=8090 and 6881/udp, got:\n%s", qbitYAML)
 	}
 }
+
+func TestUbuntuLiveServerGrubPatchAndHybridMBRCidata(t *testing.T) {
+	// Test official Ubuntu 24.04 / 26.04 Live Server grub.cfg pattern (without 'splash')
+	buf := []byte("set timeout=30\nmenuentry \"Try or Install Ubuntu Server\" {\n\tset gfxpayload=keep\n\tlinux\t/casper/vmlinuz  ---\n\tinitrd\t/casper/initrd\n}\n")
+	patches := PatchGrubKernelCmdlineInPlace(buf)
+	if patches < 2 {
+		t.Fatalf("expected at least 2 patches (timeout + Live Server linux cmdline), got %d", patches)
+	}
+	if !bytes.Contains(buf, []byte("set timeout=02")) {
+		t.Fatalf("expected set timeout=02 in patched grub.cfg, got:\n%s", string(buf))
+	}
+	if !bytes.Contains(buf, []byte("linux\t/casper/vmlinuz autoinstall quiet     ---")) {
+		t.Fatalf("expected patched Live Server autoinstall kernel line, got:\n%s", string(buf))
+	}
+}
+
+func TestReinstallModesOfflineUpdaterAndIPhoneAutoBackup(t *testing.T) {
+	// 1. Reinstall Without Retaining Data MUST block unless ConfirmWipeServerData == "WIPE-SERVER-DATA"
+	wipeBlocked := ServerProfileConfig{
+		Hostname:              "instant-server",
+		Username:              "admin",
+		InstallMode:           "reinstall_wipe_data",
+		ConfirmWipeServerData: "",
+	}
+	if err := ValidateProfileConfig(wipeBlocked); err == nil {
+		t.Fatalf("expected reinstall_wipe_data without confirmation token to be blocked")
+	}
+
+	wipeConfirmed := wipeBlocked
+	wipeConfirmed.ConfirmWipeServerData = "WIPE-SERVER-DATA"
+	if err := ValidateProfileConfig(wipeConfirmed); err != nil {
+		t.Fatalf("expected confirmed reinstall_wipe_data to pass validation, got: %v", err)
+	}
+
+	// 2. Reinstall While Retaining Server Data + iPhone Auto-Backup + Custom Config Files
+	keepCfg := ServerProfileConfig{
+		Hostname:               "instant-server",
+		Username:               "admin",
+		Password:               "StrongPass123!",
+		InstallMode:            "reinstall_keep_data",
+		EnableIPhoneAutoBackup: true,
+		IPhoneBackupMode:       "immich_and_smb",
+		CustomConfigFiles: map[string]string{
+			"/etc/custom-iphone-sync.conf": "SYNC_INTERVAL=300\n",
+		},
+		CustomPostInstallScript: "mkdir -p /DATA/iPhone_Backups/AutoSync\n",
+	}
+	if err := ValidateProfileConfig(keepCfg); err != nil {
+		t.Fatalf("expected reinstall_keep_data config to be valid, got: %v", err)
+	}
+
+	userData := GenerateAutoinstallUserData(keepCfg)
+	for _, must := range []string{
+		"systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target",
+		"reinstall_preserve_data.sh backup",
+		"reinstall_preserve_data.sh restore",
+	} {
+		if !strings.Contains(userData, must) {
+			t.Fatalf("expected reinstall_keep_data user-data to contain %q, got:\n%s", must, userData)
+		}
+	}
+
+	stageDir := t.TempDir()
+	written, err := StageCIDATAPayload(stageDir, keepCfg, []byte("#!/usr/bin/env bash\n"), []byte("<html></html>"))
+	if err != nil {
+		t.Fatalf("StageCIDATAPayload failed for keepCfg: %v", err)
+	}
+	for _, expectedFile := range []string{
+		"reinstall_preserve_data.sh",
+		"offline_updater_apply.sh",
+		"emergency_repair_reset.sh",
+		"custom_post_install.sh",
+	} {
+		found := false
+		for _, w := range written {
+			if w == expectedFile {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("expected %q in staged CIDATA files, got %v", expectedFile, written)
+		}
+	}
+}

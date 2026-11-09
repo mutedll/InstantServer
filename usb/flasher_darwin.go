@@ -12,6 +12,19 @@ import (
 	"time"
 )
 
+// AcquireHostWakeLock runs caffeinate -dims bound to the current process PID so macOS
+// never sleeps display, system, or disk during ISO downloading or USB flashing.
+func AcquireHostWakeLock() func() {
+	cmd := exec.Command("caffeinate", "-dims", "-w", fmt.Sprintf("%d", os.Getpid()))
+	if err := cmd.Start(); err == nil && cmd.Process != nil {
+		return func() {
+			_ = cmd.Process.Kill()
+			_, _ = cmd.Process.Wait()
+		}
+	}
+	return func() {}
+}
+
 type darwinRawDisk struct {
 	file        *os.File
 	rawCharPath string
