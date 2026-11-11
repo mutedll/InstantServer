@@ -4,24 +4,31 @@
 package usb
 
 import (
+	"encoding/binary"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
 	"syscall"
 	"time"
-	"unsafe"
 )
 
 const (
 	winFileFlagNoBuffering   = 0x20000000
 	winFileFlagWriteThrough  = 0x80000000
+	winCreateNoWindow        = 0x08000000
 	fsctlLockVolume          = 0x00090018
 	fsctlDismountVolume      = 0x00090020
 	fsctlUnlockVolume        = 0x0009001C
 	fsctlAllowExtendedDasdIO = 0x00090083
-	ioctlDeleteDriveLayout   = 0x0007C040
 	ioctlDiskUpdateProps     = 0x00070140
+	ioctlDiskGetLengthInfo   = 0x0007405C
+
+	// winMaxUSBTransferChunk caps individual Win32 ReadFile/WriteFile IRPs to 1 MB
+	// so USBSTOR.SYS and UASPSTOR.SYS never fail with ERROR_INVALID_PARAMETER (87)
+	// or ERROR_NO_SYSTEM_RESOURCES (1450) on multi-megabyte buffers.
+	winMaxUSBTransferChunk = 1024 * 1024
 
 	esContinuous       = 0x80000000
 	esSystemRequired   = 0x00000001
@@ -59,7 +66,12 @@ func getDriveLettersForPhysicalDisk(physicalDrivePath string) []string {
 		}
 	}
 	ps := fmt.Sprintf("Get-Partition -DiskNumber %s -ErrorAction SilentlyContinue | Where-Object { $_.DriveLetter } | ForEach-Object { $_.DriveLetter }", idx)
-	out, err := exec.Command("powershell.exe", "-NoProfile", "-WindowStyle", "Hidden", "-Command", ps).Output()
+	cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", ps)
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: winCreateNoWindow,
+	}
+	out, err := cmd.Output()
 	if err != nil {
 		return nil
 	}
@@ -167,8 +179,6 @@ func OpenRawDisk(devicePath string) (RawDiskHandle, error) {
 
 	var bytesReturned uint32
 	_ = syscall.DeviceIoControl(hDisk, fsctlAllowExtendedDasdIO, nil, 0, nil, 0, &bytesReturned, nil)
-	_ = syscall.DeviceIoControl(hDisk, ioctlDeleteDriveLayout, nil, 0, nil, 0, &bytesReturned, nil)
-	_ = syscall.DeviceIoControl(hDisk, ioctlDiskUpdateProps, nil, 0, nil, 0, &bytesReturned, nil)
 
 	f := os.NewFile(uintptr(hDisk), cleanPath)
 	return &windowsRawDisk{
@@ -189,38 +199,100 @@ func (d *windowsRawDisk) Write(p []byte) (int, error) {
 }
 
 func (d *windowsRawDisk) ReadAt(p []byte, off int64) (int, error) {
-	return d.file.ReadAt(p, off)
+	if !d.unbuffered {
+		return d.file.ReadAt(p, off)
+	}
+	totalRead := 0
+	for totalRead < len(p) {
+		rem := len(p) - totalRead
+		chunkLen := rem
+		if chunkLen > winMaxUSBTransferChunk {
+			chunkLen = winMaxUSBTransferChunk
+		}
+		curOff := uint64(off) + uint64(totalRead)
+		ov := syscall.Overlapped{
+			Offset:     uint32(curOff & 0xFFFFFFFF),
+			OffsetHigh: uint32(curOff >> 32),
+		}
+		var n uint32
+		err := syscall.ReadFile(d.handle, p[totalRead:totalRead+chunkLen], &n, &ov)
+		totalRead += int(n)
+		if err != nil {
+			return totalRead, err
+		}
+		if n == 0 {
+			break
+		}
+	}
+	return totalRead, nil
 }
 
 func (d *windowsRawDisk) WriteAt(p []byte, off int64) (int, error) {
-	if _, err := d.file.Seek(off, 0); err != nil {
-		return 0, err
+	if !d.unbuffered {
+		return d.file.WriteAt(p, off)
 	}
-	var written uint32
-	err := syscall.WriteFile(d.handle, p, &written, (*syscall.Overlapped)(unsafe.Pointer(nil)))
-	return int(written), err
+	totalWritten := 0
+	for totalWritten < len(p) {
+		rem := len(p) - totalWritten
+		chunkLen := rem
+		if chunkLen > winMaxUSBTransferChunk {
+			chunkLen = winMaxUSBTransferChunk
+		}
+		curOff := uint64(off) + uint64(totalWritten)
+		ov := syscall.Overlapped{
+			Offset:     uint32(curOff & 0xFFFFFFFF),
+			OffsetHigh: uint32(curOff >> 32),
+		}
+		var n uint32
+		err := syscall.WriteFile(d.handle, p[totalWritten:totalWritten+chunkLen], &n, &ov)
+		totalWritten += int(n)
+		if err != nil {
+			return totalWritten, err
+		}
+		if n == 0 {
+			break
+		}
+	}
+	return totalWritten, nil
 }
 
 func (d *windowsRawDisk) Seek(offset int64, whence int) (int64, error) {
+	if d.unbuffered && whence == io.SeekEnd {
+		var lengthBuf [8]byte
+		var bytesReturned uint32
+		err := syscall.DeviceIoControl(
+			d.handle,
+			ioctlDiskGetLengthInfo,
+			nil,
+			0,
+			&lengthBuf[0],
+			uint32(len(lengthBuf)),
+			&bytesReturned,
+			nil,
+		)
+		if err == nil {
+			diskBytes := int64(binary.LittleEndian.Uint64(lengthBuf[:]))
+			return diskBytes + offset, nil
+		}
+	}
 	return d.file.Seek(offset, whence)
 }
 
 func (d *windowsRawDisk) SyncAndFlush() error {
-	var bytesReturned uint32
-	if d.unbuffered {
-		_ = syscall.DeviceIoControl(d.handle, ioctlDiskUpdateProps, nil, 0, nil, 0, &bytesReturned, nil)
-	}
 	return syscall.FlushFileBuffers(d.handle)
 }
 
 func (d *windowsRawDisk) Close() error {
-	_ = d.SyncAndFlush()
+	_ = syscall.FlushFileBuffers(d.handle)
 	var bytesReturned uint32
 	for _, hVol := range d.lockedVolumes {
 		_ = syscall.DeviceIoControl(hVol, fsctlUnlockVolume, nil, 0, nil, 0, &bytesReturned, nil)
 		_ = syscall.CloseHandle(hVol)
 	}
 	d.lockedVolumes = nil
+	if d.unbuffered {
+		_ = syscall.DeviceIoControl(d.handle, ioctlDiskUpdateProps, nil, 0, nil, 0, &bytesReturned, nil)
+	}
 	return d.file.Close()
 }
 

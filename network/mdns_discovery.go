@@ -110,11 +110,13 @@ func DiscoverInstantServersOnLAN(ctx context.Context, preferredHostname string) 
 	prefix := fmt.Sprintf("%d.%d.%d.", localAddr[0], localAddr[1], localAddr[2])
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 32)
+	dialer := net.Dialer{Timeout: 90 * time.Millisecond}
 
+scanLoop:
 	for hostOctet := 1; hostOctet <= 254; hostOctet++ {
 		select {
 		case <-ctx.Done():
-			break
+			break scanLoop
 		default:
 		}
 		candidateIP := fmt.Sprintf("%s%d", prefix, hostOctet)
@@ -126,9 +128,15 @@ func DiscoverInstantServersOnLAN(ctx context.Context, preferredHostname string) 
 		go func(ip string) {
 			defer wg.Done()
 			defer func() { <-sem }()
+			if ctx.Err() != nil {
+				return
+			}
 			var open []int
 			for _, port := range targetPorts {
-				c, dErr := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", ip, port), 90*time.Millisecond)
+				if ctx.Err() != nil {
+					return
+				}
+				c, dErr := dialer.DialContext(ctx, "tcp", fmt.Sprintf("%s:%d", ip, port))
 				if dErr == nil {
 					_ = c.Close()
 					open = append(open, port)
@@ -139,7 +147,7 @@ func DiscoverInstantServersOnLAN(ctx context.Context, preferredHostname string) 
 				if !seenIPs[ip] {
 					seenIPs[ip] = true
 					results = append(results, DiscoveredServer{
-						Hostname:  preferredHostname + ".local",
+						Hostname:  strings.TrimSuffix(preferredHostname, ".local") + ".local",
 						IP:        ip,
 						OpenPorts: open,
 						ViaMDNS:   false,

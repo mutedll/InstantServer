@@ -19,6 +19,7 @@ type AppSpec struct {
 	CapAdd       []string          `json:"cap_add,omitempty"`
 	Sysctls      []string          `json:"sysctls,omitempty"`
 	Devices      []string          `json:"devices,omitempty"`
+	ShmSize      string            `json:"shm_size,omitempty"`
 	Command      string            `json:"command,omitempty"`
 	Environment  map[string]string `json:"environment,omitempty"`
 	Volumes      []string          `json:"volumes"`
@@ -27,7 +28,7 @@ type AppSpec struct {
 
 type MinecraftServerConfig struct {
 	ServerType         string `json:"server_type"`         // PAPER, PURPUR, FABRIC, FORGE, NEOFORGE, VANILLA, GEYSER_FLOODGATE
-	Version            string `json:"version"`             // LATEST, 1.21.4, 1.20.4, etc.
+	Version            string `json:"version"`             // 26.3, 26.2, 26.1, 1.21.11, 1.21.4, LATEST, etc.
 	MemoryHeap         string `json:"memory_heap"`         // 2G, 4G, 6G, 8G, 12G, 16G
 	UseAikarFlags      bool   `json:"use_aikar_flags"`     // -XX:+UseG1GC Aikar's flags
 	Gamemode           string `json:"gamemode"`            // survival, creative, adventure
@@ -49,7 +50,7 @@ type MinecraftServerConfig struct {
 func DefaultMinecraftConfig() MinecraftServerConfig {
 	return MinecraftServerConfig{
 		ServerType:         "PAPER",
-		Version:            "1.21.4",
+		Version:            "26.3",
 		MemoryHeap:         "4G",
 		UseAikarFlags:      true,
 		Gamemode:           "survival",
@@ -88,7 +89,7 @@ func BuildMinecraftComposeYAML(mc MinecraftServerConfig) string {
 
 	ver := strings.TrimSpace(mc.Version)
 	if ver == "" {
-		ver = "1.21.4"
+		ver = "26.3"
 	}
 	heap := strings.ToUpper(strings.TrimSpace(mc.MemoryHeap))
 	if heap == "" {
@@ -150,6 +151,13 @@ func BuildMinecraftComposeYAML(mc MinecraftServerConfig) string {
 			`      ENABLE_WHITELIST: "true"`,
 			`      ENFORCE_WHITELIST: "true"`,
 			fmt.Sprintf(`      WHITELIST: "%s"`, strings.TrimSpace(mc.Whitelist)),
+		)
+	} else {
+		// Minecraft 26.3 ("Wilderness Bound") enables white-list=true by default in new server.properties;
+		// explicitly set WHITE_LIST=false unless the user specified a whitelist so LAN/friends aren't blocked.
+		envLines = append(envLines,
+			`      WHITE_LIST: "false"`,
+			`      ENFORCE_WHITELIST: "false"`,
 		)
 	}
 	if modrinth != "" {
@@ -223,6 +231,8 @@ var VerifiedCoreAppSpecs = map[string]AppSpec{
 		Image: "nextcloud:stable", HostPort: 8081, InternalPort: 80,
 		Environment: map[string]string{
 			"SQLITE_DATABASE":           "nextcloud",
+			"NEXTCLOUD_ADMIN_USER":      "admin",
+			"NEXTCLOUD_ADMIN_PASSWORD":  "admin",
 			"NEXTCLOUD_TRUSTED_DOMAINS": "localhost instant-server.local *.local 192.168.*.* 10.*.*.* 100.*.*.*",
 		},
 		Volumes: []string{"/DATA/AppData/nextcloud/html:/var/www/html", "/DATA/AppData/nextcloud/data:/var/www/html/data"},
@@ -302,10 +312,11 @@ var VerifiedCoreAppSpecs = map[string]AppSpec{
 	},
 	"frigate": {
 		ID: "frigate", Title: "Frigate AI NVR Camera System", Category: "Smart Home",
-		Image: "ghcr.io/blakeblackshear/frigate:stable", HostPort: 5000, InternalPort: 5000,
-		ExtraPorts: []string{"8554:8554/tcp", "8555:8555/tcp", "8555:8555/udp"},
+		Image: "ghcr.io/blakeblackshear/frigate:stable", HostPort: 8971, InternalPort: 8971,
+		ShmSize:    "256mb",
+		ExtraPorts: []string{"5001:5000/tcp", "8554:8554/tcp", "8555:8555/tcp", "8555:8555/udp"},
 		Devices:    []string{"/dev/dri:/dev/dri"},
-		Volumes:    []string{"/DATA/AppData/frigate/config:/config", "/DATA/Media/Frigate:/media/frigate"},
+		Volumes:    []string{"/DATA/AppData/frigate/config:/config", "/DATA/Media/Frigate:/media/frigate", "/etc/localtime:/etc/localtime:ro"},
 	},
 	"vaultwarden": {
 		ID: "vaultwarden", Title: "Vaultwarden Passwords", Category: "Security & Tools",
@@ -396,7 +407,7 @@ var VerifiedCoreAppSpecs = map[string]AppSpec{
 	"satisfactory": {
 		ID: "satisfactory", Title: "Satisfactory Dedicated Server", Category: "Gaming Servers",
 		Image: "wolveix/satisfactory-server:latest", HostPort: 7777, InternalPort: 7777,
-		ExtraPorts: []string{"7777:7777/udp"},
+		ExtraPorts: []string{"7777:7777/udp", "8888:8888/tcp"},
 		Volumes:    []string{"/DATA/AppData/satisfactory:/config"},
 	},
 	"cs2_server": {
@@ -495,6 +506,50 @@ services:
 `, hostPort)
 }
 
+func BuildBookStackMultiContainerComposeYAML(hostPort int) string {
+	if hostPort <= 0 {
+		hostPort = 6875
+	}
+	return fmt.Sprintf(`name: bookstack
+services:
+  bookstack:
+    image: lscr.io/linuxserver/bookstack:latest
+    container_name: bookstack
+    restart: unless-stopped
+    depends_on:
+      - bookstack_db
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+      - APP_URL=http://localhost:%d
+      - APP_KEY=base64:CClA6bWC3qhP6yMVQECyTblYtj7uAxOh0dDpi0BcZ5w=
+      - DB_HOST=bookstack_db
+      - DB_PORT=3306
+      - DB_USERNAME=bookstack
+      - DB_PASSWORD=bookstackdbpass
+      - DB_DATABASE=bookstack
+    ports:
+      - "%d:80"
+    volumes:
+      - /DATA/AppData/bookstack/config:/config
+  bookstack_db:
+    image: lscr.io/linuxserver/mariadb:latest
+    container_name: bookstack_db
+    restart: unless-stopped
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+      - MYSQL_ROOT_PASSWORD=bookstackrootpass
+      - MYSQL_DATABASE=bookstack
+      - MYSQL_USER=bookstack
+      - MYSQL_PASSWORD=bookstackdbpass
+    volumes:
+      - /DATA/AppData/bookstack/db:/config
+`, hostPort, hostPort)
+}
+
 func BuildVerifiedAppComposeWithOverride(appID string, fallbackImage string, fallbackHostPort int, mcCfg *MinecraftServerConfig, override *AppOverride) string {
 	if appID == "minecraft" {
 		if mcCfg != nil {
@@ -515,6 +570,13 @@ func BuildVerifiedAppComposeWithOverride(appID string, fallbackImage string, fal
 			hp = override.HostPort
 		}
 		return BuildPaperlessMultiContainerComposeYAML(hp)
+	}
+	if appID == "bookstack" {
+		hp := 6875
+		if override != nil && override.HostPort > 0 {
+			hp = override.HostPort
+		}
+		return BuildBookStackMultiContainerComposeYAML(hp)
 	}
 
 	spec, exists := VerifiedCoreAppSpecs[appID]
@@ -585,6 +647,11 @@ func BuildVerifiedAppComposeWithOverride(appID string, fallbackImage string, fal
 		devSection = "\n    devices:\n" + strings.Join(dv, "\n")
 	}
 
+	var shmSection string
+	if strings.TrimSpace(spec.ShmSize) != "" {
+		shmSection = fmt.Sprintf("\n    shm_size: %q", strings.TrimSpace(spec.ShmSize))
+	}
+
 	var cmdSection string
 	if spec.Command != "" {
 		cmdSection = fmt.Sprintf("\n    command: %q", spec.Command)
@@ -632,12 +699,12 @@ services:
     container_name: %s
     restart: unless-stopped
     security_opt:
-      - no-new-privileges:true%s%s%s%s%s
+      - no-new-privileges:true%s%s%s%s%s%s
     environment:
 %s
     ports:
 %s
     volumes:
 %s
-`, spec.ID, spec.ID, spec.Image, spec.ID, memSection, cmdSection, capSection, sysctlSection, devSection, strings.Join(envLines, "\n"), strings.Join(portLines, "\n"), strings.Join(volLines, "\n"))
+`, spec.ID, spec.ID, spec.Image, spec.ID, shmSection, memSection, cmdSection, capSection, sysctlSection, devSection, strings.Join(envLines, "\n"), strings.Join(portLines, "\n"), strings.Join(volLines, "\n"))
 }

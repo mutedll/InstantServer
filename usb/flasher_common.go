@@ -122,32 +122,40 @@ type grubPatchPair struct {
 	repl   []byte
 }
 
-var grubCmdlinePatchPairs = []grubPatchPair{
+// Note: Setting `set timeout=1 ` (1 second) instead of `0` prevents Canonical's
+// patched grubx64.efi from overriding `timeout=0` back to 10 seconds when
+// `timeout_style=menu` is active.
+var grubFixedPatchPairs = []grubPatchPair{
 	{
 		needle: []byte("quiet splash ---"),
 		repl:   []byte("autoinstall  ---"),
 	},
 	{
-		needle: []byte("set gfxpayload=keep\n\tlinux\t/casper/vmlinuz  ---"),
-		repl:   []byte("linux\t/casper/vmlinuz autoinstall quiet     ---"),
-	},
-	{
-		needle: []byte("set gfxpayload=keep\n\tlinux\t/casper/vmlinuz ---"),
-		repl:   []byte("linux\t/casper/vmlinuz autoinstall quiet    ---"),
-	},
-	{
-		needle: []byte("set gfxpayload=keep\n  linux /casper/vmlinuz ---"),
-		repl:   []byte("  linux /casper/vmlinuz autoinstall quiet   ---"),
-	},
-	{
 		needle: []byte("set timeout=30"),
-		repl:   []byte("set timeout=02"),
+		repl:   []byte("set timeout=1 "),
+	},
+	{
+		needle: []byte("set timeout=10"),
+		repl:   []byte("set timeout=1 "),
+	},
+	{
+		needle: []byte("set timeout=5\n"),
+		repl:   []byte("set timeout=1\n"),
+	},
+	{
+		needle: []byte("timeout 300"),
+		repl:   []byte("timeout 10 "),
 	},
 }
 
+// PatchGrubKernelCmdlineInPlace patches Ubuntu Live Server and Desktop GRUB configs
+// in-place without changing a single file offset or ISO9660 extent length:
+//  1. Sets GRUB menu timeout to 1 second (`set timeout=1 `) so the USB boots automatically without pressing Enter.
+//  2. Replaces `set gfxpayload=keep\n\tlinux\t/casper/... ---` (as well as standalone `/casper/vmlinuz` lines)
+//     with `linux /casper/... autoinstall noprompt ---` so Subiquity installs 100% unattended and reboots automatically.
 func PatchGrubKernelCmdlineInPlace(buf []byte) int {
 	count := 0
-	for _, pair := range grubCmdlinePatchPairs {
+	for _, pair := range grubFixedPatchPairs {
 		if len(pair.needle) != len(pair.repl) {
 			continue
 		}
@@ -162,6 +170,60 @@ func PatchGrubKernelCmdlineInPlace(buf []byte) int {
 			count++
 		}
 	}
+
+	// Universal byte-length-preserving scanner for Ubuntu Live Server menuentries:
+	// Matches `set gfxpayload=keep` followed within 110 bytes by `linux` + `/casper/` + `---`
+	gfxMarker := []byte("set gfxpayload=keep")
+	dashMarker := []byte("---")
+	searchIdx := 0
+	for searchIdx < len(buf) {
+		relPos := bytes.Index(buf[searchIdx:], gfxMarker)
+		if relPos < 0 {
+			break
+		}
+		spanStart := searchIdx + relPos
+		windowEnd := spanStart + 110
+		if windowEnd > len(buf) {
+			windowEnd = len(buf)
+		}
+		window := buf[spanStart:windowEnd]
+		dashPos := bytes.Index(window, dashMarker)
+		casperPos := bytes.Index(window, []byte("/casper/"))
+		if dashPos > 0 && casperPos > 0 && casperPos < dashPos {
+			spanLen := dashPos + len(dashMarker)
+			// Extract the exact kernel binary path (e.g. "/casper/vmlinuz" or "/casper/hwe-vmlinuz")
+			kEnd := casperPos
+			for kEnd < dashPos && window[kEnd] != ' ' && window[kEnd] != '\t' && window[kEnd] != '\r' && window[kEnd] != '\n' {
+				kEnd++
+			}
+			kernelPath := string(window[casperPos:kEnd])
+			// Build candidate replacements from richest flags to compact flags that fit in spanLen
+			candidates := []string{
+				"linux\t" + kernelPath + " autoinstall noprompt noeject quiet ",
+				"linux " + kernelPath + " autoinstall noprompt ",
+				"linux\t" + kernelPath + " autoinstall quiet ",
+				"linux " + kernelPath + " autoinstall ",
+			}
+			for _, prefix := range candidates {
+				if len(prefix)+len(dashMarker) <= spanLen {
+					padCount := spanLen - len(prefix) - len(dashMarker)
+					patched := make([]byte, 0, spanLen)
+					patched = append(patched, []byte(prefix)...)
+					for p := 0; p < padCount; p++ {
+						patched = append(patched, ' ')
+					}
+					patched = append(patched, dashMarker...)
+					copy(buf[spanStart:spanStart+spanLen], patched)
+					count++
+					break
+				}
+			}
+			searchIdx = spanStart + spanLen
+		} else {
+			searchIdx = spanStart + len(gfxMarker)
+		}
+	}
+
 	return count
 }
 
@@ -303,13 +365,17 @@ func StreamISOAndCidataToRawDisk(
 
 	var cidataFAT []byte
 	if cidataStageDir != "" {
-		if fatImg, fatErr := BuildCidataFAT16Image(cidataStageDir); fatErr == nil {
-			cidataFAT = fatImg
+		fatImg, fatErr := BuildCidataFAT16Image(cidataStageDir)
+		if fatErr != nil {
+			return nil, fmt.Errorf("IS-USB-310: failed building FAT16 CIDATA partition image: %w", fatErr)
 		}
+		cidataFAT = fatImg
 	}
 
 	if injectGPTCidata {
-		_ = RelocateGPTAndWriteCidataPartition(rawDisk, uint64(totalBytes), cidataFAT)
+		if gptErr := RelocateGPTAndWriteCidataPartition(rawDisk, uint64(totalBytes), cidataFAT); gptErr != nil {
+			return nil, fmt.Errorf("IS-USB-311: failed writing GPT & CIDATA partition table on %s: %w", targetDevice, gptErr)
+		}
 	}
 
 	if syncErr := rawDisk.SyncAndFlush(); syncErr != nil {
@@ -324,7 +390,7 @@ func StreamISOAndCidataToRawDisk(
 		CRC32Hex:     fmt.Sprintf("%08X", crcHasher.Sum32()),
 		SHA256Hex:    hex.EncodeToString(shaHasher.Sum(nil)),
 		GrubPatches:  totalGrubPatches,
-		Message:      "Verified raw DMA write, SHA-256 digest, and hybrid GPT/MBR CIDATA partition.",
+		Message:      "Verified raw DMA write, SHA-256 digest, UEFI ESP + Backup GPT, and FAT16 CIDATA partition.",
 	}
 	if onProgress != nil {
 		onProgress(*finalEvent)
@@ -341,6 +407,17 @@ var microsoftBasicDataGUID = [16]byte{
 	0x68, 0xB6, 0xB7, 0x26, 0x99, 0xC7,
 }
 
+// linuxFilesystemDataGUID in mixed-endian GPT binary format: 0FC63DAF-8483-4772-8E79-3D69D8477DE4
+// Used on the ISO9660 and Gap1 partitions so Windows MountMgr never attempts to mount raw ISO9660
+// sectors as an unformatted Windows drive ("You need to format the disk in drive X:").
+var linuxFilesystemDataGUID = [16]byte{
+	0xAF, 0x3D, 0xC6, 0x0F,
+	0x83, 0x84,
+	0x72, 0x47,
+	0x8E, 0x79,
+	0x3D, 0x69, 0xD8, 0x47, 0x7D, 0xE4,
+}
+
 var cidataUniquePartGUID = [16]byte{
 	0x49, 0x4E, 0x53, 0x54,
 	0x41, 0x4E,
@@ -353,9 +430,35 @@ func RelocateGPTAndAppendCidataPartition(disk RawDiskHandle, isoBytes uint64) er
 	return RelocateGPTAndWriteCidataPartition(disk, isoBytes, nil)
 }
 
+func writeAlignedChunks(disk RawDiskHandle, data []byte, baseOffset int64) error {
+	const chunkStep = 1024 * 1024 // 1 MB chunks for universal USBSTOR/UASP/NVMe compatibility
+	chunkBuf := AllocPageAlignedBuffer(chunkStep, SectorAlignmentBytes)
+	written := 0
+	for written < len(data) {
+		rem := len(data) - written
+		n := rem
+		if n > chunkStep {
+			n = chunkStep
+		}
+		alignedN := ((n + SectorAlignmentBytes - 1) / SectorAlignmentBytes) * SectorAlignmentBytes
+		for i := 0; i < alignedN; i++ {
+			chunkBuf[i] = 0
+		}
+		copy(chunkBuf[:n], data[written:written+n])
+		if _, err := disk.WriteAt(chunkBuf[:alignedN], baseOffset+int64(written)); err != nil {
+			return err
+		}
+		written += n
+	}
+	return nil
+}
+
 func RelocateGPTAndWriteCidataPartition(disk RawDiskHandle, isoBytes uint64, cidataFATImage []byte) error {
-	// Read LBA 0..33 (34 sectors = 17,408 bytes, rounded to 20,480 bytes for 4096-byte page alignment)
-	tableBuf := AllocPageAlignedBuffer(5*SectorAlignmentBytes, SectorAlignmentBytes)
+	// Read LBA 0..63 (64 sectors = 32,768 bytes = 8 * 4096-byte pages)
+	// Ubuntu 22.04 / 24.04 / 26.04 ISOs built by xorriso have up to 248 GPT partition entries
+	// spanning LBA 2..63 (62 sectors = 31,744 bytes). Reading all 64 sectors ensures we never
+	// truncate the Partition Entry Array when recomputing PartitionEntryArrayCRC32.
+	tableBuf := AllocPageAlignedBuffer(8*SectorAlignmentBytes, SectorAlignmentBytes)
 	if _, err := disk.ReadAt(tableBuf, 0); err != nil {
 		return err
 	}
@@ -373,25 +476,31 @@ func RelocateGPTAndWriteCidataPartition(disk RawDiskHandle, isoBytes uint64, cid
 	}
 	cidataEndLBA := cidataStartLBA + cidataSectors - 1
 
-	// Write the FAT16 CIDATA filesystem image at cidataStartLBA if provided
+	// Write the FAT16 CIDATA filesystem image in 1 MB aligned chunks and verify no write error occurs
 	if len(cidataFATImage) > 0 {
-		alignedFAT := AllocPageAlignedBuffer(len(cidataFATImage), SectorAlignmentBytes)
-		copy(alignedFAT, cidataFATImage)
-		_, _ = disk.WriteAt(alignedFAT, int64(cidataStartLBA*LPTSectorSize))
+		if err := writeAlignedChunks(disk, cidataFATImage, int64(cidataStartLBA*LPTSectorSize)); err != nil {
+			return err
+		}
 	}
 
-	// Find the first empty 128-byte slot in the GPT Partition Entry Array (starting at LBA 2)
-	partArray := tableBuf[LPTSectorSize*2 : LPTSectorSize*34]
+	partArray := tableBuf[LPTSectorSize*2:]
 	numEntries := int(binary.LittleEndian.Uint32(gptHdr[80:84]))
 	entrySize := int(binary.LittleEndian.Uint32(gptHdr[84:88]))
-	if numEntries <= 0 || numEntries > 128 {
-		numEntries = 128
-	}
 	if entrySize <= 0 || entrySize > 512 {
 		entrySize = 128
+		binary.LittleEndian.PutUint32(gptHdr[84:88], 128)
+	}
+	maxEntriesInBuf := len(partArray) / entrySize
+	if numEntries <= 0 || numEntries > maxEntriesInBuf {
+		numEntries = maxEntriesInBuf
+		binary.LittleEndian.PutUint32(gptHdr[80:84], uint32(numEntries))
 	}
 
-	slotOffset := entrySize // Default to Partition #2 (index 1) if only 1 partition exists
+	// Mark existing ISO9660 / Gap1 partitions (which xorriso tags with microsoftBasicDataGUID)
+	// as Linux Filesystem Data + Hidden + NoDriveLetter (0xC000000000000001) so Windows Explorer
+	// never tries to mount the raw ISO9660 partition or show "You need to format the disk in drive X:".
+	// Partition 2 (EFI System Partition, C12A7328-...) is preserved untouched for UEFI booting.
+	slotOffset := -1
 	for i := 0; i < numEntries && (i+1)*entrySize <= len(partArray); i++ {
 		ent := partArray[i*entrySize : (i+1)*entrySize]
 		allZero := true
@@ -402,9 +511,19 @@ func RelocateGPTAndWriteCidataPartition(disk RawDiskHandle, isoBytes uint64, cid
 			}
 		}
 		if allZero {
-			slotOffset = i * entrySize
-			break
+			if slotOffset < 0 {
+				slotOffset = i * entrySize
+			}
+			continue
 		}
+		if bytes.Equal(ent[0:16], microsoftBasicDataGUID[:]) {
+			copy(ent[0:16], linuxFilesystemDataGUID[:])
+			// Set RequiredPartition (bit 0) + Hidden (bit 62) + NoDriveLetter (bit 63)
+			binary.LittleEndian.PutUint64(ent[48:56], 0xC000000000000001)
+		}
+	}
+	if slotOffset < 0 {
+		slotOffset = entrySize
 	}
 
 	if slotOffset+128 <= len(partArray) {
@@ -412,63 +531,93 @@ func RelocateGPTAndWriteCidataPartition(disk RawDiskHandle, isoBytes uint64, cid
 		for i := range ent {
 			ent[i] = 0
 		}
+		// Give CIDATA the Microsoft Basic Data GUID and Attributes = 0 so Windows, Linux, and macOS
+		// recognize and mount the FAT16 CIDATA partition cleanly without any format prompt.
 		copy(ent[0:16], microsoftBasicDataGUID[:])
 		copy(ent[16:32], cidataUniquePartGUID[:])
 		binary.LittleEndian.PutUint64(ent[32:40], cidataStartLBA)
 		binary.LittleEndian.PutUint64(ent[40:48], cidataEndLBA)
-		// Encode "CIDATA" as UTF-16LE in bytes 56..128
+		binary.LittleEndian.PutUint64(ent[48:56], 0)
 		for idx, ch := range []uint16{'C', 'I', 'D', 'A', 'T', 'A'} {
 			binary.LittleEndian.PutUint16(ent[56+idx*2:58+idx*2], ch)
 		}
 	}
 
-	// Also populate Hybrid MBR Partition Slot #4 (offset 494..510 in LBA 0) if empty
-	// so Legacy BIOS / CSM systems also discover the FAT16 CIDATA partition.
-	mbrSlot4 := tableBuf[494:510]
-	mbrSlotEmpty := true
-	for _, b := range mbrSlot4 {
-		if b != 0 {
-			mbrSlotEmpty = false
-			break
-		}
-	}
-	if mbrSlotEmpty && cidataStartLBA <= 0xFFFFFFFF && cidataSectors <= 0xFFFFFFFF {
-		mbrSlot4[0] = 0x00 // Non-bootable data partition
-		mbrSlot4[1], mbrSlot4[2], mbrSlot4[3] = 0xFE, 0xFF, 0xFF
-		mbrSlot4[4] = 0x0E // FAT16 LBA (Win95 OSR2+)
-		mbrSlot4[5], mbrSlot4[6], mbrSlot4[7] = 0xFE, 0xFF, 0xFF
-		binary.LittleEndian.PutUint32(mbrSlot4[8:12], uint32(cidataStartLBA))
-		binary.LittleEndian.PutUint32(mbrSlot4[12:16], uint32(cidataSectors))
-		tableBuf[510] = 0x55
-		tableBuf[511] = 0xAA
-	}
-
-	// Update LastUsableLBA (offset 48) and BackupLBA (offset 32) if needed
-	currentLastUsable := binary.LittleEndian.Uint64(gptHdr[48:56])
-	if cidataEndLBA > currentLastUsable {
-		binary.LittleEndian.PutUint64(gptHdr[48:56], cidataEndLBA+34)
-		binary.LittleEndian.PutUint64(gptHdr[32:40], cidataEndLBA+68)
-	}
-
-	// Recompute Partition Entry Array CRC-32 (offset 88)
 	arrayBytesLen := numEntries * entrySize
 	if arrayBytesLen > len(partArray) {
 		arrayBytesLen = len(partArray)
 	}
+	arraySectors := uint64((arrayBytesLen + LPTSectorSize - 1) / LPTSectorSize)
+
+	// Default Backup GPT position aligned immediately after cidataEndLBA
+	backupArrayLBA := ((cidataEndLBA + 1 + 7) / 8) * 8
+	backupHeaderLBA := backupArrayLBA + arraySectors
+
+	// If the underlying USB disk/image has a known larger physical capacity, place the official
+	// Backup GPT at the true end of the disk (aligned to 4096-byte page boundaries) per UEFI 2.9 Spec 5.3.2.
+	if diskEndBytes, seekErr := disk.Seek(0, io.SeekEnd); seekErr == nil && diskEndBytes > 0 {
+		totalDiskSectors := uint64(diskEndBytes) / LPTSectorSize
+		if totalDiskSectors > cidataEndLBA+arraySectors+16 {
+			// Align backupArrayLBA to an 8-sector (4096-byte) boundary near the end of the disk
+			candidateArrayLBA := ((totalDiskSectors - 1 - arraySectors) / 8) * 8
+			if candidateArrayLBA > cidataEndLBA+1 {
+				backupArrayLBA = candidateArrayLBA
+				backupHeaderLBA = backupArrayLBA + arraySectors
+			}
+		}
+	}
+	lastUsableLBA := backupArrayLBA - 1
+
+	binary.LittleEndian.PutUint64(gptHdr[24:32], 1)               // MyLBA = 1
+	binary.LittleEndian.PutUint64(gptHdr[32:40], backupHeaderLBA) // AlternateLBA = backupHeaderLBA
+	binary.LittleEndian.PutUint64(gptHdr[48:56], lastUsableLBA)   // LastUsableLBA
+
+	// Recompute Partition Entry Array CRC-32 (offset 88) over exact numEntries * entrySize bytes
 	partCRC := crc32.ChecksumIEEE(partArray[:arrayBytesLen])
 	binary.LittleEndian.PutUint32(gptHdr[88:92], partCRC)
 
-	// Recompute GPT Header CRC-32 (offset 16, over headerSize bytes at 12..16)
+	// Recompute Primary GPT Header CRC-32 (offset 16, over headerSize bytes at 12..16)
 	hdrSize := int(binary.LittleEndian.Uint32(gptHdr[12:16]))
 	if hdrSize < 92 || hdrSize > LPTSectorSize {
 		hdrSize = 92
+		binary.LittleEndian.PutUint32(gptHdr[12:16], 92)
 	}
 	gptHdr[16], gptHdr[17], gptHdr[18], gptHdr[19] = 0, 0, 0, 0
 	hdrCRC := crc32.ChecksumIEEE(gptHdr[:hdrSize])
 	binary.LittleEndian.PutUint32(gptHdr[16:20], hdrCRC)
 
-	// Write the updated GPT Header + Partition Entry Array back to LBA 0..33!
+	// Ensure LBA 0 Protective MBR (offset 446..510) conforms to UEFI Specification Section 5.2.2:
+	// Partition 1 (0xEE) spans LBA 1..backupHeaderLBA, and Slots 2..4 are untouched/zeroed.
+	if tableBuf[446+4] == 0xEE {
+		protSectors := backupHeaderLBA
+		if protSectors > 0xFFFFFFFF {
+			protSectors = 0xFFFFFFFF
+		}
+		binary.LittleEndian.PutUint32(tableBuf[446+12:446+16], uint32(protSectors))
+	}
+	tableBuf[510] = 0x55
+	tableBuf[511] = 0xAA
+
+	// Write the updated Protective MBR + Primary GPT Header + Partition Entry Array back to LBA 0..63
 	if _, err := disk.WriteAt(tableBuf, 0); err != nil {
+		return err
+	}
+
+	// Build and write the Backup GPT Partition Entry Array + Backup GPT Header at backupArrayLBA
+	backupBytesTotal := int((arraySectors + 1) * LPTSectorSize)
+	backupBuf := AllocPageAlignedBuffer(backupBytesTotal, SectorAlignmentBytes)
+	copy(backupBuf[:arrayBytesLen], partArray[:arrayBytesLen])
+
+	backupHdr := backupBuf[arraySectors*LPTSectorSize : (arraySectors+1)*LPTSectorSize]
+	copy(backupHdr, gptHdr)
+	binary.LittleEndian.PutUint64(backupHdr[24:32], backupHeaderLBA) // MyLBA = backupHeaderLBA
+	binary.LittleEndian.PutUint64(backupHdr[32:40], 1)               // AlternateLBA = 1
+	binary.LittleEndian.PutUint64(backupHdr[72:80], backupArrayLBA)  // PartitionEntryLBA = backupArrayLBA
+	backupHdr[16], backupHdr[17], backupHdr[18], backupHdr[19] = 0, 0, 0, 0
+	backupHdrCRC := crc32.ChecksumIEEE(backupHdr[:hdrSize])
+	binary.LittleEndian.PutUint32(backupHdr[16:20], backupHdrCRC)
+
+	if _, err := disk.WriteAt(backupBuf, int64(backupArrayLBA*LPTSectorSize)); err != nil {
 		return err
 	}
 	return disk.SyncAndFlush()

@@ -205,8 +205,11 @@ func TestVerifiedAppCatalogAndMinecraftStudio(t *testing.T) {
 		t.Fatalf("expected Ollama + Open WebUI compose to map 3005:8080, got:\n%s", ollamaYAML)
 	}
 
-	// Verify Minecraft Studio Compose generation with Geyser+Floodgate crossplay, Aikar flags, Offline mode, Modrinth, and RCON backup sidecar
+	// Verify Minecraft Studio Compose generation with 26.3 default, WHITE_LIST: false, Geyser+Floodgate crossplay, Aikar flags, Offline mode, Modrinth, and RCON backup sidecar
 	mcCfg := DefaultMinecraftConfig()
+	if mcCfg.Version != "26.3" {
+		t.Fatalf("expected DefaultMinecraftConfig Version to be 26.3, got %q", mcCfg.Version)
+	}
 	mcCfg.ServerType = "GEYSER_FLOODGATE"
 	mcCfg.MemoryHeap = "6G"
 	mcCfg.OnlineMode = false
@@ -215,9 +218,11 @@ func TestVerifiedAppCatalogAndMinecraftStudio(t *testing.T) {
 	mcYAML := BuildMinecraftComposeYAML(mcCfg)
 	for _, token := range []string{
 		`TYPE: "PAPER"`,
+		`VERSION: "26.3"`,
 		`MEMORY: "6G"`,
 		`USE_AIKAR_FLAGS: "true"`,
 		`ONLINE_MODE: "false"`,
+		`WHITE_LIST: "false"`,
 		`OPS: "nihal,admin"`,
 		`MODRINTH_PROJECTS: "worldedit,lithium,geyser,floodgate"`,
 		`"19132:19132/udp"`,
@@ -265,6 +270,9 @@ func TestSha512CryptAndAutoinstallChrootSafety(t *testing.T) {
 	}
 
 	userData := GenerateAutoinstallUserData(cfg)
+	if strings.Contains(userData, "reset-partition: true") {
+		t.Fatalf("expected user-data NOT to include OEM reset-partition: true")
+	}
 	for _, mustContain := range []string{
 		hash1,
 		`"HomeFiber5G":`,
@@ -389,20 +397,24 @@ func TestMultiServiceImmichPaperlessAndV6Migrations(t *testing.T) {
 
 func TestUbuntuLiveServerGrubPatchAndHybridMBRCidata(t *testing.T) {
 	// Test official Ubuntu 24.04 / 26.04 Live Server grub.cfg pattern (without 'splash')
-	buf := []byte("set timeout=30\nmenuentry \"Try or Install Ubuntu Server\" {\n\tset gfxpayload=keep\n\tlinux\t/casper/vmlinuz  ---\n\tinitrd\t/casper/initrd\n}\n")
+	orig := "set timeout=30\nmenuentry \"Try or Install Ubuntu Server\" {\n\tset gfxpayload=keep\n\tlinux\t/casper/vmlinuz  ---\n\tinitrd\t/casper/initrd\n}\n"
+	buf := []byte(orig)
 	patches := PatchGrubKernelCmdlineInPlace(buf)
 	if patches < 2 {
 		t.Fatalf("expected at least 2 patches (timeout + Live Server linux cmdline), got %d", patches)
 	}
-	if !bytes.Contains(buf, []byte("set timeout=02")) {
-		t.Fatalf("expected set timeout=02 in patched grub.cfg, got:\n%s", string(buf))
+	if len(buf) != len(orig) {
+		t.Fatalf("expected exact in-place byte length %d, got %d", len(orig), len(buf))
 	}
-	if !bytes.Contains(buf, []byte("linux\t/casper/vmlinuz autoinstall quiet     ---")) {
+	if !bytes.Contains(buf, []byte("set timeout=1 ")) {
+		t.Fatalf("expected set timeout=1  in patched grub.cfg, got:\n%s", string(buf))
+	}
+	if !bytes.Contains(buf, []byte("/casper/vmlinuz autoinstall")) || !bytes.Contains(buf, []byte("---")) {
 		t.Fatalf("expected patched Live Server autoinstall kernel line, got:\n%s", string(buf))
 	}
 }
 
-func TestReinstallModesOfflineUpdaterAndIPhoneAutoBackup(t *testing.T) {
+func TestReinstallModesOfflineUpdaterAndCustomWorkflows(t *testing.T) {
 	// 1. Reinstall Without Retaining Data MUST block unless ConfirmWipeServerData == "WIPE-SERVER-DATA"
 	wipeBlocked := ServerProfileConfig{
 		Hostname:              "instant-server",
@@ -420,18 +432,27 @@ func TestReinstallModesOfflineUpdaterAndIPhoneAutoBackup(t *testing.T) {
 		t.Fatalf("expected confirmed reinstall_wipe_data to pass validation, got: %v", err)
 	}
 
-	// 2. Reinstall While Retaining Server Data + iPhone Auto-Backup + Custom Config Files
+	// 2. Reinstall While Retaining Server Data + Universal Custom Server Workflows (Custom Configs, Samba Shares, Systemd, Udev, Apt, Post-Install Script)
 	keepCfg := ServerProfileConfig{
-		Hostname:               "instant-server",
-		Username:               "admin",
-		Password:               "StrongPass123!",
-		InstallMode:            "reinstall_keep_data",
-		EnableIPhoneAutoBackup: true,
-		IPhoneBackupMode:       "immich_and_smb",
-		CustomConfigFiles: map[string]string{
-			"/etc/custom-iphone-sync.conf": "SYNC_INTERVAL=300\n",
+		Hostname:          "instant-server",
+		Username:          "admin",
+		Password:          "StrongPass123!",
+		InstallMode:       "reinstall_keep_data",
+		StorageLayout:     "lvm",
+		CustomAptPackages: []string{"ffmpeg", "rsync"},
+		CustomSambaShares: []CustomSambaShare{
+			{Name: "CustomVault", Path: "/DATA/CustomVault", Comment: "User Custom NAS Share", AppleFruit: true},
 		},
-		CustomPostInstallScript: "mkdir -p /DATA/iPhone_Backups/AutoSync\n",
+		CustomSystemdUnits: map[string]string{
+			"custom-sync.service": "[Unit]\nDescription=Custom Sync Job\n[Service]\nExecStart=/usr/bin/true\n",
+		},
+		CustomUdevRules: map[string]string{
+			"99-custom-usb.rules": "ACTION==\"add\", SUBSYSTEM==\"usb\", RUN+=\"/usr/local/bin/custom-usb-trigger.sh\"\n",
+		},
+		CustomConfigFiles: map[string]string{
+			"/etc/custom-workflow.conf": "SYNC_INTERVAL=300\n",
+		},
+		CustomPostInstallScript: "mkdir -p /DATA/CustomVault\n",
 	}
 	if err := ValidateProfileConfig(keepCfg); err != nil {
 		t.Fatalf("expected reinstall_keep_data config to be valid, got: %v", err)
@@ -442,6 +463,7 @@ func TestReinstallModesOfflineUpdaterAndIPhoneAutoBackup(t *testing.T) {
 		"systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target",
 		"reinstall_preserve_data.sh backup",
 		"reinstall_preserve_data.sh restore",
+		"sizing-policy: all",
 	} {
 		if !strings.Contains(userData, must) {
 			t.Fatalf("expected reinstall_keep_data user-data to contain %q, got:\n%s", must, userData)
@@ -458,6 +480,7 @@ func TestReinstallModesOfflineUpdaterAndIPhoneAutoBackup(t *testing.T) {
 		"offline_updater_apply.sh",
 		"emergency_repair_reset.sh",
 		"custom_post_install.sh",
+		"custom_samba_shares.conf",
 	} {
 		found := false
 		for _, w := range written {

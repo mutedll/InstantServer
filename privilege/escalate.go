@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"reflect"
 	"runtime"
 	"strings"
+	"syscall"
 )
 
 type EscalationResult struct {
@@ -16,13 +18,35 @@ type EscalationResult struct {
 	Message         string `json:"message"`
 }
 
+// hideConsoleWindowOnWindows sets HideWindow=true and CreationFlags=CREATE_NO_WINDOW (0x08000000)
+// on Windows exec.Cmd instances without requiring platform-specific build tags, preventing
+// conhost.exe / cmd.exe / powershell.exe from flashing a black console window.
+func hideConsoleWindowOnWindows(cmd *exec.Cmd) {
+	if runtime.GOOS != "windows" || cmd == nil {
+		return
+	}
+	var attr syscall.SysProcAttr
+	v := reflect.ValueOf(&attr).Elem()
+	if f := v.FieldByName("HideWindow"); f.IsValid() && f.CanSet() && f.Kind() == reflect.Bool {
+		f.SetBool(true)
+	}
+	if f := v.FieldByName("CreationFlags"); f.IsValid() && f.CanSet() && f.Kind() == reflect.Uint32 {
+		f.SetUint(0x08000000) // CREATE_NO_WINDOW
+	}
+	cmd.SysProcAttr = &attr
+}
+
 func IsProcessElevated() bool {
 	if runtime.GOOS == "windows" {
-		if f, err := os.Open(`\\.\PHYSICALDRIVE0`); err == nil {
-			_ = f.Close()
-			return true
+		for _, dev := range []string{`\\.\PHYSICALDRIVE0`, `\\.\PHYSICALDRIVE1`, `\\.\PHYSICALDRIVE2`} {
+			if f, err := os.Open(dev); err == nil {
+				_ = f.Close()
+				return true
+			}
 		}
-		if err := exec.Command("fltmc").Run(); err == nil {
+		cmd := exec.Command("fltmc.exe")
+		hideConsoleWindowOnWindows(cmd)
+		if err := cmd.Run(); err == nil {
 			return true
 		}
 		return false
@@ -101,21 +125,24 @@ func RequestNativePrivilegeEscalation(helperCommand []string) EscalationResult {
 		}
 
 	case "windows":
-		psCmd := fmt.Sprintf("Start-Process -FilePath '%s' -Verb RunAs", strings.ReplaceAll(exePath, "'", "''"))
-		cmd := exec.Command("powershell.exe", "-NoProfile", "-WindowStyle", "Hidden", "-Command", psCmd)
-		if startErr := cmd.Start(); startErr == nil {
+		psCmd := fmt.Sprintf("$ErrorActionPreference='Stop'; Start-Process -FilePath '%s' -Verb RunAs", strings.ReplaceAll(exePath, "'", "''"))
+		cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", psCmd)
+		hideConsoleWindowOnWindows(cmd)
+		// Run() waits only for the UAC consent prompt decision; once the elevated instance launches,
+		// Start-Process returns 0 immediately so the caller can close the old unprivileged window cleanly.
+		if runErr := cmd.Run(); runErr == nil {
 			return EscalationResult{
 				AlreadyElevated: false,
 				ElevatedSpawned: true,
 				Method:          "windows_uac_manifest",
-				Message:         "Triggered Windows UAC Administrator prompt.",
+				Message:         "Launched elevated Administrator instance and closing unprivileged window.",
 			}
 		}
 		return EscalationResult{
 			AlreadyElevated: false,
 			ElevatedSpawned: false,
 			Method:          "windows_uac_manifest",
-			Message:         "Windows UAC elevation required to lock and write raw USB sectors.",
+			Message:         "Windows UAC elevation was declined or cancelled.",
 		}
 	}
 

@@ -266,10 +266,21 @@ func BuildCidataFAT16Image(stageDir string) ([]byte, error) {
 		var stdEnt [32]byte
 		copy(stdEnt[0:11], shortName[:])
 		stdEnt[11] = 0x20 // ATTR_ARCHIVE
+		// Set Windows NT / Linux vfat lowercase 8.3 flags (0x18 = lowercase base + lowercase ext)
+		// whenever the filename is lowercase so even non-LFN shortname=winnt mounts see lowercase names.
+		if f.RelName == strings.ToLower(f.RelName) {
+			stdEnt[12] = 0x18
+		}
 		binary.LittleEndian.PutUint16(stdEnt[26:28], firstCluster)
 		binary.LittleEndian.PutUint32(stdEnt[28:32], uint32(len(f.Data)))
 		writeDirEntry(stdEnt)
 	}
 
 	return img, nil
+}
+
+// BuildFAT16CidataVolume is a convenience alias for BuildCidataFAT16Image so callers
+// passing an explicit volume label compile cleanly.
+func BuildFAT16CidataVolume(stageDir string, _ string) ([]byte, error) {
+	return BuildCidataFAT16Image(stageDir)
 }

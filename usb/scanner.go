@@ -2,12 +2,15 @@
 package usb
 
 import (
+	"encoding/csv"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 type USBDeviceCandidate struct {
@@ -20,6 +23,21 @@ type USBDeviceCandidate struct {
 	Mountpoints      []string `json:"mountpoints"`
 	TripleLockPassed bool     `json:"triple_lock_passed"`
 	BlockReasons     []string `json:"block_reasons"`
+}
+
+func hideScannerConsoleOnWindows(cmd *exec.Cmd) {
+	if runtime.GOOS != "windows" || cmd == nil {
+		return
+	}
+	var attr syscall.SysProcAttr
+	v := reflect.ValueOf(&attr).Elem()
+	if f := v.FieldByName("HideWindow"); f.IsValid() && f.CanSet() && f.Kind() == reflect.Bool {
+		f.SetBool(true)
+	}
+	if f := v.FieldByName("CreationFlags"); f.IsValid() && f.CanSet() && f.Kind() == reflect.Uint32 {
+		f.SetUint(0x08000000) // CREATE_NO_WINDOW
+	}
+	cmd.SysProcAttr = &attr
 }
 
 func EvaluateTripleLockSafety(bus string, removable bool, sizeGB float64, mountpoints []string, deviceNode string) (bool, []string) {
@@ -71,7 +89,7 @@ func ScanRemovableUSBDrives() []USBDeviceCandidate {
 		if err == nil {
 			for idx, entry := range entries {
 				name := entry.Name()
-				if strings.HasPrefix(name, "loop") || strings.HasPrefix(name, "ram") || strings.HasPrefix(name, "zram") || strings.HasPrefix(name, "dm-") {
+				if strings.HasPrefix(name, "loop") || strings.HasPrefix(name, "ram") || strings.HasPrefix(name, "zram") || strings.HasPrefix(name, "dm-") || strings.HasPrefix(name, "sr") {
 					continue
 				}
 				sysDir := filepath.Join("/sys/block", name)
@@ -89,6 +107,9 @@ func ScanRemovableUSBDrives() []USBDeviceCandidate {
 				bus := "sata"
 				if strings.Contains(strings.ToLower(linkTarget), "usb") {
 					bus = "usb"
+					// External USB-to-NVMe / USB-to-SATA UASP enclosures often report /sys/block/<dev>/removable == 0
+					// even though they are hot-plugged external USB devices.
+					removable = true
 				} else if strings.HasPrefix(name, "nvme") {
 					bus = "nvme"
 				}
@@ -159,7 +180,6 @@ func ScanRemovableUSBDrives() []USBDeviceCandidate {
 							removable = true
 						}
 					case "Disk Size", "Total Size":
-						// Format example: "32.0 GB (32017047552 Bytes) ..."
 						if openIdx := strings.Index(v, "("); openIdx >= 0 {
 							sub := v[openIdx+1:]
 							if spIdx := strings.Index(sub, " "); spIdx > 0 {
@@ -193,46 +213,65 @@ func ScanRemovableUSBDrives() []USBDeviceCandidate {
 		}
 
 	case "windows":
-		psScript := `Get-CimInstance Win32_DiskDrive | Select-Object Index,Model,Size,InterfaceType,MediaType | ConvertTo-Csv -NoTypeInformation`
-		out, err := exec.Command("powershell.exe", "-NoProfile", "-WindowStyle", "Hidden", "-Command", psScript).Output()
+		psScript := `Get-CimInstance Win32_DiskDrive | ForEach-Object {
+  $d = $_
+  $letters = @(Get-Partition -DiskNumber $d.Index -ErrorAction SilentlyContinue | Where-Object { $_.DriveLetter } | ForEach-Object { "$($_.DriveLetter):\" }) -join ";"
+  [PSCustomObject]@{
+    Index = $d.Index
+    Model = $d.Model
+    Size = $d.Size
+    InterfaceType = $d.InterfaceType
+    MediaType = $d.MediaType
+    MountLetters = $letters
+  }
+} | ConvertTo-Csv -NoTypeInformation`
+		cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", psScript)
+		hideScannerConsoleOnWindows(cmd)
+		out, err := cmd.Output()
 		if err == nil {
-			lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-			for i, line := range lines {
-				if i == 0 || strings.TrimSpace(line) == "" {
-					continue
+			r := csv.NewReader(strings.NewReader(strings.TrimSpace(string(out))))
+			records, rErr := r.ReadAll()
+			if rErr == nil && len(records) > 1 {
+				for _, cols := range records[1:] {
+					if len(cols) < 5 {
+						continue
+					}
+					diskIdx := strings.TrimSpace(cols[0])
+					model := strings.TrimSpace(cols[1])
+					sizeRaw, _ := strconv.ParseUint(strings.TrimSpace(cols[2]), 10, 64)
+					sizeGB := float64(sizeRaw) / (1024.0 * 1024.0 * 1024.0)
+					iface := strings.ToLower(strings.TrimSpace(cols[3]))
+					media := strings.ToLower(strings.TrimSpace(cols[4]))
+					bus := "sata"
+					if strings.Contains(iface, "usb") {
+						bus = "usb"
+					}
+					removable := bus == "usb" || strings.Contains(media, "removable") || strings.Contains(media, "external")
+					devNode := `\\.\PhysicalDrive` + diskIdx
+					var mounts []string
+					if len(cols) >= 6 && strings.TrimSpace(cols[5]) != "" {
+						for _, mp := range strings.Split(cols[5], ";") {
+							if strings.TrimSpace(mp) != "" {
+								mounts = append(mounts, strings.TrimSpace(mp))
+							}
+						}
+					}
+					if diskIdx == "0" && len(mounts) == 0 {
+						mounts = []string{`C:\`}
+					}
+					passed, reasons := EvaluateTripleLockSafety(bus, removable, sizeGB, mounts, devNode)
+					candidates = append(candidates, USBDeviceCandidate{
+						DeviceID:         "win_disk_" + diskIdx,
+						DeviceNode:       devNode,
+						Model:            model,
+						SizeGB:           float64(int(sizeGB*10)) / 10.0,
+						Bus:              bus,
+						Removable:        removable,
+						Mountpoints:      mounts,
+						TripleLockPassed: passed,
+						BlockReasons:     reasons,
+					})
 				}
-				cols := strings.Split(strings.Trim(line, "\r\""), "\",\"")
-				if len(cols) < 5 {
-					continue
-				}
-				diskIdx := cols[0]
-				model := cols[1]
-				sizeRaw, _ := strconv.ParseUint(cols[2], 10, 64)
-				sizeGB := float64(sizeRaw) / (1024.0 * 1024.0 * 1024.0)
-				iface := strings.ToLower(cols[3])
-				media := strings.ToLower(cols[4])
-				bus := "sata"
-				if strings.Contains(iface, "usb") {
-					bus = "usb"
-				}
-				removable := bus == "usb" || strings.Contains(media, "removable")
-				devNode := `\\.\PhysicalDrive` + diskIdx
-				var mounts []string
-				if diskIdx == "0" {
-					mounts = []string{`C:\`}
-				}
-				passed, reasons := EvaluateTripleLockSafety(bus, removable, sizeGB, mounts, devNode)
-				candidates = append(candidates, USBDeviceCandidate{
-					DeviceID:         "win_disk_" + diskIdx,
-					DeviceNode:       devNode,
-					Model:            model,
-					SizeGB:           float64(int(sizeGB*10)) / 10.0,
-					Bus:              bus,
-					Removable:        removable,
-					Mountpoints:      mounts,
-					TripleLockPassed: passed,
-					BlockReasons:     reasons,
-				})
 			}
 		}
 	}
@@ -259,7 +298,7 @@ func ScanRemovableUSBDrives() []USBDeviceCandidate {
 				Removable:        false,
 				Mountpoints:      []string{"C:\\"},
 				TripleLockPassed: false,
-				BlockReasons:     []string{"System OS drive is protected"},
+				BlockReasons:     []string{"Non-USB bus (nvme) is blocked", "Drive is marked non-removable", "System OS partition (C:\\) is hardware-protected"},
 			},
 		}
 	}

@@ -212,6 +212,7 @@ func DownloadISOWithResume(
 	buf := make([]byte, 512*1024)
 	downloaded := existingOffset
 	startTime := time.Now()
+	var lastProgressEmit time.Time
 
 	for {
 		if pauseGate != nil {
@@ -240,7 +241,9 @@ func DownloadISOWithResume(
 			if pct > 100 {
 				pct = 100
 			}
-			if onProgress != nil {
+			// Throttle progress events to at most ~6 updates/sec (160ms) so Wails IPC and DOM updates never flicker
+			if onProgress != nil && (time.Since(lastProgressEmit) >= 160*time.Millisecond || pct >= 100 || errors.Is(rErr, io.EOF)) {
+				lastProgressEmit = time.Now()
 				onProgress(FlashProgressEvent{
 					Stage:        "DOWNLOADING_ISO",
 					Percent:      pct,

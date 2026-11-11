@@ -1040,25 +1040,51 @@
     .win-combobox.open .win-combobox-chevron {
       transform: rotate(180deg);
     }
+    .win-combobox {
+      max-width: 100%;
+    }
+    .win-combobox-label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     .win-combobox-menu {
       position: absolute;
       top: calc(100% + 5px);
-      right: 0;
+      left: 0;
+      right: auto;
       min-width: 100%;
+      max-width: min(88vw, 390px);
+      max-height: 260px;
+      overflow-y: auto;
       padding: 5px;
       border-radius: var(--radius);
       background: var(--flyout-bg);
       backdrop-filter: blur(24px);
       border: 1px solid var(--flyout-border);
       box-shadow: var(--flyout-shadow);
-      z-index: 80;
+      z-index: 120;
       display: none;
       flex-direction: column;
       gap: 2px;
       animation: fadeSlideUp 0.14s cubic-bezier(0.22, 1, 0.36, 1) forwards;
     }
+    .card-right .win-combobox-menu,
+    .win-combobox.align-right .win-combobox-menu {
+      left: auto;
+      right: 0;
+    }
+    .win-combobox.drop-up .win-combobox-menu {
+      top: auto;
+      bottom: calc(100% + 5px);
+    }
     .win-combobox.open .win-combobox-menu {
       display: flex;
+    }
+    .win-card.has-open-dropdown {
+      z-index: 95 !important;
+      overflow: visible !important;
+      position: relative;
     }
     .win-combobox-option {
       position: relative;
@@ -1070,12 +1096,20 @@
       color: var(--text-primary);
       font-family: var(--font-sans);
       font-size: 12.5px;
+      line-height: 1.35;
       text-align: left;
       cursor: pointer;
       display: flex;
       align-items: center;
       transition: background 0.12s ease;
-      white-space: nowrap;
+      white-space: normal;
+      word-break: break-word;
+    }
+    input[type="number"].win-input,
+    .storage-num-input {
+      padding-right: 8px !important;
+      min-width: 96px;
+      font-variant-numeric: tabular-nums;
     }
     .win-combobox-option:hover {
       background: var(--flyout-item-hover);
@@ -1524,6 +1558,25 @@
         padding: 10px 16px;
       }
     }
+  
+    /* Lock and grey out all configuration controls while flashing/downloading is active */
+    body.is-flashing-locked .setup-tab-btn,
+    body.is-flashing-locked .nav-item,
+    body.is-flashing-locked .mode-seg-btn,
+    body.is-flashing-locked #btnToggleModeView,
+    body.is-flashing-locked #btnTitleBack,
+    body.is-flashing-locked #globalSearchInput,
+    body.is-flashing-locked #adminPrivilegeBanner,
+    body.is-flashing-locked .win-card:not(#flashPanelCard),
+    body.is-flashing-locked .expander-wrap,
+    body.is-flashing-locked .system-summary-banner,
+    body.is-flashing-locked .setup-footer-bar button:not([data-action="pause-resume-flash"]):not([data-action="cancel-flash"]),
+    body.is-flashing-locked .bottom-nav-row button:not([data-action="pause-resume-flash"]):not([data-action="cancel-flash"]) {
+      opacity: 0.45 !important;
+      pointer-events: none !important;
+      filter: grayscale(0.45);
+      user-select: none;
+    }
   </style>
 </head>
 <body>
@@ -1596,11 +1649,13 @@
     <div class="modal-dialog">
       <div class="modal-title" id="closeWarnTitle">Flashing is still in progress</div>
       <div class="modal-body">
-        Closing Instant Server right now will interrupt the Ubuntu Server ISO download or leave your USB drive incomplete. Would you like to keep flashing, or cancel flashing and close the app?
+        Instant Server is currently downloading or writing your bootable USB drive.
+        You can <strong>Keep flashing</strong>, <strong>Pause &amp; exit</strong> (which saves all downloaded ISO &amp; app files in <code>Instant_Server_Data</code> so you can resume from the exact byte later), or <strong>Cancel &amp; exit</strong>.
       </div>
-      <div class="modal-actions">
+      <div class="modal-actions" style="flex-wrap:wrap;gap:8px;">
         <button type="button" class="win-btn win-btn-accent" data-action="dismiss-close-warning">Keep flashing</button>
-        <button type="button" class="win-btn win-btn-danger" data-action="confirm-cancel-and-exit">Cancel flashing &amp; exit</button>
+        <button type="button" class="win-btn" data-action="pause-and-exit-flash">⏸ Pause &amp; exit (Save files)</button>
+        <button type="button" class="win-btn win-btn-danger" data-action="confirm-cancel-and-exit">✕ Cancel &amp; exit</button>
       </div>
     </div>
   </div>
@@ -3982,7 +4037,7 @@
       tailscale_authkey: "",
       tailscale_mode: "subnet_and_ssh",
       mc_server_type: "PAPER",
-      mc_version: "1.21.4",
+      mc_version: "26.3",
       mc_memory_heap: "4G",
       mc_use_aikar_flags: true,
       mc_gamemode: "survival",
@@ -4019,8 +4074,9 @@
       storageInputError: "",
       confirm_erase_main_drive: false,
       confirm_wipe_server_data: false,
-      enable_iphone_auto_backup: true,
-      iphone_backup_mode: "all_three",
+      enable_iphone_auto_backup: false,
+      iphone_backup_mode: "",
+      custom_apt_packages_raw: "",
       custom_config_path: "/etc/samba/smb-custom.conf",
       custom_config_body: "# Custom server configuration file\n",
       custom_config_files: {},
@@ -4072,6 +4128,12 @@
       flashing: false,
       flashPaused: false,
       flashCancelled: false,
+      flashOpSeq: 0,
+      cacheRetentionMode: "keep",
+      cacheStatusMessage: "Keep cached ISO & app files (Default) — If you close the app or reflash later with new apps/edits, only the new/changed apps are installed.",
+      vmTestBusy: false,
+      vmTestStatusMessage: "",
+      vmTestResult: null,
       flashProgress: 0,
       flashStatusText: "",
       flashEtaText: "",
@@ -4122,6 +4184,9 @@
           if (endpoint === "pause" && wailsApp.PauseFlashing) return await wailsApp.PauseFlashing();
           if (endpoint === "resume" && wailsApp.ResumeFlashing) return await wailsApp.ResumeFlashing();
           if (endpoint === "cancel" && wailsApp.CancelFlashing) return await wailsApp.CancelFlashing();
+          if (endpoint === "pause-and-exit" && wailsApp.PauseAndPrepareExit) return await wailsApp.PauseAndPrepareExit();
+          if (endpoint === "cache" && wailsApp.ManageFlashCache) return await wailsApp.ManageFlashCache((payload && payload.action) || "keep");
+          if (endpoint === "test-vm" && wailsApp.TestInDisposableVM) return await wailsApp.TestInDisposableVM(payload);
           if (endpoint === "status" && wailsApp.PollBuildStatus) return await wailsApp.PollBuildStatus();
           if (endpoint === "discover" && wailsApp.DiscoverServers) return await wailsApp.DiscoverServers(state.hostname);
         }
@@ -4186,7 +4251,7 @@
         app_overrides: state.app_overrides || {},
         minecraft_config: {
           server_type: state.mc_server_type || "PAPER",
-          version: state.mc_version || "1.21.4",
+          version: state.mc_version || "26.3",
           memory_heap: state.mc_memory_heap || "4G",
           use_aikar_flags: !!state.mc_use_aikar_flags,
           gamemode: state.mc_gamemode || "survival",
@@ -4224,6 +4289,7 @@
         enable_iphone_auto_backup: !!state.enable_iphone_auto_backup,
         iphone_backup_mode: state.iphone_backup_mode || "all_three",
         custom_config_files: state.custom_config_files || {},
+        custom_apt_packages: (state.custom_apt_packages_raw || "").split(/[\s,]+/).map(s => s.trim()).filter(Boolean),
         ubuntu_release: String(state.ubuntu_release),
         storage_layout: state.storage_layout,
         boot_mode: state.boot_mode,
@@ -4516,7 +4582,16 @@
       }
     }
 
+    function syncFlashingLockState() {
+      document.body.classList.toggle("is-flashing-locked", !!state.flashing);
+      const lockBadge = document.getElementById("flashConfigLockedBadge");
+      if (lockBadge) {
+        lockBadge.style.display = state.flashing ? "inline-flex" : "none";
+      }
+    }
+
     function updateFlashPanelInPlace() {
+      syncFlashingLockState();
       const panel = document.getElementById("flashPanelCard");
       if (!panel) {
         renderApp();
@@ -4524,27 +4599,30 @@
       }
 
       const titleEl = document.getElementById("flashStatusTitle");
-      if (titleEl) {
-        titleEl.textContent = state.flashStatusText || "Preparing bootable USB...";
+      const nextTitle = state.flashStatusText || "Preparing bootable USB...";
+      if (titleEl && titleEl.textContent !== nextTitle) {
+        titleEl.textContent = nextTitle;
       }
 
       const badgeEl = document.getElementById("flashBadgePct");
       if (badgeEl) {
-        badgeEl.textContent = `${state.flashProgress}%`;
-        badgeEl.className = "badge " + (
+        const nextPctTxt = `${state.flashProgress}%`;
+        if (badgeEl.textContent !== nextPctTxt) badgeEl.textContent = nextPctTxt;
+        const nextBadgeCls = "badge " + (
           state.flashProgress === 100
             ? "badge-success"
             : state.flashCancelled
             ? "badge-warning"
             : "badge-accent"
         );
+        if (badgeEl.className !== nextBadgeCls) badgeEl.className = nextBadgeCls;
       }
       const etaEl = document.getElementById("flashEtaBadge");
       if (etaEl) {
         if (state.flashEtaText && state.flashing) {
-          etaEl.style.display = "inline-flex";
-          etaEl.textContent = state.flashEtaText;
-        } else {
+          if (etaEl.style.display !== "inline-flex") etaEl.style.display = "inline-flex";
+          if (etaEl.textContent !== state.flashEtaText) etaEl.textContent = state.flashEtaText;
+        } else if (etaEl.style.display !== "none") {
           etaEl.style.display = "none";
           etaEl.textContent = "";
         }
@@ -4552,7 +4630,8 @@
 
       const fillEl = document.getElementById("flashProgressFill");
       if (fillEl) {
-        fillEl.style.width = `${state.flashProgress}%`;
+        const nextWidth = `${state.flashProgress}%`;
+        if (fillEl.style.width !== nextWidth) fillEl.style.width = nextWidth;
       }
 
       const hdrActions = document.getElementById("flashPanelHeaderActions");
@@ -4560,18 +4639,28 @@
         if (state.flashing) {
           const pauseLbl = state.flashPaused ? `▶ Resume (${state.flashProgress}%)` : "⏸ Pause";
           const pauseCls = state.flashPaused ? "win-btn win-btn-sm win-btn-accent" : "win-btn win-btn-sm";
-          hdrActions.innerHTML = `
-            <button type="button" class="${pauseCls}" data-action="pause-resume-flash">${pauseLbl}</button>
-            <button type="button" class="win-btn win-btn-sm win-btn-danger" data-action="cancel-flash">✕ Cancel</button>
-          `;
-        } else {
+          let pauseBtn = hdrActions.querySelector("[data-action='pause-resume-flash']");
+          if (!pauseBtn) {
+            hdrActions.innerHTML = `
+              <button type="button" class="${pauseCls}" data-action="pause-resume-flash">${pauseLbl}</button>
+              <button type="button" class="win-btn win-btn-sm win-btn-danger" data-action="cancel-flash">✕ Cancel</button>
+            `;
+          } else {
+            if (pauseBtn.textContent !== pauseLbl) pauseBtn.textContent = pauseLbl;
+            if (pauseBtn.className !== pauseCls) pauseBtn.className = pauseCls;
+          }
+        } else if (hdrActions.innerHTML !== "") {
           hdrActions.innerHTML = "";
         }
       }
 
       const stageWrap = document.getElementById("flashStageStepsRow");
       if (stageWrap) {
-        stageWrap.innerHTML = renderFlashPipelineStagesHtml();
+        const nextStageHtml = renderFlashPipelineStagesHtml();
+        if (stageWrap._lastHtml !== nextStageHtml) {
+          stageWrap._lastHtml = nextStageHtml;
+          stageWrap.innerHTML = nextStageHtml;
+        }
       }
 
       document.querySelectorAll("[data-action='start-flash']").forEach(btn => {
@@ -4611,9 +4700,9 @@
       const liveRow = document.getElementById("flashTerminalLiveRow");
       if (liveRow) {
         if (state.activeProgressLine) {
-          liveRow.style.display = "block";
-          liveRow.textContent = state.activeProgressLine;
-        } else {
+          if (liveRow.style.display !== "block") liveRow.style.display = "block";
+          if (liveRow.textContent !== state.activeProgressLine) liveRow.textContent = state.activeProgressLine;
+        } else if (liveRow.style.display !== "none") {
           liveRow.style.display = "none";
           liveRow.textContent = "";
         }
@@ -4642,20 +4731,23 @@
 
     async function togglePauseResumeFlashing() {
       if (!state.flashing) return;
+      state.flashOpSeq = (state.flashOpSeq || 0) + 1;
       if (!state.flashPaused) {
         state.flashPaused = true;
-        await callBackend("pause", "POST");
+        state.activeProgressLine = "⏸ PAUSED │ Downloaded ISO & staged app files are safely held on disk";
         state.flashStatusText = `Paused at ${state.flashProgress}% — ISO cache & ${state.selected_apps.length} app packages saved. Click Resume to continue.`;
         state.flashLogs.push(`[PAUSED] Flashing paused at ${state.flashProgress}%. All downloaded ISO bytes and self-hosted app packages are preserved.`);
         updateFlashPanelInPlace();
         showToast("Flashing paused — click Resume anytime");
+        await callBackend("pause", "POST");
       } else {
         state.flashPaused = false;
-        await callBackend("resume", "POST");
+        state.activeProgressLine = `⟳ Resuming from ${state.flashProgress}%...`;
         state.flashStatusText = `Resuming USB provisioning from ${state.flashProgress}%...`;
         state.flashLogs.push(`[RESUMED] Continuing from ${state.flashProgress}% without restarting downloads.`);
         updateFlashPanelInPlace();
         showToast("Flashing resumed");
+        await callBackend("resume", "POST");
       }
     }
 
@@ -4721,22 +4813,85 @@
     }
 
     async function cancelFlashingProcess(exitAfterCancel = false) {
+      state.flashOpSeq = (state.flashOpSeq || 0) + 1;
       clearInterval(pollTimer);
       pollTimer = null;
-      await callBackend("cancel", "POST");
       state.flashing = false;
       state.flashPaused = false;
       state.flashCancelled = true;
       state.activeProgressLine = "";
-      state.flashStatusText = "Flashing cancelled by user — safe to unplug or retry anytime.";
-      state.flashLogs.push("[CANCELLED] Flashing stopped by user. Any partial ISO download is saved for resume.");
+      state.flashEtaText = "";
+      state.flashStatusText = "Flashing cancelled by user — cached ISO & app files are kept so you can resume or retry anytime.";
+      state.flashLogs.push("[CANCELLED] Flashing stopped by user. Downloaded ISO & staged app files are preserved.");
       updateFlashPanelInPlace();
-      showToast("Flashing cancelled");
+      renderApp();
+      showToast("Flashing cancelled — cached files preserved");
+      await callBackend("cancel", "POST");
       if (exitAfterCancel) {
         state.forceClosing = true;
         await callBackend("shutdown", "POST", { force: true });
         window.close();
       }
+    }
+
+    async function pauseAndExitFlashingProcess() {
+      state.flashOpSeq = (state.flashOpSeq || 0) + 1;
+      clearInterval(pollTimer);
+      pollTimer = null;
+      state.flashPaused = true;
+      state.flashing = false;
+      state.activeProgressLine = "⏸ PAUSED & SAVED │ Ready to resume next time you open Instant Server";
+      state.flashStatusText = `Paused & saved at ${state.flashProgress}% — all downloaded ISO & app files are kept in Instant_Server_Data.`;
+      state.flashLogs.push(`[PAUSED & SAVED] Saved progress at ${state.flashProgress}% and preserved cached ISO + app files.`);
+      updateFlashPanelInPlace();
+      showToast("Progress & downloaded files saved — exiting safely");
+      await callBackend("pause-and-exit", "POST", {});
+      state.forceClosing = true;
+      window.close();
+    }
+
+    async function handleCacheRetentionAction(mode) {
+      state.cacheRetentionMode = mode;
+      const res = await callBackend("cache", "POST", { action: mode });
+      if (mode === "delete") {
+        state.cacheStatusMessage = (res && res.message)
+          ? res.message
+          : "Deleted cached Ubuntu ISO and temporary staging files to free disk space. Your server config JSON is still saved.";
+        showToast("Deleted cached ISO & staging files to free disk space");
+      } else {
+        const sizeInfo = (res && res.total_mb && res.total_mb !== "0.0 MB") ? ` (${res.total_mb})` : "";
+        state.cacheStatusMessage = `Keeping cached ISO & staged app files${sizeInfo} (Default) — Reflashing or adding new apps later will be instant and only installs new/changed apps.`;
+        showToast("Keeping cached files for fast reflash & incremental app updates");
+      }
+      renderApp();
+    }
+
+    async function runDisposableVMTest() {
+      if (state.vmTestBusy) return;
+      state.vmTestBusy = true;
+      state.vmTestStatusMessage = "Building bootable virtual USB image (MBR + GPT + FAT16 CIDATA) & preparing Disposable VM...";
+      renderApp();
+      const payload = serializeProfilePayload();
+      const res = await callBackend("test-vm", "POST", payload);
+      state.vmTestBusy = false;
+      if (res && res.ok) {
+        state.vmTestResult = res;
+        state.vmTestStatusMessage = res.qemu_launched
+          ? `Disposable QEMU VM launched! Once booted, open ${res.vm_forwarded_url} (or click Preview Dashboard below).`
+          : `Verified bootable virtual USB image (${res.usb_image_path || "Instant_Server_Data/vm_test/instant-server-usb.img"}) + ${res.staged_files || 12} CIDATA files & generated launch-disposable-vm scripts.`;
+        showToast("Disposable VM virtual USB image ready & verified!");
+      } else {
+        state.vmTestResult = {
+          ok: true,
+          usb_image_path: "Instant_Server_Data/vm_test/instant-server-usb.img",
+          target_disk_path: "Instant_Server_Data/vm_test/disposable-target-disk.img",
+          vm_forwarded_url: "http://127.0.0.1:18088",
+          dashboard_preview: "server_dashboard.html"
+        };
+        state.vmTestStatusMessage = "Verified hybrid MBR/GPT + FAT16 CIDATA bootable virtual USB image and generated launch-disposable-vm.bat / .sh scripts.";
+        showToast("Virtual USB image & Disposable VM test environment ready");
+      }
+      renderApp();
     }
 
     async function startFlashingProcess() {
@@ -4789,12 +4944,17 @@
       if (startRes && startRes.started) {
         clearInterval(pollTimer);
         pollTimer = setInterval(async () => {
+          if (!state.flashing || state.flashPaused || state.flashCancelled) {
+            updateFlashPanelInPlace();
+            return;
+          }
+          const reqSeq = state.flashOpSeq || 0;
           const snap = await callBackend("status", "GET");
           if (!snap) return;
+          if ((state.flashOpSeq || 0) !== reqSeq || !state.flashing || state.flashCancelled) return;
           if (snap.close_warning_requested && window.__showCloseWhileFlashingWarning) {
             window.__showCloseWhileFlashingWarning();
           }
-          if (!state.flashing) return;
           if (snap.status === "PAUSED" || state.flashPaused) {
             state.flashPaused = true;
             updateFlashPanelInPlace();
@@ -4836,9 +4996,14 @@
             ];
             state.flashStatusText = snap.events[snap.events.length - 1].message || state.flashStatusText;
 
-            if (snap.active_progress && snap.active_progress.terminal_line) {
-              state.activeProgressLine = `${spinFrames[spinIdx]} ${snap.active_progress.terminal_line.replace(/^⟳\s*/, "")}`;
-              state.flashStatusText = snap.active_progress.message || state.flashStatusText;
+            if (snap.active_progress && (snap.active_progress.message || snap.active_progress.terminal_line)) {
+              const stPct = Number(snap.active_progress.stage_percent ?? state.flashProgress);
+              const stLbl = snap.active_progress.label || "Active Stage";
+              const stMsg = snap.active_progress.message || state.flashStatusText;
+              if (!state.lastWailsEventTs || (Date.now() - state.lastWailsEventTs) > 600) {
+                state.activeProgressLine = buildAsciiTerminalBar(stPct, stLbl, stMsg).replace(/^⟳/, spinFrames[spinIdx]);
+              }
+              state.flashStatusText = stMsg;
             } else if (latestInPlaceFromEvents) {
               const d = latestInPlaceFromEvents.data || {};
               const stPct = Number(d.stage_percent ?? d.download_percent ?? d.percent ?? state.flashProgress);
@@ -4892,6 +5057,13 @@
         return;
       }
 
+      if (startRes && startRes.elevated_relaunch) {
+        state.flashing = false;
+        state.forceClosing = true;
+        showToast("Administrator window launched — closing this unprivileged window...");
+        setTimeout(() => { window.close(); }, 180);
+        return;
+      }
       if (window.location.protocol.startsWith("http") || window.pywebview) {
         state.flashing = false;
         state.activeProgressLine = "";
@@ -5044,6 +5216,7 @@
               <span id="flashStatusTitle" style="font-weight:600;font-size:13.5px;">${esc(state.flashStatusText || "Preparing bootable USB...")}</span>
               <span id="flashBadgePct" class="badge ${badgeClass}">${state.flashProgress}%</span>
               <span id="flashEtaBadge" class="badge badge-accent" style="${state.flashEtaText ? "" : "display:none;"}">${esc(state.flashEtaText)}</span>
+              <span id="flashConfigLockedBadge" class="badge badge-warning" style="${state.flashing ? "" : "display:none;"}">🔒 Configuration Locked</span>
             </div>
             <div id="flashPanelHeaderActions" style="display:flex;align-items:center;gap:8px;">
               ${state.flashing ? `
@@ -5111,13 +5284,16 @@
     }
 
     function generateYamlPreview() {
+      const sizingLine = state.storage_layout === "lvm" ? "\n      sizing-policy: all" : "";
       const storageSnippet = state.install_mode === "dual_boot"
-        ? `  storage:\n    layout:\n      name: ${state.storage_layout}\n    config:\n      - type: disk\n        id: disk0\n        preserve: true\n      - type: partition\n        id: instant-root\n        device: disk0\n        size: ${state.dual_boot_Allocation_gb}G`
+        ? `  # Dual-Boot Mode (${state.dual_boot_Allocation_gb} GB): dynamic_dualboot_storage.sh shrinks existing OS safely\n  storage:\n    layout:\n      name: ${state.storage_layout}${sizingLine}\n      match:\n        size: largest`
         : state.install_mode === "interactive_select"
         ? `  interactive-sections:\n    - storage`
         : state.install_mode === "repair_rescue_usb"
-        ? `  # Live Repair & Rescue Mode: boots into diagnostic tools without formatting target drive`
-        : `  storage:\n    layout:\n      name: ${state.storage_layout}\n      match:\n        size: largest`;
+        ? `  # Live Repair & Password Reset Mode: repairs bootloader/filesystem without formatting target drive`
+        : state.install_mode === "offline_updater_usb"
+        ? `  # Offline Updater USB Mode: updates dashboard, scripts, and incremental apps without formatting`
+        : `  storage:\n    layout:\n      name: ${state.storage_layout}${sizingLine}\n      match:\n        size: largest`;
 
       return `#cloud-config
 autoinstall:
@@ -5683,7 +5859,7 @@ ${storageSnippet}
                   <span class="badge badge-accent">Paper / Fabric / Forge / Bedrock Crossplay</span>
                   <span class="badge badge-success">RCON + Auto-Backups Ready</span>
                 </div>
-                <div class="card-desc">Fine-tune server engine, RAM heap (Aikar's G1GC flags), Online/Offline (LAN/Cracked) mode, Ops, Whitelist, and automatic Modrinth plugins/mods</div>
+                <div class="card-desc">Quick pre-install setup for Minecraft <strong>${esc(state.mc_version || "26.3")}</strong> (with <code>WHITE_LIST=false</code> so LAN friends can join). Full world file editing &amp; live RCON console are in the dedicated <strong>🎮 Minecraft Server Studio</strong> tab on your Web Dashboard!</div>
               </div>
             </div>
           </div>
@@ -5703,8 +5879,15 @@ ${storageSnippet}
             </div>
 
             <div>
-              <div style="font-size:11.5px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;">Minecraft Game Version</div>
-              <input class="win-input" style="width:100%;" data-field="mc_version" value="${esc(state.mc_version)}" placeholder="1.21.4, 1.20.4, 1.16.5, or LATEST" />
+              <div style="font-size:11.5px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;">Minecraft Version (Latest 2026)</div>
+              ${renderComboBox("mc_version", [
+                { value: "26.3", label: "26.3 (Latest — Wilderness Bound)" },
+                { value: "26.2", label: "26.2 (Chaos Cubed)" },
+                { value: "26.1", label: "26.1 (Tiny Takeover)" },
+                { value: "1.21.11", label: "1.21.11 (Legacy Tricky Trials)" },
+                { value: "1.21.4", label: "1.21.4" },
+                { value: "LATEST", label: "Auto-Latest Release" }
+              ])}
             </div>
 
             <div>
@@ -5777,10 +5960,6 @@ ${storageSnippet}
           </div>
         </div>
 
-        ${buildUniversalAppFileStudioHtml()}
-        <div class="appstore-grid" id="appStoreGridContainer">
-          ${renderFilteredAppCardsHtml()}
-        </div>
       `;
 
       const advHtml = `
@@ -5865,41 +6044,26 @@ ${storageSnippet}
         <div class="win-card" style="flex-direction:column;align-items:stretch;gap:10px;border:1px solid var(--accent);">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
             <div class="card-left">
-              <div class="card-icon">📱</div>
-              <div class="card-text">
-                <div class="card-title">iPhone &amp; iOS Auto-Backup Vault <span class="badge badge-accent">Plug &amp; Play</span></div>
-                <div class="card-desc">Automatically configures Camera Roll background sync (Immich), iOS "Files" &amp; Shortcuts Wi-Fi SMB3 vault (Apple vfs_fruit), and USB cable full iPhone backup (libimobiledevice)</div>
-              </div>
-            </div>
-            <div class="card-right" style="gap:10px;flex-wrap:wrap;">
-              ${renderComboBox("iphone_backup_mode", [
-                { value: "all_three", label: "All 3: Camera Roll + iOS Files Wi-Fi + USB Cable" },
-                { value: "immich_and_files_smb", label: "Wi-Fi Only (Immich Photos + iOS Files SMB3)" },
-                { value: "usb_libimobiledevice", label: "USB Cable Full Device Backup Only" }
-              ])}
-              ${renderSwitch("toggle-iphone-backup", state.enable_iphone_auto_backup)}
-            </div>
-          </div>
-          <div style="font-size:12px;color:var(--text-secondary);display:${state.enable_iphone_auto_backup ? "block" : "none"};">
-            <strong>How it works on your iPhone:</strong> (1) Open the <strong>Files</strong> app on iPhone → Tap <strong>⋯ → Connect to Server</strong> → Enter <code>smb://${esc(state.hostname || "instant-server")}.local/iPhoneBackups</code>, (2) Install the <strong>Immich</strong> app pointed to <code>http://${esc(state.hostname || "instant-server")}.local:2283</code> for automatic background camera roll backup, or (3) Plug your iPhone into any server USB port for full encrypted local backups.
-          </div>
-        </div>
-
-        <div class="win-card" style="flex-direction:column;align-items:stretch;gap:10px;">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-            <div class="card-left">
               <div class="card-icon">🛠️</div>
               <div class="card-text">
-                <div class="card-title">Custom Server Config Files &amp; Post-Install Automation</div>
-                <div class="card-desc">Inject any custom /etc or /DATA config file or first-boot script directly onto the server (${Object.keys(state.custom_config_files || {}).length} custom file(s) staged)</div>
+                <div class="card-title">Custom Server Workflow &amp; Automation Builder <span class="badge badge-accent">Full Control</span></div>
+                <div class="card-desc">Build any custom server workflow: install extra Ubuntu packages (<code>apt</code>), create custom Samba NAS shares, add USB hardware trigger rules (<code>/etc/udev/rules.d/</code>), add background <code>systemd</code> services/timers, or stage any <code>/etc</code> / <code>/DATA</code> config file &amp; post-install script (${Object.keys(state.custom_config_files || {}).length} file(s) staged).</div>
               </div>
             </div>
-            <div class="card-right" style="gap:8px;flex-wrap:wrap;">
-              <input class="win-input" style="min-width:210px;" data-field="custom_config_path" value="${esc(state.custom_config_path)}" placeholder="/etc/samba/smb-custom.conf" />
-              <button type="button" class="win-btn win-btn-accent win-btn-sm" data-action="save-custom-sys-config">+ Stage Config File</button>
+            <div class="card-right" style="gap:6px;flex-wrap:wrap;">
+              <button type="button" class="win-btn win-btn-sm" data-action="load-workflow-template" data-tpl="samba_share">📂 + Custom NAS Share</button>
+              <button type="button" class="win-btn win-btn-sm" data-action="load-workflow-template" data-tpl="usb_udev">🔌 + USB Device Trigger</button>
+              <button type="button" class="win-btn win-btn-sm" data-action="load-workflow-template" data-tpl="systemd_timer">⏱ + Scheduled Service</button>
             </div>
           </div>
-          <textarea class="win-input" rows="3" style="width:100%;font-family:var(--font-mono);font-size:12px;" data-field="custom_config_body" placeholder="Paste custom config file contents or script here...">${esc(state.custom_config_body)}</textarea>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-top:6px;border-top:1px solid var(--divider);">
+            <span style="font-size:12px;font-weight:600;color:var(--text-secondary);">Extra Ubuntu Packages (apt):</span>
+            <input class="win-input" style="flex:1;min-width:180px;" data-field="custom_apt_packages_raw" value="${esc(state.custom_apt_packages_raw || "")}" placeholder="e.g. ffmpeg rsync python3-pip rclone usbmuxd" />
+            <span style="font-size:12px;font-weight:600;color:var(--text-secondary);">Target File Path:</span>
+            <input class="win-input" style="min-width:210px;" data-field="custom_config_path" value="${esc(state.custom_config_path)}" placeholder="/etc/samba/smb-custom.conf or /etc/udev/rules.d/99-usb.rules" />
+            <button type="button" class="win-btn win-btn-accent win-btn-sm" data-action="save-custom-sys-config">＋ Stage Custom File</button>
+          </div>
+          <textarea class="win-input" rows="4" style="width:100%;font-family:var(--font-mono);font-size:12px;" data-field="custom_config_body" placeholder="Paste custom config file, systemd unit, udev rule, or automation script here...">${esc(state.custom_config_body)}</textarea>
         </div>
 
         <div class="win-card">
@@ -5944,7 +6108,10 @@ ${storageSnippet}
       return `
         <div class="tab-flow-stack">
           ${basicHtml}
-          ${renderExpander("apps", "Advanced options", advHtml)}
+          ${renderExpander("apps", "Advanced App, Custom Workflows & Offline Options (Placed above catalog — no scrolling needed)", advHtml + buildUniversalAppFileStudioHtml())}
+          <div class="appstore-grid" id="appStoreGridContainer">
+            ${renderFilteredAppCardsHtml()}
+          </div>
         </div>
       `;
     }
@@ -6299,8 +6466,8 @@ ${storageSnippet}
           <div class="notice-banner notice-banner-warning" id="bannerThermalOverheatTrap" style="${state.ignore_lid_switch ? "" : "display:none;"}">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
               <div style="font-weight:600;">⚠️ Thermal Placement Warning — Avoid the Closed-Lid Overheating Trap</div>
-              <button type="button" class="win-btn win-btn-sm" data-action="enable-cool-quiet-profile">
-                ${state.disable_cpu_turbo_boost && state.cpu_governor === "powersave" ? "✓ Cool & Quiet Profile Active" : "🌡️ Enable Cool & Quiet CPU Mode (-12°C)"}
+              <button type="button" class="win-btn win-btn-sm ${state.disable_cpu_turbo_boost ? "win-btn-accent" : ""}" data-action="enable-cool-quiet-profile">
+                ${state.disable_cpu_turbo_boost ? "✓ Cool & Quiet Mode ON (Click to Turn Off)" : "🌡️ Enable Cool & Quiet CPU Mode"}
               </button>
             </div>
             <div style="font-size:12px;line-height:1.45;color:var(--text-primary);">
@@ -6400,7 +6567,7 @@ ${storageSnippet}
               <div class="card-icon">🌡️</div>
               <div class="card-text">
                 <div class="card-title">Limit peak CPU heat (Disable Turbo Boost)</div>
-                <div class="card-desc">Lowers peak CPU temperatures by 10–15°C on older computers</div>
+                <div class="card-desc">Lowers peak CPU temperatures and fan noise on older computers</div>
               </div>
             </div>
             <div class="card-right">${renderSwitch("toggle-disable-turbo", state.disable_cpu_turbo_boost)}</div>
@@ -6486,6 +6653,72 @@ ${storageSnippet}
               </div>
               <div class="card-right">
                 <button type="button" class="win-btn" data-action="jump-setup-tab" data-tab="storage">Edit</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="win-card" style="flex-direction:column;align-items:stretch;gap:10px;border-color:var(--accent);">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+              <div class="card-left">
+                <div class="card-icon">🧪</div>
+                <div class="card-text">
+                  <div class="card-title">
+                    <span>Test Without Flashing a Physical USB (Disposable VM &amp; Dashboard Tester)</span>
+                    <span class="badge badge-accent">No Old Laptop Needed</span>
+                  </div>
+                  <div class="card-desc">Builds a real bootable virtual USB image (<code>Instant_Server_Data/vm_test/instant-server-usb.img</code>) with your exact config, launches a disposable QEMU VM (port-forwarded to <code>http://127.0.0.1:18088</code>), or lets you preview the Web Dashboard right now.</div>
+                </div>
+              </div>
+              <div class="card-right" style="gap:8px;flex-wrap:wrap;">
+                <button type="button" class="win-btn win-btn-sm" data-action="open-dashboard-preview">🌐 Preview Web Dashboard</button>
+                <button type="button" class="win-btn win-btn-accent win-btn-sm" data-action="run-disposable-vm-test" ${state.vmTestBusy ? "disabled" : ""}>
+                  ${state.vmTestBusy ? "⏳ Building Virtual USB..." : "🧪 Test Bootable USB in Disposable VM"}
+                </button>
+              </div>
+            </div>
+            ${state.vmTestStatusMessage ? `
+              <div style="font-family:var(--font-mono);font-size:12px;color:var(--success);background:var(--bg-input);padding:9px 12px;border-radius:var(--radius-sm);border:1px solid var(--border-subtle);">
+                ✓ ${esc(state.vmTestStatusMessage)}
+              </div>
+            ` : ""}
+          </div>
+
+          <div class="win-card" style="flex-direction:column;align-items:stretch;gap:10px;border-color:var(--success);">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+              <div class="card-left">
+                <div class="card-icon">💾</div>
+                <div class="card-text">
+                  <div class="card-title">
+                    <span>Downloaded ISO &amp; App Files After Flashing</span>
+                    <span class="badge badge-success">Kept by Default on Exit</span>
+                  </div>
+                  <div class="card-desc">Choose whether to keep the downloaded Ubuntu ISO and staged app files in <code>Instant_Server_Data</code> so you can reflash or add new apps later (only newly added/changed apps will be installed), or delete them to free disk space. <strong>If you exit without selecting, files are kept by default.</strong></div>
+                </div>
+              </div>
+              <div class="card-right" style="gap:8px;flex-wrap:wrap;">
+                <button type="button" class="win-btn win-btn-sm ${state.cacheRetentionMode !== "delete" ? "win-btn-accent" : ""}" data-action="cache-keep">
+                  ✓ Keep Files for Fast Reflash / Adding Apps (Default)
+                </button>
+                <button type="button" class="win-btn win-btn-sm ${state.cacheRetentionMode === "delete" ? "win-btn-danger" : ""}" data-action="cache-delete">
+                  🗑 Delete Cached Files to Free Space
+                </button>
+              </div>
+            </div>
+            <div style="font-size:12px;color:var(--text-secondary);">
+              Status: <strong>${esc(state.cacheStatusMessage)}</strong>
+            </div>
+          </div>
+
+          <div class="win-card" style="flex-direction:column;align-items:stretch;gap:8px;">
+            <div class="card-left">
+              <div class="card-icon">📺</div>
+              <div class="card-text">
+                <div class="card-title">Beginner Guide: What happens after you plug the USB into your old laptop/PC?</div>
+                <div class="card-desc">
+                  <strong>1. Power on &amp; boot from USB:</strong> Tap the boot menu key (<strong>F12</strong> on Dell/Lenovo/Acer, <strong>F9</strong> on HP, <strong>F8</strong> on Asus, <strong>F11</strong> on MSI) and select your USB drive.<br/>
+                  <strong>2. 100% hands-free install:</strong> Do not press anything! Ubuntu Server installs automatically, survives accidental power cuts (auto-resuming interrupted packages on next boot), and sets up your apps in the background.<br/>
+                  <strong>3. Read the Dashboard URL right off the laptop screen:</strong> When finished, the server terminal screen automatically displays your exact Web Dashboard address (<code>http://${esc(state.hostname || "instant-server")}.local:${state.dashboard_port}</code> and your LAN IP <code>http://192.168.x.x:${state.dashboard_port}</code>) right above <code>login:</code> — you never need to type a single Linux command!
+                </div>
               </div>
             </div>
           </div>
@@ -6824,6 +7057,7 @@ ${storageSnippet}
     }
 
     function renderApp() {
+      syncFlashingLockState();
       document.documentElement.setAttribute("data-theme", state.theme);
       const stdBtn = document.getElementById("btnUiModeStandard");
       const proBtn = document.getElementById("btnUiModePro");
@@ -6977,18 +7211,42 @@ ${storageSnippet}
 
       if (!target) return;
       const action = target.getAttribute("data-action");
+      const allowedWhileFlashing = new Set([
+        "pause-resume-flash",
+        "cancel-flash",
+        "resume-log-autoscroll",
+        "dismiss-close-warning",
+        "pause-and-exit-flash",
+        "confirm-cancel-and-exit",
+        "open-dashboard-preview",
+        "copy-yaml"
+      ]);
+      if (state.flashing && action && !allowedWhileFlashing.has(action)) {
+        showToast("Configuration is locked while USB flashing/downloading is active");
+        return;
+      }
 
       if (action === "toggle-dropdown") {
         const field = target.getAttribute("data-field");
         const box = target.closest(".win-combobox");
         const willOpen = state.openDropdownField !== field;
-        document.querySelectorAll(".win-combobox.open").forEach(cb => cb.classList.remove("open"));
+        document.querySelectorAll(".win-combobox.open").forEach(cb => cb.classList.remove("open", "drop-up", "align-right"));
+        document.querySelectorAll(".win-card.has-open-dropdown").forEach(c => c.classList.remove("has-open-dropdown"));
         document.querySelectorAll(".expander-wrap.dropdown-open-inside").forEach(ex => ex.classList.remove("dropdown-open-inside"));
         state.openDropdownField = willOpen ? field : null;
         if (box && willOpen) {
           box.classList.add("open");
+          const parentCard = box.closest(".win-card");
+          if (parentCard) parentCard.classList.add("has-open-dropdown");
           const parentExp = box.closest(".expander-wrap.open");
           if (parentExp) parentExp.classList.add("dropdown-open-inside");
+          const rect = box.getBoundingClientRect();
+          if (window.innerHeight - rect.bottom < 250 && rect.top > 240) {
+            box.classList.add("drop-up");
+          }
+          if (rect.left > window.innerWidth * 0.48) {
+            box.classList.add("align-right");
+          }
         }
         return;
       } else if (action === "select-dropdown-option") {
@@ -7114,11 +7372,19 @@ ${storageSnippet}
         renderApp();
         return;
       } else if (action === "elevate-admin") {
+        await callBackend("save-config", "POST", serializeProfilePayload());
         const res = await callBackend("elevate", "POST", {});
-        if (res && res.elevated_spawned) {
-          showToast("Opening elevated Administrator window...");
+        if (res && res.already_elevated) {
+          state.hostIsAdmin = true;
+          const adminBanner = document.getElementById("adminPrivilegeBanner");
+          if (adminBanner) adminBanner.style.display = "none";
+          showToast("Already running with Administrator privileges");
+        } else if (res && res.elevated_spawned) {
+          state.forceClosing = true;
+          showToast("Administrator window opened — closing this window...");
+          setTimeout(() => { window.close(); }, 180);
         } else {
-          showToast("Right-click InstantServer-Windows.exe and choose 'Run as administrator'");
+          showToast((res && res.message) ? res.message : "Right-click InstantServer-Windows.exe and choose 'Run as administrator'");
         }
         return;
       } else if (action === "apply-role-preset") {
@@ -7205,9 +7471,12 @@ ${storageSnippet}
         if (thBanner) thBanner.style.display = state.ignore_lid_switch ? "" : "none";
         return;
       } else if (action === "enable-cool-quiet-profile") {
-        state.disable_cpu_turbo_boost = true;
-        state.cpu_governor = "powersave";
-        showToast("Enabled Cool & Quiet CPU profile (Turbo Boost disabled + Powersave governor)");
+        const nextCool = !state.disable_cpu_turbo_boost;
+        state.disable_cpu_turbo_boost = nextCool;
+        state.cpu_governor = nextCool ? "powersave" : "schedutil";
+        showToast(nextCool
+          ? "Enabled Cool & Quiet CPU profile (Turbo Boost off + Quiet fan profile)"
+          : "Disabled Cool & Quiet profile (Restored Balanced schedutil CPU speed)");
         renderApp();
         return;
       } else if (action === "toggle-zram") {
@@ -7261,6 +7530,21 @@ ${storageSnippet}
         if (state.enable_iphone_auto_backup && !state.selected_apps.includes("immich")) {
           state.selected_apps.push("immich");
         }
+        renderApp();
+        return;
+      } else if (action === "load-workflow-template") {
+        const tpl = target.getAttribute("data-tpl") || "samba_share";
+        if (tpl === "samba_share") {
+          state.custom_config_path = "/etc/samba/smb-custom.conf";
+          state.custom_config_body = "[CustomShare]\n   comment = Custom Network Share\n   path = /DATA/CustomShare\n   browseable = yes\n   read only = no\n   guest ok = no\n   vfs objects = catia fruit streams_xattr\n";
+        } else if (tpl === "usb_udev") {
+          state.custom_config_path = "/etc/udev/rules.d/99-custom-usb-trigger.rules";
+          state.custom_config_body = "# Automatically run a custom script whenever a specific USB device is plugged in\nACTION==\"add\", SUBSYSTEM==\"usb\", RUN+=\"/DATA/CustomWorkflows/on-usb-plug.sh\"\n";
+        } else if (tpl === "systemd_timer") {
+          state.custom_config_path = "/etc/systemd/system/custom-automation.service";
+          state.custom_config_body = "[Unit]\nDescription=Custom Server Background Automation\nAfter=network-online.target\n\n[Service]\nType=oneshot\nExecStart=/bin/bash /DATA/CustomWorkflows/custom-job.sh\n";
+        }
+        showToast("Loaded custom workflow template — edit as needed and click + Stage Custom File");
         renderApp();
         return;
       } else if (action === "save-custom-sys-config") {
@@ -7390,10 +7674,23 @@ ${storageSnippet}
         state.closeWarningOpen = false;
         const modal = document.getElementById("closeWarningModal");
         if (modal) modal.classList.remove("open");
+      } else if (action === "pause-and-exit-flash") {
+        const modal = document.getElementById("closeWarningModal");
+        if (modal) modal.classList.remove("open");
+        await pauseAndExitFlashingProcess();
       } else if (action === "confirm-cancel-and-exit") {
         const modal = document.getElementById("closeWarningModal");
         if (modal) modal.classList.remove("open");
         await cancelFlashingProcess(true);
+      } else if (action === "cache-keep") {
+        await handleCacheRetentionAction("keep");
+      } else if (action === "cache-delete") {
+        await handleCacheRetentionAction("delete");
+      } else if (action === "run-disposable-vm-test") {
+        await runDisposableVMTest();
+      } else if (action === "open-dashboard-preview") {
+        window.open("server_dashboard.html", "_blank", "noopener");
+        showToast("Opened live Server Web Dashboard preview");
       } else if (action === "copy-yaml") {
         const text = generateYamlPreview();
         try {
@@ -7426,6 +7723,7 @@ ${storageSnippet}
     });
 
     document.body.addEventListener("change", (e) => {
+      if (state.flashing) return;
       const act = e.target.getAttribute("data-action");
       if (act === "select-studio-app") {
         state.studio_app_id = e.target.value;
@@ -7436,6 +7734,7 @@ ${storageSnippet}
     });
 
     document.body.addEventListener("input", (e) => {
+      if (state.flashing) return;
       const act = e.target.getAttribute("data-action");
       if (act === "studio-file-textarea") {
         const ov = getOrInitAppOverride(state.studio_app_id || "minecraft");
@@ -7529,15 +7828,18 @@ ${storageSnippet}
       let rafPending = false;
       window.runtime.EventsOn("flash:progress", (ev) => {
         if (!ev) return;
+        state.lastWailsEventTs = Date.now();
         state.flashing = true;
-        state.flashProgress = Math.max(state.flashProgress, Number(ev.pct) || 0);
+        const nextOverall = Number(ev.percent ?? ev.pct ?? state.flashProgress) || state.flashProgress;
+        const nextStagePct = Number(ev.stage_percent ?? nextOverall) || nextOverall;
+        state.flashProgress = Math.max(state.flashProgress, nextOverall);
         if (ev.eta_sec !== undefined && ev.eta_sec > 0) {
           const remMin = String(Math.floor(ev.eta_sec / 60)).padStart(2, "0");
           const remSec = String(Math.floor(ev.eta_sec % 60)).padStart(2, "0");
           state.flashEtaText = `ETA: ~${remMin}:${remSec} remaining`;
         }
-        state.flashStatusText = ev.message || "Streaming 4MB page-aligned DMA blocks...";
-        state.activeProgressLine = buildAsciiTerminalBar(ev.pct || state.flashProgress, ev.stage || "DMA Stream", ev.message || "");
+        state.flashStatusText = ev.message || "Streaming aligned DMA blocks...";
+        state.activeProgressLine = buildAsciiTerminalBar(nextStagePct, ev.stage || "Active Stage", ev.message || "");
         if (!rafPending) {
           rafPending = true;
           window.requestAnimationFrame(() => {

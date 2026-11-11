@@ -2,7 +2,9 @@
 package usb
 
 import (
+	"crypto/sha256"
 	"crypto/sha512"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +14,15 @@ import (
 	"strconv"
 	"strings"
 )
+
+type CustomSambaShare struct {
+	Name       string `json:"name"`
+	Path       string `json:"path"`
+	Comment    string `json:"comment,omitempty"`
+	ReadOnly   bool   `json:"read_only,omitempty"`
+	GuestOK    bool   `json:"guest_ok,omitempty"`
+	AppleFruit bool   `json:"apple_fruit,omitempty"`
+}
 
 type ServerProfileConfig struct {
 	Hostname                    string                 `json:"hostname"`
@@ -36,13 +47,17 @@ type ServerProfileConfig struct {
 	DashboardChoice             string                 `json:"dashboard_choice"`
 	DashboardPort               int                    `json:"dashboard_port"`
 	EnableAutoUpdates           bool                   `json:"enable_auto_updates"`
-	EnableIPhoneAutoBackup      bool                   `json:"enable_iphone_auto_backup"`
+	EnableIPhoneAutoBackup      bool                   `json:"enable_iphone_auto_backup,omitempty"`
 	IPhoneBackupMode            string                 `json:"iphone_backup_mode,omitempty"`
 	SelectedApps                []string               `json:"selected_apps"`
 	CustomApps                  []CustomAppEntry       `json:"custom_apps"`
 	MinecraftConfig             *MinecraftServerConfig `json:"minecraft_config,omitempty"`
 	AppOverrides                map[string]AppOverride `json:"app_overrides,omitempty"`
 	CustomConfigFiles           map[string]string      `json:"custom_config_files,omitempty"`
+	CustomAptPackages           []string               `json:"custom_apt_packages,omitempty"`
+	CustomSambaShares           []CustomSambaShare     `json:"custom_samba_shares,omitempty"`
+	CustomSystemdUnits          map[string]string      `json:"custom_systemd_units,omitempty"`
+	CustomUdevRules             map[string]string      `json:"custom_udev_rules,omitempty"`
 	CustomPostInstallScript     string                 `json:"custom_post_install_script,omitempty"`
 	InstallMode                 string                 `json:"install_mode"`
 	DualBootAllocationGB        int                    `json:"dual_boot_Allocation_gb"`
@@ -380,6 +395,12 @@ func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
 	if layout == "" {
 		layout = "direct"
 	}
+	sizingLine := ""
+	if layout == "lvm" {
+		// Per Canonical Subiquity Reference, LVM defaults to `scaled` (which only uses 50% or max 100 GiB of large disks);
+		// `sizing-policy: all` ensures 100% of the server partition is allocated to the root LV.
+		sizingLine = "\n      sizing-policy: all"
+	}
 
 	var sshKeysBlock string
 	if len(cfg.SSHAuthorizedKeys) > 0 {
@@ -454,9 +475,14 @@ func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
           "%s":%s`, safeSSID, authLine)
 	}
 
-	// Always inhibit sleep/suspend and ignore laptop lid close inside the live Ubuntu installer environment
-	liveNoSleepCmds := `    - systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target 2>/dev/null || true
-    - mkdir -p /etc/systemd/logind.conf.d && printf "[Login]\nHandleLidSwitch=ignore\nHandleLidSwitchExternalPower=ignore\nHandleLidSwitchDocked=ignore\nIdleAction=ignore\n" > /etc/systemd/logind.conf.d/00-live-nosleep.conf && systemctl restart systemd-logind 2>/dev/null || true`
+	// Always inhibit sleep/suspend, unblock rfkill Wi-Fi radios, ignore laptop lid close, mount CIDATA at /mnt/cidata,
+	// and run select_target_disk.sh to pin the internal non-USB disk and prevent infinite reboot loops.
+	liveNoSleepCmds := `    - rfkill unblock all 2>/dev/null || true
+    - systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target 2>/dev/null || true
+    - mkdir -p /etc/systemd/logind.conf.d /mnt/cidata && printf "[Login]\nHandleLidSwitch=ignore\nHandleLidSwitchExternalPower=ignore\nHandleLidSwitchDocked=ignore\nIdleAction=ignore\n" > /etc/systemd/logind.conf.d/00-live-nosleep.conf && systemctl restart systemd-logind 2>/dev/null || true
+    - cdev=$(blkid -L CIDATA 2>/dev/null || blkid -L cidata 2>/dev/null || true); [ -n "$cdev" ] && mount -o ro "$cdev" /mnt/cidata 2>/dev/null || true
+    - touch /run/casper-no-prompt 2>/dev/null || true
+    - bash /mnt/cidata/select_target_disk.sh 2>/dev/null || bash /cdrom/cidata/select_target_disk.sh 2>/dev/null || true`
 
 	var earlyCommandsBlock string
 	var storageBlock string
@@ -470,55 +496,25 @@ func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
 		}
 		earlyCommandsBlock = fmt.Sprintf(`  early-commands:
 %s
-    - bash /cdrom/cidata/dynamic_dualboot_storage.sh %d 2>/dev/null || bash /cdrom/dynamic_dualboot_storage.sh %d 2>/dev/null || true
-`, liveNoSleepCmds, allocGB, allocGB)
+    - bash /mnt/cidata/dynamic_dualboot_storage.sh %d 2>/dev/null || bash /cdrom/cidata/dynamic_dualboot_storage.sh %d 2>/dev/null || bash /cdrom/dynamic_dualboot_storage.sh %d 2>/dev/null || true
+`, liveNoSleepCmds, allocGB, allocGB, allocGB)
 		storageBlock = fmt.Sprintf(`  storage:
-    config:
-      - type: disk
-        id: disk0
-        ptable: gpt
-        preserve: true
-        grub_device: false
-      - type: partition
-        id: efi-part
-        device: disk0
-        size: 512M
-        flag: boot
-        preserve: true
-        grub_device: true
-      - type: format
-        id: efi-fmt
-        volume: efi-part
-        fstype: fat32
-        preserve: true
-      - type: mount
-        id: efi-mnt
-        device: efi-fmt
-        path: /boot/efi
-      - type: partition
-        id: instant-root
-        device: disk0
-        size: %dG
-      - type: format
-        id: instant-root-fmt
-        volume: instant-root
-        fstype: ext4
-      - type: mount
-        id: instant-root-mnt
-        device: instant-root-fmt
-        path: /`, allocGB)
+    layout:
+      name: %s%s
+      match:
+        size: largest`, layout, sizingLine)
 
 	case "reinstall_keep_data":
 		earlyCommandsBlock = fmt.Sprintf(`  early-commands:
 %s
-    - bash /cdrom/cidata/reinstall_preserve_data.sh backup 2>/dev/null || bash /cdrom/reinstall_preserve_data.sh backup 2>/dev/null || true
+    - bash /mnt/cidata/reinstall_preserve_data.sh backup 2>/dev/null || bash /cdrom/cidata/reinstall_preserve_data.sh backup 2>/dev/null || bash /cdrom/reinstall_preserve_data.sh backup 2>/dev/null || true
 `, liveNoSleepCmds)
 		storageBlock = fmt.Sprintf(`  storage:
     layout:
-      name: %s
+      name: %s%s
       match:
-        size: largest`, layout)
-		extraLateCommands = "\n    - bash /cdrom/cidata/reinstall_preserve_data.sh restore 2>/dev/null || bash /cdrom/reinstall_preserve_data.sh restore 2>/dev/null || true"
+        size: largest`, layout, sizingLine)
+		extraLateCommands = "\n    - bash /mnt/cidata/reinstall_preserve_data.sh restore 2>/dev/null || bash /cdrom/cidata/reinstall_preserve_data.sh restore 2>/dev/null || bash /cdrom/reinstall_preserve_data.sh restore 2>/dev/null || true"
 
 	case "reinstall_wipe_data":
 		earlyCommandsBlock = fmt.Sprintf(`  early-commands:
@@ -526,21 +522,21 @@ func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
 `, liveNoSleepCmds)
 		storageBlock = fmt.Sprintf(`  storage:
     layout:
-      name: %s
+      name: %s%s
       match:
-        size: largest`, layout)
+        size: largest`, layout, sizingLine)
 
 	case "offline_updater_usb":
 		earlyCommandsBlock = fmt.Sprintf(`  early-commands:
 %s
-    - bash /cdrom/cidata/offline_updater_apply.sh 2>/dev/null || bash /cdrom/offline_updater_apply.sh 2>/dev/null || true
+    - bash /mnt/cidata/offline_updater_apply.sh 2>/dev/null || bash /cdrom/cidata/offline_updater_apply.sh 2>/dev/null || bash /cdrom/offline_updater_apply.sh 2>/dev/null || true
 `, liveNoSleepCmds)
 		storageBlock = `  # Offline Updater USB: updates existing server dashboard, scripts, and app stacks without formatting`
 
 	case "repair_rescue_usb":
 		earlyCommandsBlock = fmt.Sprintf(`  early-commands:
 %s
-    - bash /cdrom/cidata/emergency_repair_reset.sh 2>/dev/null || bash /cdrom/emergency_repair_reset.sh 2>/dev/null || true
+    - bash /mnt/cidata/emergency_repair_reset.sh 2>/dev/null || bash /cdrom/cidata/emergency_repair_reset.sh 2>/dev/null || bash /cdrom/emergency_repair_reset.sh 2>/dev/null || true
 `, liveNoSleepCmds)
 		storageBlock = `  # Live Repair & Password Reset Mode: repairs bootloader/filesystem and resets credentials without formatting`
 
@@ -557,9 +553,9 @@ func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
 `, liveNoSleepCmds)
 		storageBlock = fmt.Sprintf(`  storage:
     layout:
-      name: %s
+      name: %s%s
       match:
-        path: /dev/sdb`, layout)
+        path: /dev/sdb`, layout, sizingLine)
 
 	default:
 		earlyCommandsBlock = fmt.Sprintf(`  early-commands:
@@ -567,14 +563,15 @@ func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
 `, liveNoSleepCmds)
 		storageBlock = fmt.Sprintf(`  storage:
     layout:
-      name: %s
+      name: %s%s
       match:
-        size: largest`, layout)
+        size: largest`, layout, sizingLine)
 	}
 
 	return fmt.Sprintf(`#cloud-config
 autoinstall:
   version: 1
+  shutdown: reboot
   identity:
     hostname: %s
     username: %s
@@ -588,8 +585,12 @@ autoinstall:
 %s%s%s
 %s%s
   late-commands:
-    - mkdir -p /target/opt/instant-server
-    - cp -rf /cdrom/cidata/* /target/opt/instant-server/ 2>/dev/null || cp -rf /cdrom/* /target/opt/instant-server/ 2>/dev/null || true%s
+    - mkdir -p /target/opt/instant-server /target/opt/instant-server/debs /mnt/cidata
+    - cdev=$(blkid -L CIDATA 2>/dev/null || blkid -L cidata 2>/dev/null || true); [ -n "$cdev" ] && mount -o ro "$cdev" /mnt/cidata 2>/dev/null || true
+    - cp -rf /mnt/cidata/* /target/opt/instant-server/ 2>/dev/null || cp -rf /cdrom/cidata/* /target/opt/instant-server/ 2>/dev/null || cp -rf /cdrom/* /target/opt/instant-server/ 2>/dev/null || true
+    - find /cdrom/pool -type f \( -name "wpasupplicant*.deb" -o -name "wireless-tools*.deb" -o -name "libnl-*.deb" -o -name "libpcsclite*.deb" -o -name "rfkill*.deb" -o -name "ethtool*.deb" \) -exec cp -f {} /target/opt/instant-server/debs/ \; 2>/dev/null || true%s
+    - date +%%s > /target/opt/instant-server/.install_complete_epoch 2>/dev/null || true
+    - touch /run/casper-no-prompt 2>/dev/null || true
     - curtin in-target -- chmod +x /opt/instant-server/laptop_hardening.sh
     - curtin in-target -- bash /opt/instant-server/laptop_hardening.sh
 `, host, user, hashedPass, sshKeysBlock, ethSection, usbTetherSection, wifiSection, earlyCommandsBlock, storageBlock, extraLateCommands)
@@ -613,6 +614,18 @@ func GenerateTargetEnvConf(cfg ServerProfileConfig) string {
 	dashPort := cfg.DashboardPort
 	if dashPort <= 0 {
 		dashPort = 8088
+	}
+	sshPort := cfg.SSHPort
+	if sshPort <= 0 || sshPort > 65535 {
+		sshPort = 22
+	}
+	swappiness := cfg.VMSwappiness
+	if swappiness <= 0 || swappiness > 100 {
+		swappiness = 10
+	}
+	inotifyWatches := cfg.InotifyMaxWatches
+	if inotifyWatches < 65536 {
+		inotifyWatches = 524288
 	}
 	batStart := cfg.BatteryChargeStartPct
 	if batStart <= 0 {
@@ -646,10 +659,6 @@ func GenerateTargetEnvConf(cfg ServerProfileConfig) string {
 	if tsMode == "" {
 		tsMode = "subnet_and_ssh"
 	}
-	iphoneMode := strings.TrimSpace(cfg.IPhoneBackupMode)
-	if iphoneMode == "" {
-		iphoneMode = "all_three"
-	}
 	enableCockpit := cfg.DashboardChoice == "both" || cfg.DashboardChoice == "cockpit" || cfg.DashboardChoice == ""
 	enableCasaOS := cfg.DashboardChoice == "both" || cfg.DashboardChoice == "casaos" || cfg.DashboardChoice == ""
 
@@ -666,9 +675,14 @@ INSTANT_ENABLE_CASAOS=%q
 INSTANT_ENABLE_DOCKER="1"
 INSTANT_ENABLE_CUSTOM_DASHBOARD="1"
 INSTANT_DASHBOARD_PORT=%q
+INSTANT_SSH_PORT=%q
+INSTANT_ENABLE_UFW=%q
+INSTANT_ENABLE_FAIL2BAN=%q
+INSTANT_ENABLE_TCP_BBR=%q
+INSTANT_VM_SWAPPINESS=%q
+INSTANT_INOTIFY_MAX_WATCHES=%q
 INSTANT_ENABLE_AUTO_UPDATES=%q
-INSTANT_ENABLE_IPHONE_BACKUP=%q
-INSTANT_IPHONE_BACKUP_MODE=%q
+INSTANT_CUSTOM_APT_PACKAGES=%q
 INSTANT_ENABLE_TAILSCALE=%q
 INSTANT_TAILSCALE_AUTHKEY=%q
 INSTANT_TAILSCALE_MODE=%q
@@ -690,9 +704,14 @@ INSTANT_SELECTED_APPS=%q
 		bool01(enableCockpit),
 		bool01(enableCasaOS),
 		strconv.Itoa(dashPort),
+		strconv.Itoa(sshPort),
+		bool01(cfg.EnableUFWFirewall),
+		bool01(cfg.EnableFail2ban),
+		bool01(cfg.EnableTCPBBR),
+		strconv.Itoa(swappiness),
+		strconv.Itoa(inotifyWatches),
 		bool01(cfg.EnableAutoUpdates),
-		bool01(cfg.EnableIPhoneAutoBackup),
-		iphoneMode,
+		strings.Join(cfg.CustomAptPackages, " "),
 		bool01(cfg.EnableTailscale),
 		strings.TrimSpace(cfg.TailscaleAuthKey),
 		tsMode,
@@ -722,20 +741,6 @@ func StageCIDATAPayload(targetDir string, cfg ServerProfileConfig, hardeningScri
 		return nil, err
 	}
 
-	// If iPhone Auto-Backup is enabled, ensure Immich photo backup is included in SelectedApps
-	if cfg.EnableIPhoneAutoBackup {
-		hasImmich := false
-		for _, a := range cfg.SelectedApps {
-			if a == "immich" {
-				hasImmich = true
-				break
-			}
-		}
-		if !hasImmich {
-			cfg.SelectedApps = append(cfg.SelectedApps, "immich")
-		}
-	}
-
 	var writtenFiles []string
 	writeItem := func(relPath string, data []byte, perm os.FileMode) error {
 		full := filepath.Join(targetDir, relPath)
@@ -753,34 +758,161 @@ func StageCIDATAPayload(targetDir string, cfg ServerProfileConfig, hardeningScri
 	if err := writeItem("user-data", userData, 0644); err != nil {
 		return nil, err
 	}
-	metaData := []byte(fmt.Sprintf("instance-id: %s-01\nlocal-hostname: %s\n", cfg.Hostname, cfg.Hostname))
+	metaData := []byte("instance-id: " + cfg.Hostname + "-01\nlocal-hostname: " + cfg.Hostname + "\n")
 	if err := writeItem("meta-data", metaData, 0644); err != nil {
 		return nil, err
 	}
+	selectDiskHelper := []byte(`#!/usr/bin/env bash
+set -uo pipefail
+# 1. Identify both the ISO/cdrom disk and the CIDATA disk so Subiquity NEVER overwrites installer media
+CDROM_PART=$(findmnt -n -o SOURCE /cdrom 2>/dev/null || true)
+CIDATA_PART=$(blkid -L CIDATA 2>/dev/null || blkid -L cidata 2>/dev/null || true)
+USB_DISK=""
+CIDATA_DISK=""
+if [ -n "$CDROM_PART" ]; then
+    PK=$(lsblk -no PKNAME "$CDROM_PART" 2>/dev/null | head -n1)
+    if [ -n "$PK" ]; then USB_DISK="/dev/${PK}"; else USB_DISK="$CDROM_PART"; fi
+fi
+if [ -n "$CIDATA_PART" ]; then
+    PK2=$(lsblk -no PKNAME "$CIDATA_PART" 2>/dev/null | head -n1)
+    if [ -n "$PK2" ]; then CIDATA_DISK="/dev/${PK2}"; else CIDATA_DISK="$CIDATA_PART"; fi
+    [ -z "$USB_DISK" ] && USB_DISK="$CIDATA_DISK"
+fi
+
+# 2. Guard against infinite reinstall loop if user left the USB plugged in during automatic reboot
+mkdir -p /mnt/check_existing
+for part in $(lsblk -lnpo NAME,FSTYPE | awk '$2 == "ext4" {print $1}'); do
+    [ -n "$USB_DISK" ] && [[ "$part" == "${USB_DISK}"* ]] && continue
+    [ -n "$CIDATA_DISK" ] && [[ "$part" == "${CIDATA_DISK}"* ]] && continue
+    if mount -o ro "$part" /mnt/check_existing 2>/dev/null; then
+        if [ -f "/mnt/check_existing/opt/instant-server/.install_complete_epoch" ]; then
+            STAMP=$(cat /mnt/check_existing/opt/instant-server/.install_complete_epoch 2>/dev/null || echo 0)
+            NOW=$(date +%s)
+            DIFF=$((NOW - STAMP))
+            if [ "$DIFF" -ge 0 ] && [ "$DIFF" -lt 1800 ]; then
+                umount /mnt/check_existing 2>/dev/null || true
+                echo "[instant-server] Fresh installation detected on $part (${DIFF}s ago). Rebooting into installed OS..."
+                touch /run/casper-no-prompt 2>/dev/null || true
+                sync
+                reboot -f
+                exit 0
+            fi
+        fi
+        umount /mnt/check_existing 2>/dev/null || true
+    fi
+done
+
+# 3. Pin largest internal non-USB disk in /autoinstall.yaml so a large USB stick or VM seed disk never wipes itself
+BEST_DISK=""
+BEST_SIZE=0
+while read -r dname dsize drm dtype; do
+    [ "$dtype" = "disk" ] || continue
+    [ -n "$USB_DISK" ] && [ "$dname" = "$USB_DISK" ] && continue
+    [ -n "$CIDATA_DISK" ] && [ "$dname" = "$CIDATA_DISK" ] && continue
+    [[ "$dname" == /dev/loop* || "$dname" == /dev/ram* || "$dname" == /dev/zram* || "$dname" == /dev/sr* ]] && continue
+    if [ "$drm" = "0" ] && [ "${dsize:-0}" -gt "$BEST_SIZE" ]; then
+        BEST_SIZE="$dsize"
+        BEST_DISK="$dname"
+    fi
+done < <(lsblk -dbnpo NAME,SIZE,RM,TYPE 2>/dev/null)
+
+if [ -n "$BEST_DISK" ]; then
+    echo "$BEST_DISK" > /run/instant-target-disk
+    if [ -f /autoinstall.yaml ]; then
+        sed -i "s|size: largest|path: ${BEST_DISK}|g" /autoinstall.yaml 2>/dev/null || true
+        echo "[instant-server] Pinned internal target disk: ${BEST_DISK}"
+    fi
+fi
+`)
+	if err := writeItem("select_target_disk.sh", NormalizeShellScriptLF(selectDiskHelper), 0755); err != nil {
+		return nil, err
+	}
+
+	// Non-destructive Dual-Boot storage allocator:
+	// Inspects target disk; if an existing Windows/Linux OS with an EFI System Partition + NTFS/ext4 partition exists,
+	// shrinks the largest data partition if needed to free ${REQ_GB} GiB and preserves existing OS partitions.
 	dualBootHelper := []byte(`#!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
 REQ_GB="${1:-45}"
-echo "[instant-server] Inspecting target disk for non-destructive ${REQ_GB}G dual-boot allocation..."
+TARGET_DISK=$(cat /run/instant-target-disk 2>/dev/null || true)
+[ -z "$TARGET_DISK" ] && exit 0
+
+# Count existing partitions on TARGET_DISK
+PART_COUNT=$(lsblk -lnpo NAME,TYPE "$TARGET_DISK" 2>/dev/null | awk '$2=="part"{count++} END{print count+0}')
+if [ "${PART_COUNT:-0}" -eq 0 ]; then
+    echo "[instant-server] Target disk ${TARGET_DISK} has no existing partitions; using standard layout."
+    exit 0
+fi
+
+# Check if an existing EFI System Partition (vfat) and a shrinkable NTFS/ext4 partition exist
+ESP_PART=""
+SHRINK_PART=""
+SHRINK_FSTYPE=""
+SHRINK_SIZE_BYTES=0
+
+while read -r pname psize pfstype; do
+    [ -z "$pname" ] && continue
+    if [ "$pfstype" = "vfat" ] || [ "$pfstype" = "fat32" ]; then
+        [ -z "$ESP_PART" ] && ESP_PART="$pname"
+    elif [ "$pfstype" = "ntfs" ] || [ "$pfstype" = "ext4" ]; then
+        if [ "${psize:-0}" -gt "$SHRINK_SIZE_BYTES" ]; then
+            SHRINK_SIZE_BYTES="$psize"
+            SHRINK_PART="$pname"
+            SHRINK_FSTYPE="$pfstype"
+        fi
+    fi
+done < <(lsblk -lnbpo NAME,SIZE,FSTYPE "$TARGET_DISK" 2>/dev/null | tail -n +2)
+
+REQ_BYTES=$((REQ_GB * 1024 * 1024 * 1024))
+MIN_REMAIN_BYTES=$((20 * 1024 * 1024 * 1024))
+
+if [ -n "$SHRINK_PART" ] && [ "$SHRINK_SIZE_BYTES" -gt $((REQ_BYTES + MIN_REMAIN_BYTES)) ]; then
+    NEW_SIZE_BYTES=$((SHRINK_SIZE_BYTES - REQ_BYTES))
+    NEW_SIZE_MB=$((NEW_SIZE_BYTES / 1048576))
+    PNUM=$(echo "$SHRINK_PART" | grep -o '[0-9]*$' || true)
+    echo "[instant-server] Shrinking ${SHRINK_PART} (${SHRINK_FSTYPE}) to ${NEW_SIZE_MB}M to free ${REQ_GB}G for dual-boot..."
+    if [ "$SHRINK_FSTYPE" = "ntfs" ] && command -v ntfsresize >/dev/null 2>&1; then
+        ntfsresize -f -s "${NEW_SIZE_MB}M" "$SHRINK_PART" >/dev/null 2>&1 || true
+        [ -n "$PNUM" ] && parted ---pretend-input-tty "$TARGET_DISK" resizepart "$PNUM" "${NEW_SIZE_MB}MB" Yes >/dev/null 2>&1 || true
+    elif [ "$SHRINK_FSTYPE" = "ext4" ] && command -v resize2fs >/dev/null 2>&1; then
+        e2fsck -fy "$SHRINK_PART" >/dev/null 2>&1 || true
+        resize2fs "$SHRINK_PART" "${NEW_SIZE_MB}M" >/dev/null 2>&1 || true
+        [ -n "$PNUM" ] && parted ---pretend-input-tty "$TARGET_DISK" resizepart "$PNUM" "${NEW_SIZE_MB}MB" Yes >/dev/null 2>&1 || true
+    fi
+    partprobe "$TARGET_DISK" 2>/dev/null || true
+fi
 `)
 	if err := writeItem("dynamic_dualboot_storage.sh", NormalizeShellScriptLF(dualBootHelper), 0755); err != nil {
 		return nil, err
 	}
 
-	// Reinstall While Retaining Server Data helper script
+	// Reinstall While Retaining Server Data helper script:
+	// Uses /dev/shm/instant-preserved-data (50% RAM tmpfs, never /run which is limited to 10% RAM)
+	// and checks available staging space so systemd/udev in /run can never be exhausted.
 	reinstallPreserveScript := []byte(`#!/usr/bin/env bash
 set -euo pipefail
 ACTION="${1:-backup}"
-STAGE_BACKUP="/run/instant-preserved-data"
+STAGE_BACKUP="/dev/shm/instant-preserved-data"
 mkdir -p "$STAGE_BACKUP" /mnt/existing_os
 if [ "$ACTION" = "backup" ]; then
+    AVAIL_KB=$(df -Pk /dev/shm 2>/dev/null | awk 'NR==2 {print $4}' || echo 0)
     for part in $(lsblk -lnpo NAME,FSTYPE | awk '$2 ~ /ext4|btrfs|xfs/ {print $1}'); do
         if mount -o ro "$part" /mnt/existing_os 2>/dev/null; then
-            if [ -d "/mnt/existing_os/DATA" ]; then
-                echo "[instant-server] Backing up existing /DATA from $part..."
-                cp -a /mnt/existing_os/DATA "$STAGE_BACKUP/" 2>/dev/null || true
-            fi
             if [ -d "/mnt/existing_os/opt/instant-server" ]; then
                 cp -a /mnt/existing_os/opt/instant-server "$STAGE_BACKUP/" 2>/dev/null || true
+            fi
+            if [ -d "/mnt/existing_os/DATA" ]; then
+                DATA_KB=$(du -sk /mnt/existing_os/DATA 2>/dev/null | awk '{print $1}' || echo 0)
+                if [ "${AVAIL_KB:-0}" -gt $((DATA_KB + 131072)) ]; then
+                    echo "[instant-server] Backing up full /DATA (${DATA_KB} KB) from $part..."
+                    cp -a /mnt/existing_os/DATA "$STAGE_BACKUP/" 2>/dev/null || true
+                else
+                    echo "[instant-server] Backing up critical /DATA/AppData, /DATA/Backups, and /DATA/CustomWorkflows from $part..."
+                    mkdir -p "$STAGE_BACKUP/DATA"
+                    for sub in AppData Backups CustomWorkflows Shared; do
+                        [ -d "/mnt/existing_os/DATA/$sub" ] && cp -a "/mnt/existing_os/DATA/$sub" "$STAGE_BACKUP/DATA/" 2>/dev/null || true
+                    done
+                fi
             fi
             umount /mnt/existing_os 2>/dev/null || true
         fi
@@ -789,6 +921,7 @@ elif [ "$ACTION" = "restore" ]; then
     if [ -d "$STAGE_BACKUP/DATA" ]; then
         mkdir -p /target/DATA
         cp -a "$STAGE_BACKUP/DATA/." /target/DATA/ 2>/dev/null || true
+        rm -rf "$STAGE_BACKUP" 2>/dev/null || true
         echo "[instant-server] Restored preserved /DATA to reinstalled server."
     fi
 fi
@@ -797,7 +930,7 @@ fi
 		return nil, err
 	}
 
-	// Offline Updater USB helper script (for local-only / air-gapped servers)
+	// Offline Updater USB helper script (for local-only / air-gapped servers or incremental app additions)
 	offlineUpdaterScript := []byte(`#!/usr/bin/env bash
 set -euo pipefail
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -819,11 +952,26 @@ fi
 mkdir -p "${TARGET_ROOT}/opt/instant-server" "${TARGET_ROOT}/DATA/AppData"
 cp -rf "${SRC_DIR}/server_dashboard.html" "${TARGET_ROOT}/opt/instant-server/" 2>/dev/null || true
 cp -rf "${SRC_DIR}/laptop_hardening.sh" "${TARGET_ROOT}/opt/instant-server/" 2>/dev/null || true
+cp -rf "${SRC_DIR}/instant_apps_bundle.sh" "${TARGET_ROOT}/opt/instant-server/" 2>/dev/null || true
 if [ -d "${SRC_DIR}/casaos_apps" ]; then
     cp -rf "${SRC_DIR}/casaos_apps/"* "${TARGET_ROOT}/DATA/AppData/" 2>/dev/null || true
 fi
-systemctl restart instant-server-dashboard.service 2>/dev/null || true
-echo "[instant-server] Offline USB update applied to ${TARGET_ROOT}."
+if [ "$TARGET_ROOT" = "/" ]; then
+    [ -f /opt/instant-server/instant_apps_bundle.sh ] && bash /opt/instant-server/instant_apps_bundle.sh 2>/dev/null || true
+    systemctl restart instant-server-dashboard.service 2>/dev/null || true
+    systemctl start instant-server-launch-apps.service 2>/dev/null || true
+elif [ "$TARGET_ROOT" = "/mnt/target_os" ]; then
+    chroot /mnt/target_os /bin/bash /opt/instant-server/instant_apps_bundle.sh 2>/dev/null || true
+fi
+echo "[instant-server] Offline USB update and incremental apps applied to ${TARGET_ROOT}."
+if [ "$TARGET_ROOT" = "/mnt/target_os" ]; then
+    umount /mnt/target_os 2>/dev/null || true
+fi
+if [ -d "/cdrom" ] || grep -q "casper" /proc/cmdline 2>/dev/null; then
+    touch /run/casper-no-prompt 2>/dev/null || true
+    sync
+    reboot -f
+fi
 `)
 	if err := writeItem("offline_updater_apply.sh", NormalizeShellScriptLF(offlineUpdaterScript), 0755); err != nil {
 		return nil, err
@@ -831,23 +979,39 @@ echo "[instant-server] Offline USB update applied to ${TARGET_ROOT}."
 
 	// Emergency Repair & Password Reset USB helper script
 	hashedPass := Sha512Crypt(cfg.Password, "instantserverlts")
+	sshPort := cfg.SSHPort
+	if sshPort <= 0 || sshPort > 65535 {
+		sshPort = 22
+	}
+	dashPort := cfg.DashboardPort
+	if dashPort <= 0 || dashPort > 65535 {
+		dashPort = 8088
+	}
 	repairResetScript := fmt.Sprintf(`#!/usr/bin/env bash
 set -euo pipefail
 TARGET_USER=%q
 NEW_HASH=%q
+SSH_PORT="%d"
+DASH_PORT="%d"
 mkdir -p /mnt/repair_os
 for part in $(lsblk -lnpo NAME,FSTYPE | awk '$2 == "ext4" {print $1}'); do
     e2fsck -fy "$part" 2>/dev/null || true
     if mount "$part" /mnt/repair_os 2>/dev/null; then
         if [ -f "/mnt/repair_os/etc/shadow" ]; then
+            chroot /mnt/repair_os /bin/bash -c "rm -f /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock && dpkg --configure -a" 2>/dev/null || true
             chroot /mnt/repair_os /bin/bash -c "printf '%%s:%%s\n' '$TARGET_USER' '$NEW_HASH' | chpasswd -e" 2>/dev/null || true
-            chroot /mnt/repair_os /bin/bash -c "ufw allow 22/tcp && ufw allow 8088/tcp && fail2ban-client unban --all" 2>/dev/null || true
+            chroot /mnt/repair_os /bin/bash -c "ufw allow 22/tcp && ufw allow ${SSH_PORT}/tcp && ufw allow ${DASH_PORT}/tcp && fail2ban-client unban --all" 2>/dev/null || true
             echo "[instant-server] Reset password for $TARGET_USER and repaired filesystem on $part."
         fi
         umount /mnt/repair_os 2>/dev/null || true
     fi
 done
-`, cfg.Username, hashedPass)
+if [ -d "/cdrom" ] || grep -q "casper" /proc/cmdline 2>/dev/null; then
+    touch /run/casper-no-prompt 2>/dev/null || true
+    sync
+    reboot -f
+fi
+`, cfg.Username, hashedPass, sshPort, dashPort)
 	if err := writeItem("emergency_repair_reset.sh", NormalizeShellScriptLF([]byte(repairResetScript)), 0755); err != nil {
 		return nil, err
 	}
@@ -881,6 +1045,18 @@ done
 		safeName := strings.ReplaceAll(strings.Trim(customPath, "/\\"), "/", "__")
 		if safeName != "" {
 			_ = writeItem(filepath.Join("custom_system_configs", safeName), []byte(customContent), 0644)
+		}
+	}
+	for unitName, unitContent := range cfg.CustomSystemdUnits {
+		safeUnit := filepath.Base(strings.TrimSpace(unitName))
+		if safeUnit != "" && safeUnit != "." && safeUnit != ".." {
+			_ = writeItem(filepath.Join("custom_systemd", safeUnit), NormalizeShellScriptLF([]byte(unitContent)), 0644)
+		}
+	}
+	for ruleName, ruleContent := range cfg.CustomUdevRules {
+		safeRule := filepath.Base(strings.TrimSpace(ruleName))
+		if safeRule != "" && safeRule != "." && safeRule != ".." {
+			_ = writeItem(filepath.Join("custom_udev", safeRule), NormalizeShellScriptLF([]byte(ruleContent)), 0644)
 		}
 	}
 
@@ -917,5 +1093,91 @@ done
 			}
 		}
 	}
+
+	// Build a self-extracting root-level script (instant_apps_bundle.sh) so the flat FAT16 CIDATA
+	// root directory carries every selected app's docker-compose.yml, SHA-256 fingerprint, and custom workflows.
+	var bundleBuilder strings.Builder
+	bundleBuilder.WriteString("#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p /DATA/AppData /opt/instant-server/casaos_apps /opt/instant-server/custom_system_configs /opt/instant-server/custom_systemd /opt/instant-server/custom_udev\n")
+	for _, appID := range cfg.SelectedApps {
+		cleanID := strings.TrimSpace(appID)
+		if cleanID == "" || strings.HasPrefix(cleanID, "custom_") {
+			continue
+		}
+		var override *AppOverride
+		if cfg.AppOverrides != nil {
+			if ov, ok := cfg.AppOverrides[cleanID]; ok {
+				override = &ov
+			}
+		}
+		composeYAML := BuildVerifiedAppComposeWithOverride(cleanID, "", 0, cfg.MinecraftConfig, override)
+		sum := sha256.Sum256([]byte(strings.TrimSpace(composeYAML)))
+		hashHex := hex.EncodeToString(sum[:])
+		bundleBuilder.WriteString(fmt.Sprintf("mkdir -p /DATA/AppData/%s /opt/instant-server/casaos_apps/%s\n", cleanID, cleanID))
+		bundleBuilder.WriteString(fmt.Sprintf("cat << 'APPEOF_%s' > /DATA/AppData/%s/docker-compose.yml\n%s\nAPPEOF_%s\n", cleanID, cleanID, strings.TrimRight(composeYAML, "\r\n"), cleanID))
+		bundleBuilder.WriteString(fmt.Sprintf("printf '%%s\\n' %q > /DATA/AppData/%s/.compose_sha256\n", hashHex, cleanID))
+		bundleBuilder.WriteString(fmt.Sprintf("cp -f /DATA/AppData/%s/docker-compose.yml /opt/instant-server/casaos_apps/%s/docker-compose.yml 2>/dev/null || true\n", cleanID, cleanID))
+	}
+	for _, ca := range cfg.CustomApps {
+		if ca.ID != "" && ca.ComposeYAML != "" {
+			sum := sha256.Sum256([]byte(strings.TrimSpace(ca.ComposeYAML)))
+			hashHex := hex.EncodeToString(sum[:])
+			bundleBuilder.WriteString(fmt.Sprintf("mkdir -p /DATA/AppData/%s\n", ca.ID))
+			bundleBuilder.WriteString(fmt.Sprintf("cat << 'CUSTEOF_%s' > /DATA/AppData/%s/docker-compose.yml\n%s\nCUSTEOF_%s\n", ca.ID, ca.ID, strings.TrimRight(ca.ComposeYAML, "\r\n"), ca.ID))
+			bundleBuilder.WriteString(fmt.Sprintf("printf '%%s\\n' %q > /DATA/AppData/%s/.compose_sha256\n", hashHex, ca.ID))
+		}
+	}
+	// Also bundle custom system configs, custom Samba shares, custom systemd units, and custom udev rules into instant_apps_bundle.sh
+	// so even when mounted from flat root FAT16 CIDATA, every custom user workflow is unpacked automatically.
+	for customPath, customContent := range cfg.CustomConfigFiles {
+		safeName := strings.ReplaceAll(strings.Trim(customPath, "/\\"), "/", "__")
+		if safeName != "" {
+			bundleBuilder.WriteString(fmt.Sprintf("cat << 'SYSCFGEOF_%s' > /opt/instant-server/custom_system_configs/%s\n%s\nSYSCFGEOF_%s\n", safeName, safeName, strings.TrimRight(customContent, "\r\n"), safeName))
+		}
+	}
+	for unitName, unitContent := range cfg.CustomSystemdUnits {
+		safeUnit := filepath.Base(strings.TrimSpace(unitName))
+		if safeUnit != "" && safeUnit != "." && safeUnit != ".." {
+			tag := reSlugClean.ReplaceAllString(safeUnit, "_")
+			bundleBuilder.WriteString(fmt.Sprintf("cat << 'UNITEOF_%s' > /opt/instant-server/custom_systemd/%s\n%s\nUNITEOF_%s\n", tag, safeUnit, strings.TrimRight(unitContent, "\r\n"), tag))
+		}
+	}
+	for ruleName, ruleContent := range cfg.CustomUdevRules {
+		safeRule := filepath.Base(strings.TrimSpace(ruleName))
+		if safeRule != "" && safeRule != "." && safeRule != ".." {
+			tag := reSlugClean.ReplaceAllString(safeRule, "_")
+			bundleBuilder.WriteString(fmt.Sprintf("cat << 'UDEVEOF_%s' > /opt/instant-server/custom_udev/%s\n%s\nUDEVEOF_%s\n", tag, safeRule, strings.TrimRight(ruleContent, "\r\n"), tag))
+		}
+	}
+	if len(cfg.CustomSambaShares) > 0 {
+		var smbBuilder strings.Builder
+		for _, sh := range cfg.CustomSambaShares {
+			name := strings.TrimSpace(sh.Name)
+			path := strings.TrimSpace(sh.Path)
+			if name == "" || path == "" {
+				continue
+			}
+			ro := "no"
+			if sh.ReadOnly {
+				ro = "yes"
+			}
+			guest := "no"
+			if sh.GuestOK {
+				guest = "yes"
+			}
+			fruitLines := ""
+			if sh.AppleFruit {
+				fruitLines = "   vfs objects = catia fruit streams_xattr\n   fruit:aapl = yes\n   fruit:model = MacSamba\n   fruit:metadata = stream\n"
+			}
+			smbBuilder.WriteString(fmt.Sprintf("\n[%s]\n   comment = %s\n   path = %s\n   browseable = yes\n   read only = %s\n   guest ok = %s\n   create mask = 0664\n   directory mask = 0775\n%s", name, sh.Comment, path, ro, guest, fruitLines))
+		}
+		if smbBuilder.Len() > 0 {
+			_ = writeItem("custom_samba_shares.conf", NormalizeShellScriptLF([]byte(smbBuilder.String())), 0644)
+			bundleBuilder.WriteString(fmt.Sprintf("cat << 'SMBSHAREEOF' > /opt/instant-server/custom_samba_shares.conf\n%s\nSMBSHAREEOF\n", strings.TrimRight(smbBuilder.String(), "\r\n")))
+		}
+	}
+	if err := writeItem("instant_apps_bundle.sh", NormalizeShellScriptLF([]byte(bundleBuilder.String())), 0755); err != nil {
+		return nil, err
+	}
+
 	return writtenFiles, nil
 }
