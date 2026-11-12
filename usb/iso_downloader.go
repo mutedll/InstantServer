@@ -8,11 +8,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -106,6 +108,25 @@ func ComputeFileSHA256(path string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
+func newResilientHTTPClient() *http.Client {
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   10 * time.Second,
+			KeepAlive: 15 * time.Second,
+		}).DialContext,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 15 * time.Second,
+		ExpectContinueTimeout: 2 * time.Second,
+		IdleConnTimeout:       30 * time.Second,
+		DisableKeepAlives:     true, // Always use a fresh socket on resume/reconnect after Wi-Fi change
+	}
+	return &http.Client{
+		Transport: transport,
+		Timeout:   0,
+	}
+}
+
 func DownloadISOWithResume(
 	ctx context.Context,
 	release string,
@@ -141,78 +162,18 @@ func DownloadISOWithResume(
 	}
 
 	partPath := finalPath + ".part"
-	var existingOffset int64
+	var downloaded int64
 	if st, err := os.Stat(partPath); err == nil {
-		existingOffset = st.Size()
+		downloaded = st.Size()
 	}
 
-	client := &http.Client{Timeout: 0}
-	tryOpenURL := func(url string) (*http.Response, error) {
-		req, rErr := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-		if rErr != nil {
-			return nil, rErr
-		}
-		if existingOffset > 0 {
-			req.Header.Set("Range", fmt.Sprintf("bytes=%d-", existingOffset))
-		}
-		return client.Do(req)
-	}
-
-	resp, err := tryOpenURL(mirror.PrimaryURL)
-	if err != nil || (resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent) {
-		if resp != nil {
-			_ = resp.Body.Close()
-		}
-		if dynFile, dynURL := discoverLiveISOFromReleaseIndex(ctx, cleanRel); dynURL != "" {
-			mirror.Filename = dynFile
-			finalPath = filepath.Join(cacheDir, dynFile)
-			partPath = finalPath + ".part"
-			if st, sErr := os.Stat(partPath); sErr == nil {
-				existingOffset = st.Size()
-			} else {
-				existingOffset = 0
-			}
-			resp, err = tryOpenURL(dynURL)
-		}
-	}
-	if err != nil || resp == nil || (resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent) {
-		if resp != nil {
-			_ = resp.Body.Close()
-		}
-		resp, err = tryOpenURL(mirror.MirrorURL)
-		if err != nil {
-			return "", fmt.Errorf("IS-ISO-106: Ubuntu mirror download failed: %w", err)
-		}
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
-		return "", fmt.Errorf("IS-ISO-106: Ubuntu release mirror returned HTTP %d", resp.StatusCode)
-	}
-
-	flags := os.O_CREATE | os.O_WRONLY
-	if resp.StatusCode == http.StatusPartialContent && existingOffset > 0 {
-		flags |= os.O_APPEND
-	} else {
-		flags |= os.O_TRUNC
-		existingOffset = 0
-	}
-
-	outFile, err := os.OpenFile(partPath, flags, 0644)
-	if err != nil {
-		return "", err
-	}
-	defer outFile.Close()
-
-	totalSize := existingOffset + resp.ContentLength
-	if totalSize <= 0 {
-		totalSize = 2640 * 1024 * 1024
-	}
-
+	var totalSize int64 = 2640 * 1024 * 1024
+	activeURL := mirror.PrimaryURL
 	buf := make([]byte, 512*1024)
-	downloaded := existingOffset
-	startTime := time.Now()
 	var lastProgressEmit time.Time
+
+	const maxConsecutiveNetRetries = 60
+	retryCount := 0
 
 	for {
 		if pauseGate != nil {
@@ -226,43 +187,229 @@ func DownloadISOWithResume(
 		default:
 		}
 
-		n, rErr := resp.Body.Read(buf)
-		if n > 0 {
-			if _, wErr := outFile.Write(buf[:n]); wErr != nil {
-				return "", wErr
+		if st, err := os.Stat(partPath); err == nil {
+			downloaded = st.Size()
+		}
+
+		client := newResilientHTTPClient()
+		attemptCtx, cancelAttempt := context.WithCancel(ctx)
+		var lastActivityNano int64
+		atomic.StoreInt64(&lastActivityNano, time.Now().UnixNano())
+
+		// Watchdog closes stalled TCP sockets within 12 seconds if Wi-Fi drops silently
+		watchdogDone := make(chan struct{})
+		go func() {
+			ticker := time.NewTicker(2 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-watchdogDone:
+					return
+				case <-attemptCtx.Done():
+					return
+				case <-ticker.C:
+					if pauseGate != nil && pauseGate.IsPaused() {
+						// Close the open HTTP stream immediately on Pause so Resume always opens a fresh socket
+						cancelAttempt()
+						return
+					}
+					last := time.Unix(0, atomic.LoadInt64(&lastActivityNano))
+					if time.Since(last) > 12*time.Second {
+						cancelAttempt()
+						return
+					}
+				}
 			}
-			downloaded += int64(n)
-			elapsed := time.Since(startTime).Seconds()
-			if elapsed <= 0.001 {
-				elapsed = 0.001
+		}()
+
+		tryOpen := func(u string) (*http.Response, error) {
+			req, rErr := http.NewRequestWithContext(attemptCtx, http.MethodGet, u, nil)
+			if rErr != nil {
+				return nil, rErr
 			}
-			speedMB := (float64(downloaded-existingOffset) / 1048576.0) / elapsed
-			pct := int((downloaded * 100) / totalSize)
-			if pct > 100 {
-				pct = 100
+			if downloaded > 0 {
+				req.Header.Set("Range", fmt.Sprintf("bytes=%d-", downloaded))
 			}
-			if onProgress != nil && (time.Since(lastProgressEmit) >= 160*time.Millisecond || pct >= 100 || errors.Is(rErr, io.EOF)) {
-				lastProgressEmit = time.Now()
+			return client.Do(req)
+		}
+
+		resp, err := tryOpen(activeURL)
+		if err != nil || (resp != nil && resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent) {
+			if resp != nil {
+				_ = resp.Body.Close()
+			}
+			if dynFile, dynURL := discoverLiveISOFromReleaseIndex(attemptCtx, cleanRel); dynURL != "" {
+				mirror.Filename = dynFile
+				finalPath = filepath.Join(cacheDir, dynFile)
+				partPath = finalPath + ".part"
+				if st, sErr := os.Stat(partPath); sErr == nil {
+					downloaded = st.Size()
+				}
+				activeURL = dynURL
+				resp, err = tryOpen(activeURL)
+			}
+		}
+		if err != nil || resp == nil || (resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent) {
+			if resp != nil {
+				_ = resp.Body.Close()
+			}
+			activeURL = mirror.MirrorURL
+			resp, err = tryOpen(activeURL)
+		}
+
+		if err != nil || resp == nil || (resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent) {
+			if resp != nil {
+				_ = resp.Body.Close()
+			}
+			close(watchdogDone)
+			cancelAttempt()
+
+			if ctx.Err() != nil {
+				return "", ctx.Err()
+			}
+			if pauseGate != nil && pauseGate.IsPaused() {
+				continue
+			}
+
+			retryCount++
+			if retryCount > maxConsecutiveNetRetries {
+				if err != nil {
+					return "", fmt.Errorf("IS-ISO-106: Ubuntu mirror download interrupted at %d bytes (saved as .part): %w", downloaded, err)
+				}
+				return "", fmt.Errorf("IS-ISO-106: Ubuntu release mirror unreachable at %d bytes (saved as .part)", downloaded)
+			}
+			if onProgress != nil {
+				pct := int((downloaded * 100) / totalSize)
+				if pct > 99 {
+					pct = 99
+				}
 				onProgress(FlashProgressEvent{
 					Stage:        "DOWNLOADING_ISO",
 					Percent:      pct,
 					WrittenBytes: downloaded,
 					TotalBytes:   totalSize,
-					SpeedMBps:    speedMB,
-					Message:      fmt.Sprintf("Downloading %s: %.1f / %.1f MB @ %.1f MB/s", mirror.Filename, float64(downloaded)/1048576.0, float64(totalSize)/1048576.0, speedMB),
+					SpeedMBps:    0,
+					Message:      fmt.Sprintf("Waiting for Wi-Fi / network to resume from %.1f MB (saved as .part)...", float64(downloaded)/1048576.0),
 				})
 			}
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-time.After(2 * time.Second):
+			}
+			continue
 		}
-		if errors.Is(rErr, io.EOF) {
+
+		flags := os.O_CREATE | os.O_WRONLY
+		if resp.StatusCode == http.StatusPartialContent && downloaded > 0 {
+			flags |= os.O_APPEND
+		} else if resp.StatusCode == http.StatusOK {
+			flags |= os.O_TRUNC
+			downloaded = 0
+		}
+
+		if resp.ContentLength > 0 {
+			totalSize = downloaded + resp.ContentLength
+		}
+
+		outFile, fErr := os.OpenFile(partPath, flags, 0644)
+		if fErr != nil {
+			_ = resp.Body.Close()
+			close(watchdogDone)
+			cancelAttempt()
+			return "", fErr
+		}
+
+		streamStartTime := time.Now()
+		streamStartBytes := downloaded
+		var readErr error
+
+		for {
+			if pauseGate != nil && pauseGate.IsPaused() {
+				readErr = errors.New("paused")
+				break
+			}
+			n, rErr := resp.Body.Read(buf)
+			if n > 0 {
+				atomic.StoreInt64(&lastActivityNano, time.Now().UnixNano())
+				retryCount = 0 // Reset network retry counter whenever bytes arrive
+				if _, wErr := outFile.Write(buf[:n]); wErr != nil {
+					_ = outFile.Close()
+					_ = resp.Body.Close()
+					close(watchdogDone)
+					cancelAttempt()
+					return "", wErr
+				}
+				downloaded += int64(n)
+				elapsed := time.Since(streamStartTime).Seconds()
+				if elapsed <= 0.001 {
+					elapsed = 0.001
+				}
+				speedMB := (float64(downloaded-streamStartBytes) / 1048576.0) / elapsed
+				pct := int((downloaded * 100) / totalSize)
+				if pct > 100 {
+					pct = 100
+				}
+				if onProgress != nil && (time.Since(lastProgressEmit) >= 160*time.Millisecond || pct >= 100 || errors.Is(rErr, io.EOF)) {
+					lastProgressEmit = time.Now()
+					onProgress(FlashProgressEvent{
+						Stage:        "DOWNLOADING_ISO",
+						Percent:      pct,
+						WrittenBytes: downloaded,
+						TotalBytes:   totalSize,
+						SpeedMBps:    speedMB,
+						Message:      fmt.Sprintf("Downloading %s: %.1f / %.1f MB @ %.1f MB/s", mirror.Filename, float64(downloaded)/1048576.0, float64(totalSize)/1048576.0, speedMB),
+					})
+				}
+			}
+			if rErr != nil {
+				readErr = rErr
+				break
+			}
+		}
+
+		_ = outFile.Sync()
+		_ = outFile.Close()
+		_ = resp.Body.Close()
+		close(watchdogDone)
+		cancelAttempt()
+
+		if errors.Is(readErr, io.EOF) && downloaded >= totalSize {
 			break
 		}
-		if rErr != nil {
-			return "", fmt.Errorf("IS-ISO-107: download interrupted at %d bytes (saved as .part): %w", downloaded, rErr)
+		if ctx.Err() != nil {
+			return "", fmt.Errorf("IS-ISO-107: download interrupted at %d bytes (saved as .part): %w", downloaded, ctx.Err())
+		}
+		if pauseGate != nil && pauseGate.IsPaused() {
+			// Wait cleanly while paused, then loop around to open a fresh HTTP Range connection on Resume
+			continue
+		}
+
+		retryCount++
+		if retryCount > maxConsecutiveNetRetries {
+			return "", fmt.Errorf("IS-ISO-107: download interrupted at %d bytes (saved as .part): %w", downloaded, readErr)
+		}
+		if onProgress != nil {
+			pct := int((downloaded * 100) / totalSize)
+			if pct > 99 {
+				pct = 99
+			}
+			onProgress(FlashProgressEvent{
+				Stage:        "DOWNLOADING_ISO",
+				Percent:      pct,
+				WrittenBytes: downloaded,
+				TotalBytes:   totalSize,
+				SpeedMBps:    0,
+				Message:      fmt.Sprintf("Reconnecting & resuming download from %.1f MB (saved as .part)...", float64(downloaded)/1048576.0),
+			})
+		}
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(1500 * time.Millisecond):
 		}
 	}
 
-	_ = outFile.Sync()
-	_ = outFile.Close()
 	if err := os.Rename(partPath, finalPath); err != nil {
 		return "", err
 	}

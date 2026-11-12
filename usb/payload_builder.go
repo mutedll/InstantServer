@@ -415,9 +415,25 @@ func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
 		}
 	}
 
-	ethSection := `      eth_lan:
+	// IMPORTANT (Ubuntu 24.04 / 26.04 Subiquity & Curtin Netplan Guardrail):
+	// Never place a `wifis:` block with `match: name: "wl*"` inside `autoinstall: network:`:
+	// 1. Netplan's `networkd` backend passes the YAML key as `-i <key>` to `wpa_supplicant` and fails with exit code 1
+	//    when a wildcard `match` is used or when no Wi-Fi card is present.
+	// 2. Curtin runs `net-meta` inside `/target` BEFORE `late-commands` installs `wpasupplicant_*.deb` into `/target`,
+	//    causing `netplan` to fail with "couldn't find wpa_supplicant / interface" and exit code 1.
+	// Instead, keep `autoinstall: network:` as fault-tolerant optional Ethernet (`en*` and `eth*`), bring up live Wi-Fi
+	// safely in `early-commands` (`|| true`), and configure `/etc/netplan/60-instant-wifi.yaml` with the exact detected
+	// kernel wireless interface name in `late-commands` after `wpasupplicant` is installed in `/target`.
+	ethSection := `      eth_en:
         match:
           name: "en*"
+        dhcp4: true
+        dhcp4-overrides:
+          route-metric: 100
+        optional: true
+      eth_legacy:
+        match:
+          name: "eth*"
         dhcp4: true
         dhcp4-overrides:
           route-metric: 100
@@ -427,7 +443,7 @@ func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
 		if len(cfg.StaticDNS) > 0 {
 			dnsList = `"` + strings.Join(cfg.StaticDNS, `", "`) + `"`
 		}
-		ethSection = fmt.Sprintf(`      eth_lan:
+		ethSection = fmt.Sprintf(`      eth_en:
         match:
           name: "en*"
         dhcp4: false
@@ -439,6 +455,11 @@ func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
             metric: 100
         nameservers:
           addresses: [%s]
+        optional: true
+      eth_legacy:
+        match:
+          name: "eth*"
+        dhcp4: true
         optional: true`, strings.TrimSpace(cfg.StaticIPCIDR), strings.TrimSpace(cfg.StaticGateway), dnsList)
 	}
 
@@ -454,35 +475,19 @@ func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
         optional: true`
 	}
 
-	wifiSection := ""
-	if strings.TrimSpace(cfg.WifiSSID) != "" {
-		safeSSID := strings.ReplaceAll(strings.TrimSpace(cfg.WifiSSID), `"`, `\"`)
-		safePSK := strings.ReplaceAll(cfg.WifiPassword, `"`, `\"`)
-		authLine := ""
-		if safePSK != "" {
-			authLine = fmt.Sprintf("\n            password: \"%s\"", safePSK)
-		}
-		wifiSection = fmt.Sprintf(`
-    wifis:
-      wlan_failover:
-        match:
-          name: "wl*"
-        dhcp4: true
-        dhcp4-overrides:
-          route-metric: 600
-        optional: true
-        access-points:
-          "%s":%s`, safeSSID, authLine)
-	}
-
-	// Always inhibit sleep/suspend, unblock rfkill Wi-Fi radios, ignore laptop lid close, mount CIDATA at /mnt/cidata,
-	// and run select_target_disk.sh to pin the internal non-USB disk and prevent infinite reboot loops.
-	liveNoSleepCmds := `    - rfkill unblock all 2>/dev/null || true
+	// Always start crash-proof live USB logging first (`start_usb_logger.sh`), inhibit sleep/suspend,
+	// unblock rfkill Wi-Fi radios, ignore laptop lid close, mount CIDATA & INSTANTUSB rw+sync,
+	// and run select_target_disk.sh to pin the internal non-USB disk and settle udev before Subiquity runs netplan.
+	liveNoSleepCmds := `    - mkdir -p /mnt/cidata /mnt/usb_logs
+    - cdev=$(blkid -L CIDATA 2>/dev/null || blkid -L cidata 2>/dev/null || true); [ -n "$cdev" ] && (mount -o rw,sync,flush,noatime "$cdev" /mnt/cidata 2>/dev/null || mount -o remount,rw,sync,flush /mnt/cidata 2>/dev/null || true)
+    - udev=$(blkid -L INSTANTUSB 2>/dev/null || true); [ -n "$udev" ] && (mount -o rw,sync,flush,noatime "$udev" /mnt/usb_logs 2>/dev/null || true)
+    - bash /mnt/cidata/start_usb_logger.sh 2>/dev/null || bash /cdrom/cidata/start_usb_logger.sh 2>/dev/null || true
+    - rfkill unblock all 2>/dev/null || true
     - systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target 2>/dev/null || true
-    - mkdir -p /etc/systemd/logind.conf.d /mnt/cidata && printf "[Login]\nHandleLidSwitch=ignore\nHandleLidSwitchExternalPower=ignore\nHandleLidSwitchDocked=ignore\nIdleAction=ignore\n" > /etc/systemd/logind.conf.d/00-live-nosleep.conf && systemctl restart systemd-logind 2>/dev/null || true
-    - cdev=$(blkid -L CIDATA 2>/dev/null || blkid -L cidata 2>/dev/null || true); [ -n "$cdev" ] && mount -o ro "$cdev" /mnt/cidata 2>/dev/null || true
+    - mkdir -p /etc/systemd/logind.conf.d && printf "[Login]\nHandleLidSwitch=ignore\nHandleLidSwitchExternalPower=ignore\nHandleLidSwitchDocked=ignore\nIdleAction=ignore\n" > /etc/systemd/logind.conf.d/00-live-nosleep.conf && systemctl restart systemd-logind 2>/dev/null || true
     - touch /run/casper-no-prompt 2>/dev/null || true
-    - bash /mnt/cidata/select_target_disk.sh 2>/dev/null || bash /cdrom/cidata/select_target_disk.sh 2>/dev/null || true`
+    - bash /mnt/cidata/select_target_disk.sh 2>/dev/null || bash /cdrom/cidata/select_target_disk.sh 2>/dev/null || true
+    - udevadm settle --timeout=15 2>/dev/null || true`
 
 	var earlyCommandsBlock string
 	var storageBlock string
@@ -497,6 +502,7 @@ func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
 		earlyCommandsBlock = fmt.Sprintf(`  early-commands:
 %s
     - bash /mnt/cidata/dynamic_dualboot_storage.sh %d 2>/dev/null || bash /cdrom/cidata/dynamic_dualboot_storage.sh %d 2>/dev/null || bash /cdrom/dynamic_dualboot_storage.sh %d 2>/dev/null || true
+    - udevadm settle --timeout=15 2>/dev/null || true
 `, liveNoSleepCmds, allocGB, allocGB, allocGB)
 		storageBlock = fmt.Sprintf(`  storage:
     layout:
@@ -572,6 +578,9 @@ func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
 autoinstall:
   version: 1
   shutdown: reboot
+  apt:
+    fallback: offline-install
+    geoip: false
   identity:
     hostname: %s
     username: %s
@@ -582,18 +591,26 @@ autoinstall:
   network:
     version: 2
     ethernets:
-%s%s%s
+%s%s
 %s%s
   late-commands:
-    - mkdir -p /target/opt/instant-server /target/opt/instant-server/debs /mnt/cidata
-    - cdev=$(blkid -L CIDATA 2>/dev/null || blkid -L cidata 2>/dev/null || true); [ -n "$cdev" ] && mount -o ro "$cdev" /mnt/cidata 2>/dev/null || true
+    - mkdir -p /target/opt/instant-server /target/opt/instant-server/debs /mnt/cidata /mnt/usb_logs
+    - cdev=$(blkid -L CIDATA 2>/dev/null || blkid -L cidata 2>/dev/null || true); [ -n "$cdev" ] && (mount -o rw,sync,flush,noatime "$cdev" /mnt/cidata 2>/dev/null || mount -o remount,rw,sync,flush /mnt/cidata 2>/dev/null || true)
+    - udev=$(blkid -L INSTANTUSB 2>/dev/null || true); [ -n "$udev" ] && (mount -o rw,sync,flush,noatime "$udev" /mnt/usb_logs 2>/dev/null || true)
     - cp -rf /mnt/cidata/* /target/opt/instant-server/ 2>/dev/null || cp -rf /cdrom/cidata/* /target/opt/instant-server/ 2>/dev/null || cp -rf /cdrom/* /target/opt/instant-server/ 2>/dev/null || true
     - find /cdrom/pool -type f \( -name "wpasupplicant*.deb" -o -name "wireless-tools*.deb" -o -name "libnl-*.deb" -o -name "libpcsclite*.deb" -o -name "rfkill*.deb" -o -name "ethtool*.deb" \) -exec cp -f {} /target/opt/instant-server/debs/ \; 2>/dev/null || true%s
     - date +%%s > /target/opt/instant-server/.install_complete_epoch 2>/dev/null || true
     - touch /run/casper-no-prompt 2>/dev/null || true
-    - curtin in-target -- chmod +x /opt/instant-server/laptop_hardening.sh
-    - curtin in-target -- bash /opt/instant-server/laptop_hardening.sh
-`, host, user, hashedPass, sshKeysBlock, ethSection, usbTetherSection, wifiSection, earlyCommandsBlock, storageBlock, extraLateCommands)
+    - curtin in-target -- chmod +x /opt/instant-server/laptop_hardening.sh 2>/dev/null || true
+    - curtin in-target -- bash /opt/instant-server/laptop_hardening.sh >> /mnt/cidata/INSTANT-SERVER-INSTALL.log 2>&1 || true
+    - cp -f /mnt/cidata/INSTANT-SERVER-INSTALL.log /mnt/usb_logs/INSTANT-SERVER-INSTALL.log 2>/dev/null || true
+    - cp -f /mnt/cidata/INSTANT-SERVER-INSTALL.log /target/var/log/instant-server-install.log 2>/dev/null || true
+    - bash /mnt/cidata/dump_error_logs_to_usb.sh SUCCESS 2>/dev/null || true
+    - sync
+  error-commands:
+    - bash /mnt/cidata/dump_error_logs_to_usb.sh ERROR 2>/dev/null || bash /cdrom/cidata/dump_error_logs_to_usb.sh ERROR 2>/dev/null || true
+    - sync
+`, host, user, hashedPass, sshKeysBlock, ethSection, usbTetherSection, earlyCommandsBlock, storageBlock, extraLateCommands)
 }
 
 func GenerateTargetEnvConf(cfg ServerProfileConfig) string {
@@ -664,6 +681,12 @@ func GenerateTargetEnvConf(cfg ServerProfileConfig) string {
 
 	return fmt.Sprintf(`INSTANT_HOSTNAME=%q
 INSTANT_USERNAME=%q
+INSTANT_WIFI_SSID=%q
+INSTANT_WIFI_PASSWORD=%q
+INSTANT_STATIC_IP_CIDR=%q
+INSTANT_STATIC_GATEWAY=%q
+INSTANT_STATIC_DNS=%q
+INSTANT_USB_TETHERING=%q
 INSTANT_IGNORE_LID_SWITCH=%q
 INSTANT_SCREEN_BLANK_SEC=%q
 INSTANT_BAT_START_THRESH=%q
@@ -695,6 +718,12 @@ INSTANT_SELECTED_APPS=%q
 `,
 		host,
 		user,
+		strings.TrimSpace(cfg.WifiSSID),
+		cfg.WifiPassword,
+		strings.TrimSpace(cfg.StaticIPCIDR),
+		strings.TrimSpace(cfg.StaticGateway),
+		strings.Join(cfg.StaticDNS, ","),
+		bool01(cfg.EnableUSBTethering),
 		bool01(cfg.IgnoreLidSwitch),
 		strconv.Itoa(blankSec),
 		strconv.Itoa(batStart),
@@ -762,9 +791,206 @@ func StageCIDATAPayload(targetDir string, cfg ServerProfileConfig, hardeningScri
 	if err := writeItem("meta-data", metaData, 0644); err != nil {
 		return nil, err
 	}
+	// Crash-Proof Real-Time USB Logger:
+	// Mounts both CIDATA and INSTANTUSB with `rw,sync,flush,noatime` and streams every boot, hardware,
+	// early-commands, Subiquity, Curtin, Netplan, and kernel message directly onto the USB drive
+	// (`INSTANT-SERVER-INSTALL.log`) every 2 seconds with hardware `sync` so logs survive force shutdowns.
+	startUSBLoggerScript := []byte(`#!/usr/bin/env bash
+set -uo pipefail
+mkdir -p /mnt/cidata /mnt/usb_logs
+CDEV=$(blkid -L CIDATA 2>/dev/null || blkid -L cidata 2>/dev/null || true)
+UDEV=$(blkid -L INSTANTUSB 2>/dev/null || true)
+if [ -n "$CDEV" ]; then
+    mount -o rw,sync,flush,noatime "$CDEV" /mnt/cidata 2>/dev/null || mount -o remount,rw,sync,flush /mnt/cidata 2>/dev/null || true
+fi
+if [ -n "$UDEV" ]; then
+    mount -o rw,sync,flush,noatime "$UDEV" /mnt/usb_logs 2>/dev/null || mount -o remount,rw,sync,flush /mnt/usb_logs 2>/dev/null || true
+fi
+mkdir -p /mnt/cidata/logs /mnt/usb_logs/logs 2>/dev/null || true
+
+LOG_A="/mnt/cidata/INSTANT-SERVER-INSTALL.log"
+LOG_B="/mnt/usb_logs/INSTANT-SERVER-INSTALL.log"
+
+write_both() {
+    cat >> "$LOG_A" 2>/dev/null || true
+    if mountpoint -q /mnt/usb_logs 2>/dev/null; then
+        cp -f "$LOG_A" "$LOG_B" 2>/dev/null || true
+    fi
+    sync
+}
+
+{
+    echo "================================================================================"
+    echo " INSTANT SERVER LIVE USB INSTALLATION & DIAGNOSTICS LOG"
+    echo " Started at (UTC): $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+    echo "================================================================================"
+    if [ -d /sys/firmware/efi ]; then
+        echo "[BOOT MODE] UEFI Mode"
+    else
+        echo "[BOOT MODE] Legacy BIOS / CSM Mode"
+    fi
+    echo "[KERNEL CMDLINE] $(cat /proc/cmdline 2>/dev/null || true)"
+    echo "[HARDWARE DMI] Vendor=$(cat /sys/class/dmi/id/sys_vendor 2>/dev/null || echo unknown) | Product=$(cat /sys/class/dmi/id/product_name 2>/dev/null || echo unknown) | BIOS=$(cat /sys/class/dmi/id/bios_version 2>/dev/null || echo unknown)"
+    echo "--- MEMORY ---"
+    free -h 2>/dev/null || true
+    echo "--- BLOCK DEVICES (lsblk) ---"
+    lsblk -o NAME,SIZE,TYPE,FSTYPE,LABEL,RM,ROTA,MOUNTPOINT,MODEL 2>/dev/null || true
+    echo "--- BLKID ---"
+    blkid 2>/dev/null || true
+    echo "--- NETWORK INTERFACES (ip -br link / addr) ---"
+    ip -br link 2>/dev/null || true
+    ip -br addr 2>/dev/null || true
+    echo "--- PCI & USB NETWORK ADAPTERS ---"
+    lspci -nnk 2>/dev/null | grep -A3 -iE "net|eth|wireless|wifi" || true
+    lsusb 2>/dev/null || true
+    rfkill list 2>/dev/null || true
+    echo "================================================================================"
+} | write_both
+
+if [ ! -f /run/instant-usb-log-daemon.pid ]; then
+    nohup bash /mnt/cidata/usb_log_daemon.sh >/dev/null 2>&1 &
+    echo $! > /run/instant-usb-log-daemon.pid
+fi
+exit 0
+`)
+	if err := writeItem("start_usb_logger.sh", NormalizeShellScriptLF(startUSBLoggerScript), 0755); err != nil {
+		return nil, err
+	}
+
+	usbLogDaemonScript := []byte(`#!/usr/bin/env bash
+set -uo pipefail
+LOG_A="/mnt/cidata/INSTANT-SERVER-INSTALL.log"
+LOG_B="/mnt/usb_logs/INSTANT-SERVER-INSTALL.log"
+LAST_J_LINES=0
+LAST_SUB_LINES=0
+LAST_CUR_LINES=0
+
+while true; do
+    {
+        if command -v journalctl >/dev/null 2>&1; then
+            TOTAL_J=$(journalctl -b --no-pager 2>/dev/null | wc -l || echo 0)
+            if [ "${TOTAL_J:-0}" -gt "$LAST_J_LINES" ]; then
+                NEW_CNT=$((TOTAL_J - LAST_J_LINES))
+                echo "--- [JOURNALCTL +${NEW_CNT} lines @ $(date -u '+%H:%M:%S')] ---"
+                journalctl -b --no-pager 2>/dev/null | tail -n "$NEW_CNT" | grep -E -i "subiquity|curtin|netplan|networkd|wpa|cloud-init|instant-server|error|fail|warn|parted|sfdisk|sgdisk|grub|mount" || true
+                LAST_J_LINES="$TOTAL_J"
+            fi
+        fi
+        if [ -f /var/log/installer/subiquity-server-debug.log ]; then
+            TOTAL_S=$(wc -l < /var/log/installer/subiquity-server-debug.log 2>/dev/null || echo 0)
+            if [ "${TOTAL_S:-0}" -gt "$LAST_SUB_LINES" ]; then
+                NEW_S=$((TOTAL_S - LAST_SUB_LINES))
+                echo "--- [SUBIQUITY DEBUG +${NEW_S} lines @ $(date -u '+%H:%M:%S')] ---"
+                tail -n "$NEW_S" /var/log/installer/subiquity-server-debug.log 2>/dev/null | tail -n 80 || true
+                LAST_SUB_LINES="$TOTAL_S"
+            fi
+            cp -f /var/log/installer/subiquity-server-debug.log /mnt/cidata/logs/subiquity-server-debug.log 2>/dev/null || true
+        fi
+        if [ -f /var/log/installer/curtin-install.log ]; then
+            TOTAL_C=$(wc -l < /var/log/installer/curtin-install.log 2>/dev/null || echo 0)
+            if [ "${TOTAL_C:-0}" -gt "$LAST_CUR_LINES" ]; then
+                NEW_C=$((TOTAL_C - LAST_CUR_LINES))
+                echo "--- [CURTIN INSTALL +${NEW_C} lines @ $(date -u '+%H:%M:%S')] ---"
+                tail -n "$NEW_C" /var/log/installer/curtin-install.log 2>/dev/null | tail -n 80 || true
+                LAST_CUR_LINES="$TOTAL_C"
+            fi
+            cp -f /var/log/installer/curtin-install.log /mnt/cidata/logs/curtin-install.log 2>/dev/null || true
+        fi
+    } >> "$LOG_A" 2>/dev/null || true
+
+    if mountpoint -q /mnt/usb_logs 2>/dev/null; then
+        cp -f "$LOG_A" "$LOG_B" 2>/dev/null || true
+        cp -rf /mnt/cidata/logs/* /mnt/usb_logs/logs/ 2>/dev/null || true
+    fi
+    sync
+    sleep 2
+done
+`)
+	if err := writeItem("usb_log_daemon.sh", NormalizeShellScriptLF(usbLogDaemonScript), 0755); err != nil {
+		return nil, err
+	}
+
+	dumpErrorLogsScript := []byte(`#!/usr/bin/env bash
+set -uo pipefail
+STATUS="${1:-ERROR}"
+mkdir -p /mnt/cidata/logs /mnt/usb_logs/logs
+CDEV=$(blkid -L CIDATA 2>/dev/null || blkid -L cidata 2>/dev/null || true)
+UDEV=$(blkid -L INSTANTUSB 2>/dev/null || true)
+[ -n "$CDEV" ] && (mount -o rw,sync,flush,noatime "$CDEV" /mnt/cidata 2>/dev/null || mount -o remount,rw,sync,flush /mnt/cidata 2>/dev/null || true)
+[ -n "$UDEV" ] && (mount -o rw,sync,flush,noatime "$UDEV" /mnt/usb_logs 2>/dev/null || mount -o remount,rw,sync,flush /mnt/usb_logs 2>/dev/null || true)
+
+LOG_A="/mnt/cidata/INSTANT-SERVER-INSTALL.log"
+LOG_B="/mnt/usb_logs/INSTANT-SERVER-INSTALL.log"
+
+{
+    echo ""
+    echo "================================================================================"
+    echo " FINAL INSTALLER SNAPSHOT (STATUS: ${STATUS}) @ $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+    echo "================================================================================"
+    echo "--- /autoinstall.yaml ---"
+    cat /autoinstall.yaml 2>/dev/null || true
+    echo "--- LIVE /etc/netplan/*.yaml ---"
+    head -n 100 /etc/netplan/*.yaml 2>/dev/null || true
+    echo "--- TARGET /target/etc/netplan/*.yaml ---"
+    head -n 100 /target/etc/netplan/*.yaml 2>/dev/null || true
+    echo "--- NETPLAN & IP STATUS ---"
+    ip -br link 2>/dev/null || true
+    ip -br addr 2>/dev/null || true
+    ip route 2>/dev/null || true
+    echo "--- BLOCK DEVICES & MOUNTS ---"
+    lsblk -o NAME,SIZE,TYPE,FSTYPE,LABEL,MOUNTPOINT 2>/dev/null || true
+    echo "--- SUBIQUITY TRACEBACK / CRASH FILES (/var/crash) ---"
+    for cf in /var/crash/*; do
+        [ -f "$cf" ] || continue
+        echo "Crash file: $cf"
+        tail -n 120 "$cf" 2>/dev/null || true
+    done
+    echo "--- LAST 120 LINES OF /var/log/installer/subiquity-server-debug.log ---"
+    tail -n 120 /var/log/installer/subiquity-server-debug.log 2>/dev/null || true
+    echo "--- LAST 120 LINES OF /var/log/installer/curtin-install.log ---"
+    tail -n 120 /var/log/installer/curtin-install.log 2>/dev/null || true
+    echo "--- LAST 100 LINES OF DMESG ---"
+    dmesg 2>/dev/null | tail -n 100 || true
+    echo "================================================================================"
+} >> "$LOG_A" 2>/dev/null || true
+
+cp -f /var/log/installer/subiquity-server-debug.log /mnt/cidata/logs/ 2>/dev/null || true
+cp -f /var/log/installer/curtin-install.log /mnt/cidata/logs/ 2>/dev/null || true
+cp -f /autoinstall.yaml /mnt/cidata/logs/autoinstall-used.yaml 2>/dev/null || true
+
+if mountpoint -q /mnt/usb_logs 2>/dev/null; then
+    cp -f "$LOG_A" "$LOG_B" 2>/dev/null || true
+    cp -rf /mnt/cidata/logs/* /mnt/usb_logs/logs/ 2>/dev/null || true
+fi
+sync
+sync
+if [ "$STATUS" = "ERROR" ]; then
+    printf "
+[INSTANT SERVER] Installation error logs saved to INSTANT-SERVER-INSTALL.log on your USB drive.
+" > /dev/console 2>/dev/null || true
+    printf "
+[INSTANT SERVER] Installation error logs saved to INSTANT-SERVER-INSTALL.log on your USB drive.
+" > /dev/tty1 2>/dev/null || true
+fi
+exit 0
+`)
+	if err := writeItem("dump_error_logs_to_usb.sh", NormalizeShellScriptLF(dumpErrorLogsScript), 0755); err != nil {
+		return nil, err
+	}
+
 	selectDiskHelper := []byte(`#!/usr/bin/env bash
 set -uo pipefail
-# 1. Identify both the ISO/cdrom disk and the CIDATA disk so Subiquity NEVER overwrites installer media
+LOG_A="/mnt/cidata/INSTANT-SERVER-INSTALL.log"
+log_usb() {
+    printf '[select_target_disk] %s
+' "$*" | tee -a "$LOG_A" 2>/dev/null || true
+    if mountpoint -q /mnt/usb_logs 2>/dev/null; then
+        cp -f "$LOG_A" /mnt/usb_logs/INSTANT-SERVER-INSTALL.log 2>/dev/null || true
+    fi
+    sync
+}
+
+# 1. Identify both the ISO/cdrom disk and the CIDATA/INSTANTUSB disk so Subiquity NEVER overwrites installer media
 CDROM_PART=$(findmnt -n -o SOURCE /cdrom 2>/dev/null || true)
 CIDATA_PART=$(blkid -L CIDATA 2>/dev/null || blkid -L cidata 2>/dev/null || true)
 USB_DISK=""
@@ -777,6 +1003,12 @@ if [ -n "$CIDATA_PART" ]; then
     PK2=$(lsblk -no PKNAME "$CIDATA_PART" 2>/dev/null | head -n1)
     if [ -n "$PK2" ]; then CIDATA_DISK="/dev/${PK2}"; else CIDATA_DISK="$CIDATA_PART"; fi
     [ -z "$USB_DISK" ] && USB_DISK="$CIDATA_DISK"
+fi
+log_usb "Detected installer media: USB_DISK=${USB_DISK} CIDATA_DISK=${CIDATA_DISK}"
+
+# 1b. Fix any backup GPT header warning on the USB drive itself if sgdisk is present
+if [ -n "$USB_DISK" ] && command -v sgdisk >/dev/null 2>&1; then
+    sgdisk -e "$USB_DISK" >/dev/null 2>&1 || true
 fi
 
 # 2. Guard against infinite reinstall loop if user left the USB plugged in during automatic reboot
@@ -791,7 +1023,7 @@ for part in $(lsblk -lnpo NAME,FSTYPE | awk '$2 == "ext4" {print $1}'); do
             DIFF=$((NOW - STAMP))
             if [ "$DIFF" -ge 0 ] && [ "$DIFF" -lt 1800 ]; then
                 umount /mnt/check_existing 2>/dev/null || true
-                echo "[instant-server] Fresh installation detected on $part (${DIFF}s ago). Rebooting into installed OS..."
+                log_usb "Fresh installation detected on $part (${DIFF}s ago). Rebooting into installed OS..."
                 touch /run/casper-no-prompt 2>/dev/null || true
                 sync
                 reboot -f
@@ -802,7 +1034,7 @@ for part in $(lsblk -lnpo NAME,FSTYPE | awk '$2 == "ext4" {print $1}'); do
     fi
 done
 
-# 3. Pin largest internal non-USB disk in /autoinstall.yaml so a large USB stick or VM seed disk never wipes itself
+# 3. Pin largest internal non-USB disk in /autoinstall.yaml so a large USB stick never wipes itself
 BEST_DISK=""
 BEST_SIZE=0
 while read -r dname dsize drm dtype; do
@@ -816,13 +1048,75 @@ while read -r dname dsize drm dtype; do
     fi
 done < <(lsblk -dbnpo NAME,SIZE,RM,TYPE 2>/dev/null)
 
+# Fallback for older laptops whose SATA/eMMC controller marks internal drives with RM=1
+if [ -z "$BEST_DISK" ]; then
+    while read -r dname dsize drm dtype; do
+        [ "$dtype" = "disk" ] || continue
+        [ -n "$USB_DISK" ] && [ "$dname" = "$USB_DISK" ] && continue
+        [ -n "$CIDATA_DISK" ] && [ "$dname" = "$CIDATA_DISK" ] && continue
+        [[ "$dname" == /dev/loop* || "$dname" == /dev/ram* || "$dname" == /dev/zram* || "$dname" == /dev/sr* ]] && continue
+        if [ "${dsize:-0}" -gt "$BEST_SIZE" ]; then
+            BEST_SIZE="$dsize"
+            BEST_DISK="$dname"
+        fi
+    done < <(lsblk -dbnpo NAME,SIZE,RM,TYPE 2>/dev/null)
+fi
+
 if [ -n "$BEST_DISK" ]; then
     echo "$BEST_DISK" > /run/instant-target-disk
+    # Release any active swap, LVM, mdadm, or leftover mounts on BEST_DISK from a prior interrupted install
+    swapoff -a 2>/dev/null || true
+    for p in $(lsblk -lnpo NAME "$BEST_DISK" 2>/dev/null | tail -n +2); do
+        umount -lf "$p" 2>/dev/null || true
+    done
+    vgchange -an >/dev/null 2>&1 || true
+    mdadm --stop --scan >/dev/null 2>&1 || true
+    if command -v sgdisk >/dev/null 2>&1; then
+        sgdisk -e "$BEST_DISK" >/dev/null 2>&1 || true
+    fi
     if [ -f /autoinstall.yaml ]; then
         sed -i "s|size: largest|path: ${BEST_DISK}|g" /autoinstall.yaml 2>/dev/null || true
-        echo "[instant-server] Pinned internal target disk: ${BEST_DISK}"
+        log_usb "Pinned internal target disk: ${BEST_DISK} (${BEST_SIZE} bytes)"
+    fi
+else
+    log_usb "WARNING: No separate internal target disk detected beyond USB_DISK=${USB_DISK}"
+fi
+
+# 4. Bring up live Wi-Fi in the background if configured, WITHOUT putting wifis: into /autoinstall.yaml
+if [ -f /mnt/cidata/instant-server-env.conf ]; then
+    . /mnt/cidata/instant-server-env.conf
+fi
+if [ -n "${INSTANT_WIFI_SSID:-}" ]; then
+    find /cdrom/pool -type f \( -name "libnl-*.deb" -o -name "libpcsclite*.deb" -o -name "wpasupplicant*.deb" -o -name "wireless-tools*.deb" -o -name "rfkill*.deb" \) -exec dpkg -i {} + >/dev/null 2>&1 || true
+    WIFI_DEV=""
+    for nd in /sys/class/net/*; do
+        [ -e "$nd" ] || continue
+        if [ -d "$nd/wireless" ] || [ -d "$nd/phy80211" ]; then
+            WIFI_DEV=$(basename "$nd")
+            break
+        fi
+    done
+    if [ -n "$WIFI_DEV" ] && command -v wpa_supplicant >/dev/null 2>&1; then
+        log_usb "Connecting live Wi-Fi interface ${WIFI_DEV} to SSID ${INSTANT_WIFI_SSID}..."
+        ip link set "$WIFI_DEV" up 2>/dev/null || true
+        if [ -n "${INSTANT_WIFI_PASSWORD:-}" ] && command -v wpa_passphrase >/dev/null 2>&1; then
+            wpa_passphrase "$INSTANT_WIFI_SSID" "$INSTANT_WIFI_PASSWORD" > /run/live-wpa.conf 2>/dev/null || true
+        else
+            printf 'network={
+	ssid="%s"
+	key_mgmt=NONE
+}
+' "$INSTANT_WIFI_SSID" > /run/live-wpa.conf
+        fi
+        wpa_supplicant -B -i "$WIFI_DEV" -c /run/live-wpa.conf >/dev/null 2>&1 || true
+        (dhclient -1 "$WIFI_DEV" >/dev/null 2>&1 || networkctl reconfigure "$WIFI_DEV" >/dev/null 2>&1 || true) &
+    else
+        log_usb "No live wireless interface or wpa_supplicant found during early-commands (WIFI_DEV=${WIFI_DEV:-none}); continuing with Ethernet/offline install."
     fi
 fi
+
+udevadm settle --timeout=15 2>/dev/null || true
+exit 0
 `)
 	if err := writeItem("select_target_disk.sh", NormalizeShellScriptLF(selectDiskHelper), 0755); err != nil {
 		return nil, err

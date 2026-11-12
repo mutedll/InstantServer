@@ -18,7 +18,7 @@ const (
 	fatNumTables         = 2
 	fatRootDirEntries    = 512
 	fatRootDirSectors    = (fatRootDirEntries * 32) / fatBytesPerSector // 32 sectors
-	fatTotalClusters     = 4100                                         // > 4085 clusters guarantees strict FAT16 detection in Linux vfat/blkid
+	fatTotalClusters     = 8192                                         // > 4085 clusters guarantees strict FAT16 detection in Linux vfat/blkid
 	fatSectorsPerTable   = 32                                           // 32 * 512 = 16,384 bytes (8,192 FAT16 entries)
 	fatDataStartSector   = fatReservedSectors + (fatNumTables * fatSectorsPerTable) + fatRootDirSectors
 	fatTotalSectors      = fatDataStartSector + (fatTotalClusters * fatSectorsPerCluster)
@@ -156,6 +156,18 @@ func BuildCidataFAT16Image(stageDir string) ([]byte, error) {
 			}
 		}
 	}
+	hasInstallLog := false
+	for _, f := range files {
+		if strings.EqualFold(f.RelName, "INSTANT-SERVER-INSTALL.log") {
+			hasInstallLog = true
+			break
+		}
+	}
+	if !hasInstallLog {
+		initLog := []byte("================================================================================\n INSTANT SERVER USB LOGFILE INITIALIZED\n All boot, Subiquity, Curtin, Netplan, and setup logs are saved here automatically.\n================================================================================\n")
+		files = append(files, fatStagedFile{RelName: "INSTANT-SERVER-INSTALL.log", Data: initLog})
+		totalRequiredClusters += 1
+	}
 	sort.Slice(files, func(i, j int) bool { return files[i].RelName < files[j].RelName })
 
 	// Dynamically size the FAT16 volume so it is always >= 4100 clusters (strict FAT16)
@@ -283,4 +295,151 @@ func BuildCidataFAT16Image(stageDir string) ([]byte, error) {
 // passing an explicit volume label compile cleanly.
 func BuildFAT16CidataVolume(stageDir string, _ string) ([]byte, error) {
 	return BuildCidataFAT16Image(stageDir)
+}
+
+// FormatRemainingUSBAsFAT32 formats the remaining unallocated sectors [startLBA .. endLBA]
+// on the USB drive as a clean, cross-platform FAT32 partition labeled "INSTANTUSB" and pre-creates
+// INSTANT-SERVER-INSTALL.log in its root directory so no USB capacity is wasted and live logs are stored.
+func FormatRemainingUSBAsFAT32(disk RawDiskHandle, startLBA uint64, endLBA uint64) error {
+	if endLBA <= startLBA+65536 {
+		return nil
+	}
+	totalSectors64 := endLBA - startLBA + 1
+	if totalSectors64 > 0xFFFFFFFF {
+		totalSectors64 = 0xFFFFFFFF
+	}
+	totalSectors := uint32(totalSectors64)
+
+	var secPerClus uint32 = 64 // 32 KB clusters (up to 64 GB)
+	if totalSectors > 134217728 {
+		secPerClus = 128 // 64 KB clusters (> 64 GB)
+	} else if totalSectors < 16777216 {
+		secPerClus = 16 // 8 KB clusters (< 8 GB)
+	}
+
+	const reservedSectors uint32 = 32
+	const numFATs uint32 = 2
+	approxClusters := (totalSectors - reservedSectors) / secPerClus
+	fatSectors := ((approxClusters+2)*4 + 511) / 512
+	// Align fatSectors to 8 sectors (4096 bytes) for page-aligned DMA I/O
+	fatSectors = ((fatSectors + 7) / 8) * 8
+	if fatSectors < 128 {
+		fatSectors = 128
+	}
+
+	// 1. Build the 32-sector (16 KB) Reserved Region (Boot Sector @ 0, FSInfo @ 1, Backup @ 6)
+	resBuf := AllocPageAlignedBuffer(int(reservedSectors*512), SectorAlignmentBytes)
+	for i := range resBuf {
+		resBuf[i] = 0
+	}
+
+	writeBootSector := func(b []byte) {
+		b[0], b[1], b[2] = 0xEB, 0x58, 0x90
+		copy(b[3:11], []byte("MSDOS5.0"))
+		binary.LittleEndian.PutUint16(b[11:13], 512)
+		b[13] = byte(secPerClus)
+		binary.LittleEndian.PutUint16(b[14:16], uint16(reservedSectors))
+		b[16] = byte(numFATs)
+		binary.LittleEndian.PutUint16(b[17:19], 0) // RootEntCnt = 0 for FAT32
+		binary.LittleEndian.PutUint16(b[19:21], 0) // TotSec16 = 0
+		b[21] = 0xF8                               // Media
+		binary.LittleEndian.PutUint16(b[22:24], 0) // FATSz16 = 0 for FAT32
+		binary.LittleEndian.PutUint16(b[24:26], 63)
+		binary.LittleEndian.PutUint16(b[26:28], 255)
+		binary.LittleEndian.PutUint32(b[28:32], uint32(startLBA))
+		binary.LittleEndian.PutUint32(b[32:36], totalSectors)
+		// FAT32 Extended BPB
+		binary.LittleEndian.PutUint32(b[36:40], fatSectors)
+		binary.LittleEndian.PutUint16(b[40:42], 0) // ExtFlags
+		binary.LittleEndian.PutUint16(b[42:44], 0) // FSVer
+		binary.LittleEndian.PutUint32(b[44:48], 2) // RootClus = 2
+		binary.LittleEndian.PutUint16(b[48:50], 1) // FSInfo = 1
+		binary.LittleEndian.PutUint16(b[50:52], 6) // BkBootSec = 6
+		b[64] = 0x80
+		b[66] = 0x29
+		binary.LittleEndian.PutUint32(b[67:71], 0x20261112)
+		copy(b[71:82], []byte("INSTANTUSB "))
+		copy(b[82:90], []byte("FAT32   "))
+		b[510] = 0x55
+		b[511] = 0xAA
+	}
+	writeBootSector(resBuf[0:512])
+	writeBootSector(resBuf[6*512 : 7*512])
+
+	writeFSInfo := func(fsi []byte) {
+		binary.LittleEndian.PutUint32(fsi[0:4], 0x41615252)
+		binary.LittleEndian.PutUint32(fsi[484:488], 0x61417272)
+		freeClus := uint32(0xFFFFFFFF)
+		if approxClusters > 4 {
+			freeClus = approxClusters - 4
+		}
+		binary.LittleEndian.PutUint32(fsi[488:492], freeClus)
+		binary.LittleEndian.PutUint32(fsi[492:496], 4) // Next free cluster = 4
+		fsi[510] = 0x55
+		fsi[511] = 0xAA
+	}
+	writeFSInfo(resBuf[1*512 : 2*512])
+	writeFSInfo(resBuf[7*512 : 8*512])
+
+	if _, err := disk.WriteAt(resBuf, int64(startLBA*512)); err != nil {
+		return err
+	}
+
+	// 2. Initialize FAT #1 and FAT #2 (Clusters 0, 1, 2=RootDir, 3=INSTANT-SERVER-INSTALL.log)
+	// Cap zeroing per FAT table to 4 MB (1,048,576 cluster entries) so formatting even 128 GB USB drives is instant (<0.2s).
+	fatInitBytes := int(fatSectors * 512)
+	if fatInitBytes > 4*1024*1024 {
+		fatInitBytes = 4 * 1024 * 1024
+	}
+	fatBuf := AllocPageAlignedBuffer(fatInitBytes, SectorAlignmentBytes)
+	for i := range fatBuf {
+		fatBuf[i] = 0
+	}
+	binary.LittleEndian.PutUint32(fatBuf[0:4], 0x0FFFFFF8)   // Cluster 0: Media
+	binary.LittleEndian.PutUint32(fatBuf[4:8], 0x0FFFFFFF)   // Cluster 1: EOC
+	binary.LittleEndian.PutUint32(fatBuf[8:12], 0x0FFFFFFF)  // Cluster 2: Root Directory
+	binary.LittleEndian.PutUint32(fatBuf[12:16], 0x0FFFFFFF) // Cluster 3: INSTANT-SERVER-INSTALL.log
+
+	fat1StartLBA := startLBA + uint64(reservedSectors)
+	fat2StartLBA := fat1StartLBA + uint64(fatSectors)
+	if err := writeAlignedChunks(disk, fatBuf, int64(fat1StartLBA*512)); err != nil {
+		return err
+	}
+	if err := writeAlignedChunks(disk, fatBuf, int64(fat2StartLBA*512)); err != nil {
+		return err
+	}
+
+	// 3. Initialize Cluster 2 (Root Directory) and Cluster 3 (INSTANT-SERVER-INSTALL.log)
+	clusterBytes := int(secPerClus * 512)
+	dataRegionStartLBA := fat2StartLBA + uint64(fatSectors)
+	twoClustersBuf := AllocPageAlignedBuffer(clusterBytes*2, SectorAlignmentBytes)
+	for i := range twoClustersBuf {
+		twoClustersBuf[i] = 0
+	}
+
+	// Volume Label entry in Root Directory
+	copy(twoClustersBuf[0:11], []byte("INSTANTUSB "))
+	twoClustersBuf[11] = 0x08 // ATTR_VOLUME_ID
+
+	logFileName := "INSTANT-SERVER-INSTALL.log"
+	logContent := []byte("================================================================================\n INSTANT SERVER USB STORAGE & LIVE INSTALLATION LOG\n All boot, Subiquity, Curtin, Netplan, and setup logs are saved here automatically.\n================================================================================\n")
+	shortName := makeShort83Name(logFileName, 1)
+	lfnEntries := buildLFNEntries(logFileName, shortName)
+	cursor := 32
+	for _, lfn := range lfnEntries {
+		copy(twoClustersBuf[cursor:cursor+32], lfn[:])
+		cursor += 32
+	}
+	var stdEnt [32]byte
+	copy(stdEnt[0:11], shortName[:])
+	stdEnt[11] = 0x20                               // ATTR_ARCHIVE
+	binary.LittleEndian.PutUint16(stdEnt[20:22], 0) // FirstClusterHigh = 0
+	binary.LittleEndian.PutUint16(stdEnt[26:28], 3) // FirstClusterLow = 3
+	binary.LittleEndian.PutUint32(stdEnt[28:32], uint32(len(logContent)))
+	copy(twoClustersBuf[cursor:cursor+32], stdEnt[:])
+
+	// Write initial log file content into Cluster 3
+	copy(twoClustersBuf[clusterBytes:clusterBytes+len(logContent)], logContent)
+
+	return writeAlignedChunks(disk, twoClustersBuf, int64(dataRegionStartLBA*512))
 }

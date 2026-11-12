@@ -4777,24 +4777,34 @@
     }
 
     async function togglePauseResumeFlashing() {
-      if (!state.flashing) return;
+      if (!state.flashing && !state.flashPaused) return;
+      if (state.pauseResumeBusy) return;
+      state.pauseResumeBusy = true;
       state.flashOpSeq = (state.flashOpSeq || 0) + 1;
-      if (!state.flashPaused) {
-        state.flashPaused = true;
-        state.activeProgressLine = "⏸ PAUSED │ Downloaded ISO & staged app files are safely held on disk";
-        state.flashStatusText = `Paused at ${state.flashProgress}% — ISO cache & ${state.selected_apps.length} app packages saved. Click Resume to continue.`;
-        state.flashLogs.push(`[PAUSED] Flashing paused at ${state.flashProgress}%. All downloaded ISO bytes and self-hosted app packages are preserved.`);
+      try {
+        if (!state.flashPaused) {
+          state.flashPaused = true;
+          state.activeProgressLine = "⏸ PAUSED │ Progress saved as .part";
+          state.flashStatusText = `Paused at ${state.flashProgress}% (saved as .part). Click Resume to continue.`;
+          state.flashLogs.push(`[PAUSED] Paused at ${state.flashProgress}% (saved as .part).`);
+          updateFlashPanelInPlace();
+          showToast("Paused (saved as .part)");
+          await callBackend("pause", "POST");
+        } else {
+          state.flashPaused = false;
+          state.flashing = true;
+          state.lastResumeEpoch = Date.now();
+          state.activeProgressLine = `⟳ Resuming from ${state.flashProgress}% (.part)...`;
+          state.flashStatusText = `Resuming from ${state.flashProgress}% (saved as .part)...`;
+          state.flashLogs.push(`[RESUMED] Continuing from ${state.flashProgress}% (.part).`);
+          updateFlashPanelInPlace();
+          showToast("Resumed from .part");
+          await callBackend("resume", "POST");
+          state.flashOpSeq = (state.flashOpSeq || 0) + 1;
+        }
+      } finally {
+        state.pauseResumeBusy = false;
         updateFlashPanelInPlace();
-        showToast("Flashing paused — click Resume anytime");
-        await callBackend("pause", "POST");
-      } else {
-        state.flashPaused = false;
-        state.activeProgressLine = `⟳ Resuming from ${state.flashProgress}%...`;
-        state.flashStatusText = `Resuming USB provisioning from ${state.flashProgress}%...`;
-        state.flashLogs.push(`[RESUMED] Continuing from ${state.flashProgress}% without restarting downloads.`);
-        updateFlashPanelInPlace();
-        showToast("Flashing resumed");
-        await callBackend("resume", "POST");
       }
     }
 
@@ -4963,18 +4973,18 @@
       if (startRes && startRes.started) {
         clearInterval(pollTimer);
         pollTimer = setInterval(async () => {
-          if (!state.flashing || state.flashPaused || state.flashCancelled) {
+          if (state.pauseResumeBusy || !state.flashing || state.flashPaused || state.flashCancelled) {
             updateFlashPanelInPlace();
             return;
           }
           const reqSeq = state.flashOpSeq || 0;
           const snap = await callBackend("status", "GET");
           if (!snap) return;
-          if ((state.flashOpSeq || 0) !== reqSeq || !state.flashing || state.flashCancelled) return;
+          if (state.pauseResumeBusy || (state.flashOpSeq || 0) !== reqSeq || !state.flashing || state.flashCancelled) return;
           if (snap.close_warning_requested && window.__showCloseWhileFlashingWarning) {
             window.__showCloseWhileFlashingWarning();
           }
-          if (snap.status === "PAUSED" || state.flashPaused) {
+          if (state.flashPaused || (snap.status === "PAUSED" && (!state.lastResumeEpoch || Date.now() - state.lastResumeEpoch > 1500))) {
             state.flashPaused = true;
             updateFlashPanelInPlace();
             return;
@@ -5401,7 +5411,7 @@ ${storageSnippet}
               </div>
             </div>
             <div style="font-size:12px;color:var(--text-secondary);padding-top:8px;border-top:1px solid var(--divider);line-height:1.45;">
-              <strong>📡 Real-World Speed Expectations (Ethernet vs. 2.4GHz Wi-Fi):</strong> Older laptops with 2.4GHz Wi-Fi cards typically max out at <strong>3–8 MB/s</strong> with higher latency, which can bottleneck 4K Jellyfin streaming, Immich photo backups, and Nextcloud large file transfers. For <strong>10×–20× faster speeds (110+ MB/s)</strong>, plug in a hardwired Gigabit Ethernet cable (or a USB 3.0-to-Ethernet adapter) and keep Wi-Fi configured here as automatic unplug failover.
+              <strong>Tip:</strong> Plug in an Ethernet cable when possible for faster file transfers and streaming; Wi-Fi remains active as automatic backup failover.
             </div>
           </div>
 
@@ -6644,6 +6654,36 @@ ${storageSnippet}
       `;
     }
 
+    function renderCacheRetentionCardHtml() {
+      return `
+        <div class="win-card" style="flex-direction:column;align-items:stretch;gap:10px;border-color:var(--success);">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+            <div class="card-left">
+              <div class="card-icon">💾</div>
+              <div class="card-text">
+                <div class="card-title">
+                  <span>Cached ISO &amp; App Files</span>
+                  <span class="badge badge-success">Kept by Default</span>
+                </div>
+                <div class="card-desc">Keep downloaded ISO and app files in <code>Instant_Server_Data</code> for fast reflashing, or delete them to free disk space.</div>
+              </div>
+            </div>
+            <div class="card-right" style="gap:8px;flex-wrap:wrap;">
+              <button type="button" class="win-btn win-btn-sm ${state.cacheRetentionMode !== "delete" ? "win-btn-accent" : ""}" data-action="cache-keep">
+                ✓ Keep Files (Default)
+              </button>
+              <button type="button" class="win-btn win-btn-sm ${state.cacheRetentionMode === "delete" ? "win-btn-danger" : ""}" data-action="cache-delete">
+                🗑 Delete Cached Files
+              </button>
+            </div>
+          </div>
+          <div style="font-size:12px;color:var(--text-secondary);">
+            Status: <strong>${esc(state.cacheStatusMessage)}</strong>
+          </div>
+        </div>
+      `;
+    }
+
     function buildFinishSection() {
       const sum = buildSummaryLabels();
       const selectedTitles = APP_STORE_CATALOG.filter(a => state.selected_apps.includes(a.id)).map(a => a.title);
@@ -6705,31 +6745,7 @@ ${storageSnippet}
             </div>
           </div>
 
-          <div class="win-card" style="flex-direction:column;align-items:stretch;gap:10px;border-color:var(--success);">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-              <div class="card-left">
-                <div class="card-icon">💾</div>
-                <div class="card-text">
-                  <div class="card-title">
-                    <span>Cached ISO &amp; App Files</span>
-                    <span class="badge badge-success">Kept by Default</span>
-                  </div>
-                  <div class="card-desc">Keep downloaded files in <code>Instant_Server_Data</code> for faster reflashing, or delete them after flashing to free disk space.</div>
-                </div>
-              </div>
-              <div class="card-right" style="gap:8px;flex-wrap:wrap;">
-                <button type="button" class="win-btn win-btn-sm ${state.cacheRetentionMode !== "delete" ? "win-btn-accent" : ""}" data-action="cache-keep">
-                  ✓ Keep Files (Default)
-                </button>
-                <button type="button" class="win-btn win-btn-sm ${state.cacheRetentionMode === "delete" ? "win-btn-danger" : ""}" data-action="cache-delete">
-                  🗑 Delete Cached Files
-                </button>
-              </div>
-            </div>
-            <div style="font-size:12px;color:var(--text-secondary);">
-              Status: <strong>${esc(state.cacheStatusMessage)}</strong>
-            </div>
-          </div>
+          ${renderCacheRetentionCardHtml()}
 
           <div class="win-card" style="flex-direction:column;align-items:stretch;gap:8px;">
             <div class="card-left">
@@ -6942,6 +6958,7 @@ ${storageSnippet}
               </span>
             </div>
 
+            ${renderCacheRetentionCardHtml()}
             ${renderFlashProgressAndLogsCard()}
             ${bottomPagerHtml}
           </div>
@@ -6971,6 +6988,8 @@ ${storageSnippet}
                   <button type="button" class="win-btn" data-action="copy-yaml">Copy YAML</button>
                 </div>
               </div>
+
+              ${renderCacheRetentionCardHtml()}
 
               <div class="win-card">
                 <div class="card-left">

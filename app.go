@@ -30,6 +30,8 @@ type App struct {
 	flashStartTime time.Time
 	cancelFunc     context.CancelFunc
 	pauseGate      *usb.PauseGate
+	lastProfile    usb.ServerProfileConfig
+	lastISOPath    string
 	lastStatus     map[string]interface{}
 }
 
@@ -297,10 +299,16 @@ func (a *App) FlashUSBDevice(profile usb.ServerProfileConfig, isoPath string) ma
 	a.flashing = true
 	a.flashStartTime = time.Now()
 	a.cancelFunc = cancel
+	a.lastProfile = profile
+	a.lastISOPath = isoPath
 	a.pauseGate.Resume()
+	initPct := 6
+	if prevPct, ok := a.lastStatus["percent"].(int); ok && prevPct > 6 && prevPct < 45 {
+		initPct = prevPct
+	}
 	a.lastStatus = map[string]interface{}{
 		"status":  "RUNNING",
-		"percent": 6,
+		"percent": initPct,
 		"paused":  false,
 		"events":  []map[string]interface{}{},
 	}
@@ -494,11 +502,27 @@ func (a *App) PauseFlashing() map[string]interface{} {
 func (a *App) ResumeFlashing() map[string]interface{} {
 	a.pauseGate.Resume()
 	a.mu.Lock()
+	isRunning := a.flashing
+	savedProfile := a.lastProfile
+	savedISO := a.lastISOPath
 	startTime := a.flashStartTime
-	a.lastStatus["status"] = "RUNNING"
-	a.lastStatus["paused"] = false
+	if isRunning {
+		a.lastStatus["status"] = "RUNNING"
+		a.lastStatus["paused"] = false
+	}
 	a.mu.Unlock()
-	a.appendEventLog(startTime, "RESUMED", "[RESUMED] Resuming USB stream...")
+
+	if !isRunning && savedProfile.Hostname != "" {
+		res := a.FlashUSBDevice(savedProfile, savedISO)
+		if started, _ := res["started"].(bool); started {
+			if a.ctx != nil {
+				wailsRuntime.EventsEmit(a.ctx, "flash:resumed", map[string]interface{}{"paused": false})
+			}
+			return map[string]interface{}{"resumed": true, "status": "RUNNING", "restarted_from_part": true}
+		}
+	}
+
+	a.appendEventLog(startTime, "RESUMED", "[RESUMED] Resuming from saved .part progress...")
 	if a.ctx != nil {
 		wailsRuntime.EventsEmit(a.ctx, "flash:resumed", map[string]interface{}{"paused": false})
 	}

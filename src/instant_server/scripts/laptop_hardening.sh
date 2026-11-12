@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash disable=SC1017,SC1090,SC1091,SC2016,SC2129 #
 # src/instant_server/scripts/laptop_hardening.sh
-set -euo pipefail
+set -uo pipefail
 
 ENV_CONF="/opt/instant-server/instant-server-env.conf"
 if [ -f "$ENV_CONF" ]; then
@@ -10,6 +10,8 @@ fi
 
 INSTANT_HOSTNAME="${INSTANT_HOSTNAME:-instant-server}"
 INSTANT_USERNAME="${INSTANT_USERNAME:-admin}"
+INSTANT_WIFI_SSID="${INSTANT_WIFI_SSID:-}"
+INSTANT_WIFI_PASSWORD="${INSTANT_WIFI_PASSWORD:-}"
 INSTANT_IGNORE_LID_SWITCH="${INSTANT_IGNORE_LID_SWITCH:-1}"
 INSTANT_SCREEN_BLANK_SEC="${INSTANT_SCREEN_BLANK_SEC:-60}"
 INSTANT_BAT_START_THRESH="${INSTANT_BAT_START_THRESH:-40}"
@@ -43,6 +45,14 @@ INSTANT_CUSTOM_APT_PACKAGES="${INSTANT_CUSTOM_APT_PACKAGES:-}"
 
 log_info() {
     printf '[instant-server] %s\n' "$*"
+    printf '[instant-server] %s\n' "$*" >> /var/log/instant-server-install.log 2>/dev/null || true
+    if [ -d /mnt/cidata ] && [ -w /mnt/cidata ]; then
+        printf '[instant-server] %s\n' "$*" >> /mnt/cidata/INSTANT-SERVER-INSTALL.log 2>/dev/null || true
+    fi
+    if [ -d /mnt/usb_logs ] && [ -w /mnt/usb_logs ]; then
+        printf '[instant-server] %s\n' "$*" >> /mnt/usb_logs/INSTANT-SERVER-INSTALL.log 2>/dev/null || true
+    fi
+    sync 2>/dev/null || true
 }
 
 install_offline_wifi_debs() {
@@ -188,7 +198,54 @@ configure_laptop_lid_and_battery() {
 }
 
 configure_wifi_failover_and_powersave_off() {
-    log_info "Disabling Wi-Fi power saving and enforcing Netplan 0600 permissions..."
+    log_info "Configuring Wi-Fi failover (if SSID set), disabling Wi-Fi power saving, and enforcing Netplan 0600 permissions..."
+    mkdir -p /etc/netplan
+    if [ -n "${INSTANT_WIFI_SSID:-}" ]; then
+        local wifi_iface=""
+        for nd in /sys/class/net/*; do
+            [ -e "$nd" ] || continue
+            if [ -d "$nd/wireless" ] || [ -d "$nd/phy80211" ]; then
+                wifi_iface=$(basename "$nd")
+                break
+            fi
+        done
+        if [ -n "$wifi_iface" ]; then
+            log_info "Detected wireless interface ${wifi_iface}; writing /etc/netplan/60-instant-wifi.yaml..."
+            if [ -n "${INSTANT_WIFI_PASSWORD:-}" ]; then
+                local _bwifi=(
+                    "network:"
+                    "  version: 2"
+                    "  wifis:"
+                    "    ${wifi_iface}:"
+                    "      dhcp4: true"
+                    "      dhcp4-overrides:"
+                    "        route-metric: 600"
+                    "      optional: true"
+                    "      access-points:"
+                    "        \"${INSTANT_WIFI_SSID}\":"
+                    "          password: \"${INSTANT_WIFI_PASSWORD}\""
+                )
+                printf %sn "${_bwifi[@]}" > /etc/netplan/60-instant-wifi.yaml
+            else
+                local _bwifi_open=(
+                    "network:"
+                    "  version: 2"
+                    "  wifis:"
+                    "    ${wifi_iface}:"
+                    "      dhcp4: true"
+                    "      dhcp4-overrides:"
+                    "        route-metric: 600"
+                    "      optional: true"
+                    "      access-points:"
+                    "        \"${INSTANT_WIFI_SSID}\": {}"
+                )
+                printf %sn "${_bwifi_open[@]}" > /etc/netplan/60-instant-wifi.yaml
+            fi
+            chmod 600 /etc/netplan/60-instant-wifi.yaml 2>/dev/null || true
+        else
+            log_info "No wireless interface currently visible in /sys/class/net; instant-server-netwatch will auto-configure if Wi-Fi hardware loads on first boot."
+        fi
+    fi
     if [ -d /etc/netplan ]; then
         chmod 600 /etc/netplan/*.yaml 2>/dev/null || true
     fi
