@@ -18,7 +18,7 @@ const (
 	fatNumTables         = 2
 	fatRootDirEntries    = 512
 	fatRootDirSectors    = (fatRootDirEntries * 32) / fatBytesPerSector // 32 sectors
-	fatTotalClusters     = 8192                                         // > 4085 clusters guarantees strict FAT16 detection in Linux vfat/blkid
+	fatTotalClusters     = 4100                                         // > 4085 clusters guarantees strict FAT16 detection in Linux vfat/blkid
 	fatSectorsPerTable   = 32                                           // 32 * 512 = 16,384 bytes (8,192 FAT16 entries)
 	fatDataStartSector   = fatReservedSectors + (fatNumTables * fatSectorsPerTable) + fatRootDirSectors
 	fatTotalSectors      = fatDataStartSector + (fatTotalClusters * fatSectorsPerCluster)

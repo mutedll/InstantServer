@@ -475,6 +475,27 @@ func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
         optional: true`
 	}
 
+	wifiSection := ""
+	if strings.TrimSpace(cfg.WifiSSID) != "" {
+		safeSSID := strings.ReplaceAll(strings.TrimSpace(cfg.WifiSSID), `"`, `\"`)
+		safePSK := strings.ReplaceAll(cfg.WifiPassword, `"`, `\"`)
+		authLine := " {}"
+		if safePSK != "" {
+			authLine = fmt.Sprintf("\n            password: \"%s\"", safePSK)
+		}
+		wifiSection = fmt.Sprintf(`
+    # BEGIN_INSTANT_WIFI
+    wifis:
+      wlan0:
+        dhcp4: true
+        dhcp4-overrides:
+          route-metric: 600
+        optional: true
+        access-points:
+          "%s":%s
+    # END_INSTANT_WIFI`, safeSSID, authLine)
+	}
+
 	// Always start crash-proof live USB logging first (`start_usb_logger.sh`), inhibit sleep/suspend,
 	// unblock rfkill Wi-Fi radios, ignore laptop lid close, mount CIDATA & INSTANTUSB rw+sync,
 	// and run select_target_disk.sh to pin the internal non-USB disk and settle udev before Subiquity runs netplan.
@@ -591,7 +612,7 @@ autoinstall:
   network:
     version: 2
     ethernets:
-%s%s
+%s%s%s
 %s%s
   late-commands:
     - mkdir -p /target/opt/instant-server /target/opt/instant-server/debs /mnt/cidata /mnt/usb_logs
@@ -610,7 +631,7 @@ autoinstall:
   error-commands:
     - bash /mnt/cidata/dump_error_logs_to_usb.sh ERROR 2>/dev/null || bash /cdrom/cidata/dump_error_logs_to_usb.sh ERROR 2>/dev/null || true
     - sync
-`, host, user, hashedPass, sshKeysBlock, ethSection, usbTetherSection, earlyCommandsBlock, storageBlock, extraLateCommands)
+`, host, user, hashedPass, sshKeysBlock, ethSection, usbTetherSection, wifiSection, earlyCommandsBlock, storageBlock, extraLateCommands)
 }
 
 func GenerateTargetEnvConf(cfg ServerProfileConfig) string {
@@ -1082,7 +1103,11 @@ else
     log_usb "WARNING: No separate internal target disk detected beyond USB_DISK=${USB_DISK}"
 fi
 
-# 4. Bring up live Wi-Fi in the background if configured, WITHOUT putting wifis: into /autoinstall.yaml
+# 4. Strip # BEGIN_INSTANT_WIFI .. # END_INSTANT_WIFI from /autoinstall.yaml before Subiquity re-reads it
+# so Curtin net-meta never fails before wpasupplicant is installed in /target, and connect live Wi-Fi directly
+if [ -f /autoinstall.yaml ]; then
+    sed -i '/# BEGIN_INSTANT_WIFI/,/# END_INSTANT_WIFI/d' /autoinstall.yaml 2>/dev/null || true
+fi
 if [ -f /mnt/cidata/instant-server-env.conf ]; then
     . /mnt/cidata/instant-server-env.conf
 fi
