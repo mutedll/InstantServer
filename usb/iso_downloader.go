@@ -241,7 +241,6 @@ func DownloadISOWithResume(
 			if pct > 100 {
 				pct = 100
 			}
-			// Throttle progress events to at most ~6 updates/sec (160ms) so Wails IPC and DOM updates never flicker
 			if onProgress != nil && (time.Since(lastProgressEmit) >= 160*time.Millisecond || pct >= 100 || errors.Is(rErr, io.EOF)) {
 				lastProgressEmit = time.Now()
 				onProgress(FlashProgressEvent{
@@ -258,7 +257,7 @@ func DownloadISOWithResume(
 			break
 		}
 		if rErr != nil {
-			return "", fmt.Errorf("IS-ISO-107: stream interrupted at %d bytes (saved to .part for instant resume): %w", downloaded, rErr)
+			return "", fmt.Errorf("IS-ISO-107: download interrupted at %d bytes (saved as .part): %w", downloaded, rErr)
 		}
 	}
 

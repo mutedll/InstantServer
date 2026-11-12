@@ -4,14 +4,11 @@ package main
 import (
 	"context"
 	"embed"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"hash/crc32"
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -134,8 +131,7 @@ func (a *App) IsForceClosing() bool {
 }
 
 // GracefulShutdownSupervisor safely stops any active DMA stream while keeping
-// all downloaded ISO and staged app files on disk by default so the user can
-// resume or reflash later without re-downloading.
+// downloaded ISO and staged app files on disk by default.
 func (a *App) GracefulShutdownSupervisor() {
 	a.mu.Lock()
 	a.forceClosing = true
@@ -149,14 +145,11 @@ func (a *App) GracefulShutdownSupervisor() {
 }
 
 func (a *App) ProbeHost() map[string]interface{} {
-	qemuBin, _ := exec.LookPath("qemu-system-x86_64")
 	return map[string]interface{}{
 		"host_os":          runtime.GOOS,
 		"arch":             runtime.GOARCH,
 		"is_admin_or_root": privilege.IsProcessElevated(),
 		"engine":           "wails_go_native_dma",
-		"qemu_available":   qemuBin != "",
-		"qemu_path":        qemuBin,
 	}
 }
 
@@ -334,14 +327,14 @@ func (a *App) FlashUSBDevice(profile usb.ServerProfileConfig, isoPath string) ma
 			a.mu.Unlock()
 			return
 		}
-		a.appendEventLog(startTime, "STAGE_CIDATA", fmt.Sprintf("Staged %d cloud-init & app file(s) for FAT16 CIDATA partition (cached for fast reflash)", len(stagedFiles)))
+		a.appendEventLog(startTime, "STAGE_CIDATA", fmt.Sprintf("Staged %d cloud-init & app file(s) for FAT16 CIDATA partition", len(stagedFiles)))
 
 		resolvedISO := strings.TrimSpace(isoPath)
 		if resolvedISO == "" {
 			resolvedISO = strings.TrimSpace(profile.CustomISOPath)
 		}
 		if resolvedISO == "" || func() bool { _, e := os.Stat(resolvedISO); return e != nil }() {
-			a.appendEventLog(startTime, "ISO_CHECK", fmt.Sprintf("Resolving Ubuntu Server %s LTS ISO mirror & local cache...", profile.UbuntuRelease))
+			a.appendEventLog(startTime, "ISO_CHECK", fmt.Sprintf("Checking Ubuntu Server %s LTS ISO...", profile.UbuntuRelease))
 			cacheDir := filepath.Join(baseDataDir, "iso_cache")
 			dlPath, dlErr := usb.DownloadISOWithResume(
 				ctx,
@@ -393,12 +386,12 @@ func (a *App) FlashUSBDevice(profile usb.ServerProfileConfig, isoPath string) ma
 				return
 			}
 			resolvedISO = dlPath
-			a.appendEventLog(startTime, "ISO_READY", fmt.Sprintf("Ubuntu Server ISO ready in cache: %s", filepath.Base(resolvedISO)))
+			a.appendEventLog(startTime, "ISO_READY", fmt.Sprintf("Ubuntu Server ISO ready: %s", filepath.Base(resolvedISO)))
 		} else {
 			a.appendEventLog(startTime, "ISO_LOCAL", fmt.Sprintf("Using local ISO file: %s", resolvedISO))
 		}
 
-		a.appendEventLog(startTime, "USB_OPEN", fmt.Sprintf("Opening raw USB block device %s with 1MB Win32-safe DMA chunks...", profile.SelectedUSBDevice))
+		a.appendEventLog(startTime, "USB_OPEN", fmt.Sprintf("Opening USB device %s...", profile.SelectedUSBDevice))
 		finalEv, err := usb.StreamISOAndCidataToRawDisk(
 			ctx,
 			resolvedISO,
@@ -487,11 +480,11 @@ func (a *App) PauseFlashing() map[string]interface{} {
 	a.lastStatus["status"] = "PAUSED"
 	a.lastStatus["paused"] = true
 	a.lastStatus["active_progress"] = map[string]interface{}{
-		"message":       "Paused — all downloaded ISO & staged files are safely held on disk",
-		"terminal_line": "⏸ PAUSED │ Click Resume anytime to continue from exact byte offset",
+		"message":       "Paused — partial progress saved as .part",
+		"terminal_line": "⏸ PAUSED │ Click Resume to continue",
 	}
 	a.mu.Unlock()
-	a.appendEventLog(startTime, "PAUSED", "[PAUSED] Flashing paused safely. Downloaded ISO & staged files are preserved.")
+	a.appendEventLog(startTime, "PAUSED", "[PAUSED] Flashing paused (saved as .part).")
 	if a.ctx != nil {
 		wailsRuntime.EventsEmit(a.ctx, "flash:paused", map[string]interface{}{"paused": true})
 	}
@@ -505,7 +498,7 @@ func (a *App) ResumeFlashing() map[string]interface{} {
 	a.lastStatus["status"] = "RUNNING"
 	a.lastStatus["paused"] = false
 	a.mu.Unlock()
-	a.appendEventLog(startTime, "RESUMED", "[RESUMED] Resuming USB DMA stream from exact byte offset...")
+	a.appendEventLog(startTime, "RESUMED", "[RESUMED] Resuming USB stream...")
 	if a.ctx != nil {
 		wailsRuntime.EventsEmit(a.ctx, "flash:resumed", map[string]interface{}{"paused": false})
 	}
@@ -522,7 +515,7 @@ func (a *App) CancelFlashing() map[string]interface{} {
 	a.lastStatus["paused"] = false
 	a.lastStatus["active_progress"] = nil
 	a.mu.Unlock()
-	a.appendEventLog(startTime, "CANCELLED", "[CANCELLED] Operation cancelled by user. Cached ISO & app files kept for later.")
+	a.appendEventLog(startTime, "CANCELLED", "[CANCELLED] Operation cancelled (saved as .part).")
 	if cancel != nil {
 		cancel()
 	}
@@ -532,8 +525,8 @@ func (a *App) CancelFlashing() map[string]interface{} {
 	return map[string]interface{}{"cancelled": true, "status": "CANCELLED"}
 }
 
-// PauseAndPrepareExit pauses the current operation, preserves all downloaded `.part` / `.iso`
-// files and staged CIDATA configurations in `Instant_Server_Data`, and permits the window to close.
+// PauseAndPrepareExit pauses the current operation, keeps `.part` / `.iso`
+// files in `Instant_Server_Data`, and permits the window to close.
 func (a *App) PauseAndPrepareExit() map[string]interface{} {
 	a.pauseGate.Pause()
 	a.mu.Lock()
@@ -543,7 +536,7 @@ func (a *App) PauseAndPrepareExit() map[string]interface{} {
 	a.lastStatus["status"] = "PAUSED"
 	a.lastStatus["paused"] = true
 	a.mu.Unlock()
-	a.appendEventLog(startTime, "PAUSED_EXIT", "[PAUSED & SAVED] Saved partial ISO download & staged app files for instant resume next time.")
+	a.appendEventLog(startTime, "PAUSED_EXIT", "[PAUSED] Saved as .part.")
 	if cancel != nil {
 		cancel()
 	}
@@ -573,7 +566,7 @@ func (a *App) ManageFlashCache(action string) map[string]interface{} {
 			"kept":        false,
 			"total_bytes": 0,
 			"total_mb":    "0.0 MB",
-			"message":     "Deleted cached Ubuntu ISO and temporary staging files to free disk space.",
+			"message":     "Deleted cached ISO and staging files.",
 		}
 	}
 
@@ -596,225 +589,8 @@ func (a *App) ManageFlashCache(action string) map[string]interface{} {
 		"total_bytes": totalBytes,
 		"total_mb":    fmt.Sprintf("%.1f MB", float64(totalBytes)/(1024.0*1024.0)),
 		"data_dir":    baseDir,
-		"message":     "Cached ISO & staged app configs retained. Reflashing or adding new apps will be instant.",
+		"message":     "Cached ISO and app files kept.",
 	}
-}
-
-// TestInDisposableVM builds a real bootable hybrid MBR/GPT + FAT16 CIDATA virtual USB disk image
-// (`Instant_Server_Data/vm_test/instant-server-usb.img`) plus a standalone 16 MiB `instant-server-cidata.img`
-// and a sparse 20 GB virtual target drive, generates cross-platform QEMU launch scripts with SMBIOS NoCloud
-// (`-smbios type=1,serial=ds=nocloud`) and port forwarding (`localhost:18088 -> :8088`),
-// and spawns QEMU automatically if installed on the host.
-func (a *App) TestInDisposableVM(profile usb.ServerProfileConfig) map[string]interface{} {
-	if err := usb.ValidateProfileConfig(profile); err != nil {
-		return map[string]interface{}{"ok": false, "error": err.Error()}
-	}
-	_ = a.SaveConfig(profile)
-
-	baseDir := resolveWritableDataDir()
-	vmDir := filepath.Join(baseDir, "vm_test")
-	stageDir := filepath.Join(baseDir, "cidata_stage")
-	_ = os.MkdirAll(vmDir, 0755)
-
-	hardeningBytes, _ := a.assets.ReadFile("src/instant_server/scripts/laptop_hardening.sh")
-	dashBytes, _ := a.assets.ReadFile("src/instant_server/ui/server_dashboard.html")
-	stagedFiles, stageErr := usb.StageCIDATAPayload(stageDir, profile, hardeningBytes, dashBytes)
-	if stageErr != nil {
-		return map[string]interface{}{"ok": false, "error": stageErr.Error()}
-	}
-
-	usbImgPath := filepath.Join(vmDir, "instant-server-usb.img")
-	cidataImgPath := filepath.Join(vmDir, "instant-server-cidata.img")
-	targetDiskPath := filepath.Join(vmDir, "disposable-target-disk.img")
-
-	// Always build the 16 MiB FAT16 CIDATA volume (`instant-server-cidata.img`) so QEMU always has
-	// the complete NoCloud seed (`user-data`, `meta-data`, `laptop_hardening.sh`, `server_dashboard.html`, `instant_apps_bundle.sh`)
-	// even when booting directly from a cached 2.6 GB Ubuntu Server ISO.
-	cidataBytes, cidataErr := usb.BuildCidataFAT16Image(stageDir)
-	if cidataErr != nil {
-		return map[string]interface{}{"ok": false, "error": fmt.Sprintf("Failed to build FAT16 CIDATA volume: %v", cidataErr)}
-	}
-	if err := os.WriteFile(cidataImgPath, cidataBytes, 0644); err != nil {
-		return map[string]interface{}{"ok": false, "error": fmt.Sprintf("Failed to write CIDATA image: %v", err)}
-	}
-
-	// Check if a cached full ISO already exists in iso_cache; if not, create a synthetic 36 MB hybrid GPT/MBR ISO
-	// with GRUB autoinstall config so the virtual USB image undergoes the exact same GPT relocation & FAT16 CIDATA builder.
-	isoSourcePath := strings.TrimSpace(profile.CustomISOPath)
-	if isoSourcePath == "" {
-		isoCacheDir := filepath.Join(baseDir, "iso_cache")
-		if entries, err := os.ReadDir(isoCacheDir); err == nil {
-			for _, e := range entries {
-				if strings.HasSuffix(strings.ToLower(e.Name()), ".iso") {
-					isoSourcePath = filepath.Join(isoCacheDir, e.Name())
-					break
-				}
-			}
-		}
-	}
-
-	usingFullISO := false
-	if isoSourcePath != "" {
-		if st, err := os.Stat(isoSourcePath); err == nil && st.Size() > 32*1024*1024 {
-			usingFullISO = true
-		}
-	}
-
-	if !usingFullISO {
-		synthISO := filepath.Join(vmDir, "synthetic-boot-check.iso")
-		if err := buildSyntheticBootableTestISO(synthISO); err != nil {
-			return map[string]interface{}{"ok": false, "error": fmt.Sprintf("Failed to create synthetic test ISO: %v", err)}
-		}
-		isoSourcePath = synthISO
-	}
-
-	// Build the virtual USB image using the exact same StreamISOAndCidataToRawDisk pipeline
-	if !usingFullISO {
-		if f, err := os.OpenFile(usbImgPath, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0644); err == nil {
-			_ = f.Truncate(36 * 1024 * 1024)
-			_ = f.Close()
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		_, err := usb.StreamISOAndCidataToRawDisk(ctx, isoSourcePath, usbImgPath, stageDir, true, true, usb.NewPauseGate(), nil)
-		if err != nil {
-			return map[string]interface{}{"ok": false, "error": fmt.Sprintf("Virtual USB boot image build failed: %v", err)}
-		}
-	}
-
-	// Create a sparse 20 GB disposable target disk if it doesn't exist
-	if f, err := os.OpenFile(targetDiskPath, os.O_CREATE|os.O_RDWR, 0644); err == nil {
-		_ = f.Truncate(20 * 1024 * 1024 * 1024)
-		_ = f.Close()
-	}
-
-	usbDriveSource := usbImgPath
-	if usingFullISO {
-		usbDriveSource = isoSourcePath
-	}
-
-	batScript := fmt.Sprintf(`@echo off
-title Instant Server — Disposable VM Boot Tester
-echo ======================================================================
-echo   Instant Server Disposable VM Tester (Port 18088 -^> :8088)
-echo   Dashboard Preview: http://127.0.0.1:18088
-echo ======================================================================
-qemu-system-x86_64 -m 4096 -smp 2 ^
-  -smbios type=1,serial=ds=nocloud ^
-  -drive file="%s",format=raw,if=virtio,index=0 ^
-  -drive file="%s",format=raw,if=virtio,index=1 ^
-  -drive file="%s",format=raw,if=virtio,index=2 ^
-  -boot order=c,menu=on ^
-  -net nic,model=virtio -net user,hostfwd=tcp:127.0.0.1:18088-:8088,hostfwd=tcp:127.0.0.1:12222-:22,hostfwd=tcp:127.0.0.1:25565-:25565
-`, usbDriveSource, cidataImgPath, targetDiskPath)
-	_ = os.WriteFile(filepath.Join(vmDir, "launch-disposable-vm.bat"), []byte(strings.ReplaceAll(batScript, "\n", "\r\n")), 0755)
-
-	shScript := fmt.Sprintf(`#!/usr/bin/env bash
-set -euo pipefail
-echo "======================================================================"
-echo "  Instant Server Disposable VM Tester (Port 18088 -> :8088)"
-echo "  Dashboard URL once booted: http://127.0.0.1:18088"
-echo "======================================================================"
-ACCEL=""
-if [ -e /dev/kvm ]; then
-    ACCEL="-enable-kvm"
-elif [ "$(uname -s 2>/dev/null || true)" = "Darwin" ]; then
-    ACCEL="-accel hvf"
-fi
-exec qemu-system-x86_64 $ACCEL -m 4096 -smp 2 \
-  -smbios type=1,serial=ds=nocloud \
-  -drive file=%q,format=raw,if=virtio,index=0 \
-  -drive file=%q,format=raw,if=virtio,index=1 \
-  -drive file=%q,format=raw,if=virtio,index=2 \
-  -boot order=c,menu=on \
-  -net nic,model=virtio -net user,hostfwd=tcp:127.0.0.1:18088-:8088,hostfwd=tcp:127.0.0.1:12222-:22,hostfwd=tcp:127.0.0.1:25565-:25565
-`, usbDriveSource, cidataImgPath, targetDiskPath)
-	_ = os.WriteFile(filepath.Join(vmDir, "launch-disposable-vm.sh"), []byte(shScript), 0755)
-
-	qemuBin, _ := exec.LookPath("qemu-system-x86_64")
-	launchedQEMU := false
-	if qemuBin != "" && usingFullISO {
-		args := []string{
-			"-m", "4096", "-smp", "2",
-			"-smbios", "type=1,serial=ds=nocloud",
-			"-drive", fmt.Sprintf("file=%s,format=raw,if=virtio,index=0", usbDriveSource),
-			"-drive", fmt.Sprintf("file=%s,format=raw,if=virtio,index=1", cidataImgPath),
-			"-drive", fmt.Sprintf("file=%s,format=raw,if=virtio,index=2", targetDiskPath),
-			"-boot", "order=c,menu=on",
-			"-net", "nic,model=virtio",
-			"-net", "user,hostfwd=tcp:127.0.0.1:18088-:8088,hostfwd=tcp:127.0.0.1:12222-:22,hostfwd=tcp:127.0.0.1:25565-:25565",
-		}
-		if runtime.GOOS == "linux" {
-			if _, err := os.Stat("/dev/kvm"); err == nil {
-				args = append([]string{"-enable-kvm"}, args...)
-			}
-		} else if runtime.GOOS == "darwin" {
-			args = append([]string{"-accel", "hvf"}, args...)
-		}
-		cmd := exec.Command(qemuBin, args...)
-		if err := cmd.Start(); err == nil {
-			launchedQEMU = true
-		}
-	}
-
-	return map[string]interface{}{
-		"ok":                true,
-		"vm_dir":            vmDir,
-		"usb_image_path":    usbImgPath,
-		"cidata_image_path": cidataImgPath,
-		"target_disk_path":  targetDiskPath,
-		"staged_files":      len(stagedFiles),
-		"using_full_iso":    usingFullISO,
-		"qemu_found":        qemuBin != "",
-		"qemu_launched":     launchedQEMU,
-		"dashboard_preview": "/server_dashboard.html",
-		"vm_forwarded_url":  "http://127.0.0.1:18088",
-		"message":           "Verified hybrid MBR + GPT + FAT16 CIDATA bootable USB structure and generated disposable VM disks & launcher.",
-	}
-}
-
-func buildSyntheticBootableTestISO(isoPath string) error {
-	isoBytes := make([]byte, 2*1024*1024)
-	// Protective MBR (LBA 0)
-	isoBytes[446+4] = 0xEE
-	binary.LittleEndian.PutUint32(isoBytes[446+8:446+12], 1)
-	binary.LittleEndian.PutUint32(isoBytes[446+12:446+16], 4095)
-	isoBytes[510] = 0x55
-	isoBytes[511] = 0xAA
-
-	// Primary GPT Header (LBA 1)
-	hdr := isoBytes[512 : 512+92]
-	copy(hdr[0:8], []byte("EFI PART"))
-	binary.LittleEndian.PutUint32(hdr[8:12], 0x00010000)
-	binary.LittleEndian.PutUint32(hdr[12:16], 92)
-	binary.LittleEndian.PutUint64(hdr[24:32], 1)
-	binary.LittleEndian.PutUint64(hdr[32:40], 4095)
-	binary.LittleEndian.PutUint64(hdr[40:48], 64)
-	binary.LittleEndian.PutUint64(hdr[48:56], 4030)
-	binary.LittleEndian.PutUint64(hdr[72:80], 2)
-	binary.LittleEndian.PutUint32(hdr[80:84], 128)
-	binary.LittleEndian.PutUint32(hdr[84:88], 128)
-
-	// Entry 0: ISO9660 system partition (LBA 64..2000), Entry 1: EFI System Partition (LBA 2001..3000)
-	e0 := isoBytes[1024 : 1024+128]
-	copy(e0[0:16], []byte{0xA2, 0xA0, 0xD0, 0xEB, 0xE5, 0xB9, 0x33, 0x44, 0x87, 0xC0, 0x68, 0xB6, 0xB7, 0x26, 0x99, 0xC7})
-	binary.LittleEndian.PutUint64(e0[32:40], 64)
-	binary.LittleEndian.PutUint64(e0[40:48], 2000)
-
-	e1 := isoBytes[1024+128 : 1024+256]
-	copy(e1[0:16], []byte{0x28, 0x73, 0x2A, 0xC1, 0x1F, 0xF8, 0xD2, 0x11, 0xBA, 0x4B, 0x00, 0xA0, 0xC9, 0x3E, 0xC9, 0x3B})
-	binary.LittleEndian.PutUint64(e1[32:40], 2001)
-	binary.LittleEndian.PutUint64(e1[40:48], 3000)
-
-	entriesCRC := crc32.ChecksumIEEE(isoBytes[1024 : 1024+128*128])
-	binary.LittleEndian.PutUint32(hdr[88:92], entriesCRC)
-	binary.LittleEndian.PutUint32(hdr[16:20], 0)
-	hdrCRC := crc32.ChecksumIEEE(hdr)
-	binary.LittleEndian.PutUint32(hdr[16:20], hdrCRC)
-
-	grubSample := "set timeout=30\nmenuentry \"Try or Install Ubuntu Server\" {\n\tlinux\t/casper/vmlinuz  ---\n\tinitrd\t/casper/initrd\n}\n"
-	copy(isoBytes[65536:], []byte(grubSample))
-	return os.WriteFile(isoPath, isoBytes, 0644)
 }
 
 func (a *App) DiscoverServers(hostname string) map[string]interface{} {
@@ -902,11 +678,6 @@ func (a *App) AssetAndAPIRouter() http.Handler {
 			body.Action = r.URL.Query().Get("action")
 		}
 		writeJSON(w, a.ManageFlashCache(body.Action))
-	})
-	mux.HandleFunc("/api/test-vm", func(w http.ResponseWriter, r *http.Request) {
-		var cfg usb.ServerProfileConfig
-		readJSONBody(r, &cfg)
-		writeJSON(w, a.TestInDisposableVM(cfg))
 	})
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, a.PollBuildStatus())

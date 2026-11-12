@@ -1043,6 +1043,56 @@
     .win-combobox {
       max-width: 100%;
     }
+    #minecraftCustomizationStudioCard .win-combobox {
+      min-width: 0;
+      width: 100%;
+      flex: 1 1 0%;
+    }
+    #minecraftCustomizationStudioCard > div > div {
+      min-width: 0;
+    }
+
+    /* Smooth Floating Value Box for Range Sliders */
+    .win-slider-wrap {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 0;
+    }
+    .win-slider-wrap input[type="range"] {
+      margin: 0;
+      cursor: pointer;
+    }
+    .win-slider-bubble {
+      position: absolute;
+      bottom: calc(100% + 4px);
+      left: 50%;
+      transform: translateX(-50%) translateY(6px) scale(0.88);
+      background: var(--dropdown-bg);
+      color: var(--text-primary);
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      padding: 3px 8px;
+      font-family: var(--font-sans);
+      font-size: 11.5px;
+      font-weight: 600;
+      line-height: 1.2;
+      white-space: nowrap;
+      pointer-events: none;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.28);
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+                  transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+                  left 0.05s linear,
+                  visibility 0.18s;
+      z-index: 60;
+    }
+    .win-slider-wrap.active .win-slider-bubble {
+      opacity: 1;
+      visibility: visible;
+      transform: translateX(-50%) translateY(0) scale(1);
+    }
     .win-combobox-label {
       overflow: hidden;
       text-overflow: ellipsis;
@@ -1650,7 +1700,7 @@
       <div class="modal-title" id="closeWarnTitle">Flashing is still in progress</div>
       <div class="modal-body">
         Instant Server is currently downloading or writing your bootable USB drive.
-        You can <strong>Keep flashing</strong>, <strong>Pause &amp; exit</strong> (which saves all downloaded ISO &amp; app files in <code>Instant_Server_Data</code> so you can resume from the exact byte later), or <strong>Cancel &amp; exit</strong>.
+        You can <strong>Keep flashing</strong>, <strong>Pause &amp; exit</strong> (progress saved as <code>.part</code>), or <strong>Cancel &amp; exit</strong>.
       </div>
       <div class="modal-actions" style="flex-wrap:wrap;gap:8px;">
         <button type="button" class="win-btn win-btn-accent" data-action="dismiss-close-warning">Keep flashing</button>
@@ -4131,9 +4181,7 @@
       flashOpSeq: 0,
       cacheRetentionMode: "keep",
       cacheStatusMessage: "Keep cached ISO & app files (Default) — If you close the app or reflash later with new apps/edits, only the new/changed apps are installed.",
-      vmTestBusy: false,
-      vmTestStatusMessage: "",
-      vmTestResult: null,
+      appsExpanded: false,
       flashProgress: 0,
       flashStatusText: "",
       flashEtaText: "",
@@ -4186,7 +4234,6 @@
           if (endpoint === "cancel" && wailsApp.CancelFlashing) return await wailsApp.CancelFlashing();
           if (endpoint === "pause-and-exit" && wailsApp.PauseAndPrepareExit) return await wailsApp.PauseAndPrepareExit();
           if (endpoint === "cache" && wailsApp.ManageFlashCache) return await wailsApp.ManageFlashCache((payload && payload.action) || "keep");
-          if (endpoint === "test-vm" && wailsApp.TestInDisposableVM) return await wailsApp.TestInDisposableVM(payload);
           if (endpoint === "status" && wailsApp.PollBuildStatus) return await wailsApp.PollBuildStatus();
           if (endpoint === "discover" && wailsApp.DiscoverServers) return await wailsApp.DiscoverServers(state.hostname);
         }
@@ -4840,9 +4887,9 @@
       pollTimer = null;
       state.flashPaused = true;
       state.flashing = false;
-      state.activeProgressLine = "⏸ PAUSED & SAVED │ Ready to resume next time you open Instant Server";
-      state.flashStatusText = `Paused & saved at ${state.flashProgress}% — all downloaded ISO & app files are kept in Instant_Server_Data.`;
-      state.flashLogs.push(`[PAUSED & SAVED] Saved progress at ${state.flashProgress}% and preserved cached ISO + app files.`);
+      state.activeProgressLine = "⏸ PAUSED │ Progress saved as .part";
+      state.flashStatusText = `Paused at ${state.flashProgress}% (saved as .part).`;
+      state.flashLogs.push(`[PAUSED] Progress at ${state.flashProgress}% saved as .part.`);
       updateFlashPanelInPlace();
       showToast("Progress & downloaded files saved — exiting safely");
       await callBackend("pause-and-exit", "POST", {});
@@ -4856,40 +4903,12 @@
       if (mode === "delete") {
         state.cacheStatusMessage = (res && res.message)
           ? res.message
-          : "Deleted cached Ubuntu ISO and temporary staging files to free disk space. Your server config JSON is still saved.";
-        showToast("Deleted cached ISO & staging files to free disk space");
+          : "Deleted cached ISO and staging files.";
+        showToast("Deleted cached files");
       } else {
         const sizeInfo = (res && res.total_mb && res.total_mb !== "0.0 MB") ? ` (${res.total_mb})` : "";
-        state.cacheStatusMessage = `Keeping cached ISO & staged app files${sizeInfo} (Default) — Reflashing or adding new apps later will be instant and only installs new/changed apps.`;
-        showToast("Keeping cached files for fast reflash & incremental app updates");
-      }
-      renderApp();
-    }
-
-    async function runDisposableVMTest() {
-      if (state.vmTestBusy) return;
-      state.vmTestBusy = true;
-      state.vmTestStatusMessage = "Building bootable virtual USB image (MBR + GPT + FAT16 CIDATA) & preparing Disposable VM...";
-      renderApp();
-      const payload = serializeProfilePayload();
-      const res = await callBackend("test-vm", "POST", payload);
-      state.vmTestBusy = false;
-      if (res && res.ok) {
-        state.vmTestResult = res;
-        state.vmTestStatusMessage = res.qemu_launched
-          ? `Disposable QEMU VM launched! Once booted, open ${res.vm_forwarded_url} (or click Preview Dashboard below).`
-          : `Verified bootable virtual USB image (${res.usb_image_path || "Instant_Server_Data/vm_test/instant-server-usb.img"}) + ${res.staged_files || 12} CIDATA files & generated launch-disposable-vm scripts.`;
-        showToast("Disposable VM virtual USB image ready & verified!");
-      } else {
-        state.vmTestResult = {
-          ok: true,
-          usb_image_path: "Instant_Server_Data/vm_test/instant-server-usb.img",
-          target_disk_path: "Instant_Server_Data/vm_test/disposable-target-disk.img",
-          vm_forwarded_url: "http://127.0.0.1:18088",
-          dashboard_preview: "server_dashboard.html"
-        };
-        state.vmTestStatusMessage = "Verified hybrid MBR/GPT + FAT16 CIDATA bootable virtual USB image and generated launch-disposable-vm.bat / .sh scripts.";
-        showToast("Virtual USB image & Disposable VM test environment ready");
+        state.cacheStatusMessage = `Keeping cached files${sizeInfo} (Default).`;
+        showToast("Keeping cached files");
       }
       renderApp();
     }
@@ -5135,6 +5154,29 @@
       `;
     }
 
+    function renderSlider(field, min, max, step, val, unit = "%", widthPx = 160) {
+      const numMin = Number(min) || 0;
+      const numMax = Number(max) || 100;
+      const numVal = Number(val ?? numMin);
+      const ratio = Math.max(0, Math.min(1, (numVal - numMin) / Math.max(1, numMax - numMin)));
+      const thumbOffsetPx = 8 + ratio * (widthPx - 16);
+      return `
+        <div class="win-slider-wrap" style="width:${widthPx}px;">
+          <div class="win-slider-bubble" style="left:${thumbOffsetPx.toFixed(1)}px;">${esc(String(numVal))}${esc(unit)}</div>
+          <input
+            type="range"
+            min="${min}"
+            max="${max}"
+            step="${step}"
+            value="${numVal}"
+            data-field="${esc(field)}"
+            data-unit="${esc(unit)}"
+            style="accent-color:var(--accent);width:${widthPx}px;"
+          />
+        </div>
+      `;
+    }
+
     function renderComboBox(field, options) {
       const currentVal = String(state[field] ?? "");
       const currentOpt = options.find(o => String(o.value) === currentVal) || options[0];
@@ -5252,7 +5294,7 @@
           </div>
           <details style="margin-top:6px;border-top:1px solid var(--border-subtle);padding-top:8px;">
             <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--text-secondary);">
-              Transparent Config &amp; Staged Files Overview (cloud-init YAML + ${state.selected_apps.length} App Manifests)
+              Config and files overview
             </summary>
             <div class="code-viewer" style="margin-top:8px;max-height:170px;overflow:auto;">${esc(generateYamlPreview())}</div>
           </details>
@@ -5566,7 +5608,11 @@ ${storageSnippet}
         return `<div class="win-card"><div class="card-title">No apps match your search filter.</div></div>`;
       }
 
-      return filtered.map(app => {
+      const initialLimit = 8;
+      const canCollapse = !state.appSearchQuery.trim() && state.appCategoryFilter === "All" && filtered.length > initialLimit;
+      const visibleApps = (canCollapse && !state.appsExpanded) ? filtered.slice(0, initialLimit) : filtered;
+
+      const cardsHtml = visibleApps.map(app => {
         const isChecked = state.selected_apps.includes(app.id);
         const isHighEnd = app.hardware_tier === "high_end";
         return `
@@ -5579,7 +5625,7 @@ ${storageSnippet}
                   ${app.recommended ? `<span class="badge badge-accent">Recommended</span>` : ""}
                   <span class="badge badge-success">${esc(app.tag)} • ${esc(app.ram)}</span>
                   <span class="badge" style="background:var(--card-bg-secondary);border:1px solid var(--border-card);color:var(--text-secondary);">${esc(app.category)}</span>
-                  ${isHighEnd ? `<span class="badge badge-warning">${esc(app.hardware_note || "8GB+ RAM Recommended")}</span>` : ""}
+                  ${isHighEnd ? `<span class="badge badge-warning">${esc(app.hardware_note || "8GB+ RAM")}</span>` : ""}
                 </div>
                 <div class="card-desc">${esc(app.desc)}</div>
               </div>
@@ -5587,6 +5633,16 @@ ${storageSnippet}
           </div>
         `;
       }).join("");
+
+      const expandBtnHtml = canCollapse ? `
+        <div style="grid-column: 1 / -1; display:flex; justify-content:center; padding-top:4px;">
+          <button type="button" class="win-btn" data-action="toggle-expand-apps">
+            ${state.appsExpanded ? "Show fewer apps ⌃" : `Show more apps (${filtered.length - initialLimit} more) ⌄`}
+          </button>
+        </div>
+      ` : "";
+
+      return cardsHtml + expandBtnHtml;
     }
 
 
@@ -5855,95 +5911,88 @@ ${storageSnippet}
               <div class="card-icon">🎮</div>
               <div class="card-text">
                 <div class="card-title">
-                  <span>Minecraft Server Customization Studio</span>
-                  <span class="badge badge-accent">Paper / Fabric / Forge / Bedrock Crossplay</span>
-                  <span class="badge badge-success">RCON + Auto-Backups Ready</span>
+                  <span>Minecraft Server Settings</span>
+                  <span class="badge badge-accent">Java &amp; Bedrock</span>
                 </div>
-                <div class="card-desc">Quick pre-install setup for Minecraft <strong>${esc(state.mc_version || "26.3")}</strong> (with <code>WHITE_LIST=false</code> so LAN friends can join). Full world file editing &amp; live RCON console are in the dedicated <strong>🎮 Minecraft Server Studio</strong> tab on your Web Dashboard!</div>
+                <div class="card-desc">Quick setup for Minecraft <strong>${esc(state.mc_version || "26.3")}</strong>. Manage worlds, files, and console later in the Web Dashboard.</div>
               </div>
             </div>
           </div>
 
-          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(230px, 1fr));gap:10px;padding-top:8px;border-top:1px solid var(--divider);">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(210px, 1fr));gap:12px;padding-top:8px;border-top:1px solid var(--divider);">
             <div>
-              <div style="font-size:11.5px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;">Server Engine &amp; Crossplay</div>
+              <div style="font-size:11.5px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;">Server Type</div>
               ${renderComboBox("mc_server_type", [
-                { value: "PAPER", label: "PaperMC (Fastest + Plugins)" },
-                { value: "GEYSER_FLOODGATE", label: "Paper + Geyser Crossplay (Java PC + Bedrock Mobile/Console)" },
-                { value: "PURPUR", label: "Purpur (Extra Gameplay Customization)" },
-                { value: "FABRIC", label: "Fabric (Lightweight Modded Server)" },
-                { value: "FORGE", label: "Forge (Classic Modpacks)" },
-                { value: "NEOFORGE", label: "NeoForge (Modern 1.20.4+ Modpacks)" },
-                { value: "VANILLA", label: "Official Mojang Vanilla" }
+                { value: "PAPER", label: "Paper (Fastest + Plugins)" },
+                { value: "GEYSER_FLOODGATE", label: "Paper + Bedrock Crossplay" },
+                { value: "PURPUR", label: "Purpur" },
+                { value: "FABRIC", label: "Fabric (Mods)" },
+                { value: "FORGE", label: "Forge (Modpacks)" },
+                { value: "NEOFORGE", label: "NeoForge" },
+                { value: "VANILLA", label: "Vanilla" }
               ])}
             </div>
 
             <div>
-              <div style="font-size:11.5px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;">Minecraft Version (Latest 2026)</div>
+              <div style="font-size:11.5px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;">Version</div>
               ${renderComboBox("mc_version", [
-                { value: "26.3", label: "26.3 (Latest — Wilderness Bound)" },
-                { value: "26.2", label: "26.2 (Chaos Cubed)" },
-                { value: "26.1", label: "26.1 (Tiny Takeover)" },
-                { value: "1.21.11", label: "1.21.11 (Legacy Tricky Trials)" },
+                { value: "26.3", label: "26.3 (Latest)" },
+                { value: "26.2", label: "26.2" },
+                { value: "26.1", label: "26.1" },
+                { value: "1.21.11", label: "1.21.11" },
                 { value: "1.21.4", label: "1.21.4" },
-                { value: "LATEST", label: "Auto-Latest Release" }
+                { value: "LATEST", label: "Auto-Latest" }
               ])}
             </div>
 
             <div>
-              <div style="font-size:11.5px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;">JVM Memory Heap (Aikar's G1GC Flags On)</div>
+              <div style="font-size:11.5px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;">Memory (RAM)</div>
               ${renderComboBox("mc_memory_heap", [
-                { value: "2G", label: "2 GB RAM Heap (4GB System)" },
-                { value: "4G", label: "4 GB RAM Heap (8GB System — Recommended)" },
-                { value: "6G", label: "6 GB RAM Heap (8GB–12GB System)" },
-                { value: "8G", label: "8 GB RAM Heap (16GB System + Heavy Mods)" },
-                { value: "12G", label: "12 GB RAM Heap (16GB–32GB System)" }
+                { value: "2G", label: "2 GB RAM" },
+                { value: "4G", label: "4 GB RAM (Recommended)" },
+                { value: "6G", label: "6 GB RAM" },
+                { value: "8G", label: "8 GB RAM" },
+                { value: "12G", label: "12 GB RAM" }
               ])}
             </div>
 
             <div>
-              <div style="font-size:11.5px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;">Gamemode &amp; Difficulty</div>
-              <div style="display:flex;gap:6px;">
-                ${renderComboBox("mc_gamemode", [
-                  { value: "survival", label: "Survival" },
-                  { value: "creative", label: "Creative" },
-                  { value: "adventure", label: "Adventure" }
-                ])}
-                ${renderComboBox("mc_difficulty", [
-                  { value: "normal", label: "Normal" },
-                  { value: "hard", label: "Hard" },
-                  { value: "easy", label: "Easy" },
-                  { value: "peaceful", label: "Peaceful" }
-                ])}
+              <div style="font-size:11.5px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;">Game Mode</div>
+              ${renderComboBox("mc_gamemode", [
+                { value: "survival", label: "Survival" },
+                { value: "creative", label: "Creative" },
+                { value: "adventure", label: "Adventure" }
+              ])}
+            </div>
+
+            <div>
+              <div style="font-size:11.5px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;">Difficulty</div>
+              ${renderComboBox("mc_difficulty", [
+                { value: "normal", label: "Normal" },
+                { value: "hard", label: "Hard" },
+                { value: "easy", label: "Easy" },
+                { value: "peaceful", label: "Peaceful" }
+              ])}
+            </div>
+
+            <div>
+              <div style="font-size:11.5px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;">Max Players &amp; Admins</div>
+              <div style="display:flex;gap:6px;min-width:0;">
+                <input class="win-input" type="number" style="width:74px;min-width:0;flex-shrink:0;" data-field="mc_max_players" value="${esc(state.mc_max_players)}" placeholder="20" title="Max Players" />
+                <input class="win-input" style="flex:1;min-width:0;" data-field="mc_ops_list" value="${esc(state.mc_ops_list)}" placeholder="Admin usernames" />
               </div>
             </div>
 
             <div>
-              <div style="font-size:11.5px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;">Admin Operators (OPS) &amp; Max Players</div>
-              <div style="display:flex;gap:6px;">
-                <input class="win-input" style="flex:1;min-width:120px;" data-field="mc_ops_list" value="${esc(state.mc_ops_list)}" placeholder="Admin usernames (comma-sep)" />
-                <input class="win-input" type="number" style="width:78px;min-width:78px;" data-field="mc_max_players" value="${esc(state.mc_max_players)}" placeholder="20" title="Max Players" />
-              </div>
+              <div style="font-size:11.5px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;">Plugins / Mods (Optional)</div>
+              <input class="win-input" style="width:100%;min-width:0;" data-field="mc_modrinth_projects" value="${esc(state.mc_modrinth_projects)}" placeholder="e.g. viaversion, worldedit" />
             </div>
 
             <div>
-              <div style="font-size:11.5px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;">Auto-Install Modrinth Plugins / Mods</div>
-              <input class="win-input" style="width:100%;" data-field="mc_modrinth_projects" value="${esc(state.mc_modrinth_projects)}" placeholder="viaversion,chunky,worldedit,lithium,bluemap" />
-            </div>
-
-            <div>
-              <div style="font-size:11.5px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;">World Seed &amp; Server Banner (MOTD)</div>
-              <div style="display:flex;gap:6px;">
-                <input class="win-input" style="width:110px;min-width:110px;" data-field="mc_level_seed" value="${esc(state.mc_level_seed)}" placeholder="Seed (opt)" />
-                <input class="win-input" style="flex:1;min-width:120px;" data-field="mc_motd" value="${esc(state.mc_motd)}" placeholder="Server MOTD" />
-              </div>
-            </div>
-
-            <div>
-              <div style="font-size:11.5px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;">Whitelist &amp; RCON Admin Password</div>
-              <div style="display:flex;gap:6px;">
-                <input class="win-input" style="flex:1;min-width:110px;" data-field="mc_whitelist" value="${esc(state.mc_whitelist)}" placeholder="Whitelist (empty = open)" />
-                <input class="win-input" style="width:130px;min-width:130px;" data-field="mc_rcon_password" value="${esc(state.mc_rcon_password)}" placeholder="RCON password" />
+              <div style="font-size:11.5px;font-weight:600;color:var(--text-secondary);margin-bottom:4px;">World Seed &amp; Server Name</div>
+              <div style="display:flex;gap:6px;min-width:0;">
+                <input class="win-input" style="width:96px;min-width:0;flex-shrink:0;" data-field="mc_level_seed" value="${esc(state.mc_level_seed)}" placeholder="Seed" />
+                <input class="win-input" style="flex:1;min-width:0;" data-field="mc_motd" value="${esc(state.mc_motd)}" placeholder="Server name" />
               </div>
             </div>
           </div>
@@ -5951,11 +6000,11 @@ ${storageSnippet}
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-top:8px;border-top:1px solid var(--divider);font-size:12px;">
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
               <input type="checkbox" data-action="toggle-mc-online-mode" ${state.mc_online_mode ? "checked" : ""} style="accent-color:var(--accent);width:16px;height:16px;" />
-              <span><strong>Mojang Online Auth (<code>ONLINE_MODE=${state.mc_online_mode}</code>):</strong> Uncheck to allow offline / LAN / non-premium clients to join</span>
+              <span>Require Mojang sign-in (uncheck for offline/LAN players)</span>
             </label>
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
               <input type="checkbox" data-action="toggle-mc-aikar" ${state.mc_use_aikar_flags ? "checked" : ""} style="accent-color:var(--accent);width:16px;height:16px;" />
-              <span><strong>Aikar's G1GC Anti-Lag JVM Flags</strong> + <strong>12h RCON World Backups</strong></span>
+              <span>Performance flags &amp; automatic backups</span>
             </label>
           </div>
         </div>
@@ -6108,10 +6157,10 @@ ${storageSnippet}
       return `
         <div class="tab-flow-stack">
           ${basicHtml}
-          ${renderExpander("apps", "Advanced App, Custom Workflows & Offline Options (Placed above catalog — no scrolling needed)", advHtml + buildUniversalAppFileStudioHtml())}
           <div class="appstore-grid" id="appStoreGridContainer">
             ${renderFilteredAppCardsHtml()}
           </div>
+          ${renderExpander("apps", "Advanced options", advHtml + buildUniversalAppFileStudioHtml())}
         </div>
       `;
     }
@@ -6465,14 +6514,13 @@ ${storageSnippet}
 
           <div class="notice-banner notice-banner-warning" id="bannerThermalOverheatTrap" style="${state.ignore_lid_switch ? "" : "display:none;"}">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-              <div style="font-weight:600;">⚠️ Thermal Placement Warning — Avoid the Closed-Lid Overheating Trap</div>
+              <div style="font-weight:600;">⚠️ Keep laptop in an open, ventilated area</div>
               <button type="button" class="win-btn win-btn-sm ${state.disable_cpu_turbo_boost ? "win-btn-accent" : ""}" data-action="enable-cool-quiet-profile">
-                ${state.disable_cpu_turbo_boost ? "✓ Cool & Quiet Mode ON (Click to Turn Off)" : "🌡️ Enable Cool & Quiet CPU Mode"}
+                ${state.disable_cpu_turbo_boost ? "✓ Cool & Quiet Mode ON" : "Enable Cool & Quiet Mode"}
               </button>
             </div>
             <div style="font-size:12px;line-height:1.45;color:var(--text-primary);">
-              Laptops dissipate heat upward through the keyboard deck. Closing the lid completely and tucking the laptop into a dark drawer, closet, or closed cabinet traps heat and can cook the battery, SSD, and motherboard over months of 24/7 uptime.
-              <strong>Best practice:</strong> Stand the laptop vertically in an open-air stand, prop the lid slightly ajar (1–2 inches), or place it on a cooling pad with unrestricted airflow.
+              Avoid placing a closed laptop inside enclosed drawers or cabinets. Keep airflow unobstructed or prop the lid slightly ajar.
             </div>
           </div>
 
@@ -6485,7 +6533,7 @@ ${storageSnippet}
               </div>
             </div>
             <div class="card-right">
-              <input type="range" min="50" max="85" step="5" value="${state.battery_charge_stop_pct}" data-field="battery_charge_stop_pct" style="accent-color:var(--accent);width:160px;" />
+              ${renderSlider("battery_charge_stop_pct", 50, 85, 5, state.battery_charge_stop_pct, "%", 160)}
             </div>
           </div>
 
@@ -6498,7 +6546,7 @@ ${storageSnippet}
               </div>
             </div>
             <div class="card-right">
-              <input type="range" min="10" max="35" step="5" value="${state.ups_shutdown_battery_pct}" data-field="ups_shutdown_battery_pct" style="accent-color:var(--accent);width:160px;" />
+              ${renderSlider("ups_shutdown_battery_pct", 10, 35, 5, state.ups_shutdown_battery_pct, "%", 160)}
             </div>
           </div>
         </div>
@@ -6582,7 +6630,7 @@ ${storageSnippet}
               </div>
             </div>
             <div class="card-right">
-              <input type="range" min="1" max="60" step="1" value="${state.vm_swappiness}" data-field="vm_swappiness" style="accent-color:var(--accent);width:140px;" />
+              ${renderSlider("vm_swappiness", 1, 60, 1, state.vm_swappiness, "%", 140)}
             </div>
           </div>
         ` : ""}
@@ -6657,50 +6705,24 @@ ${storageSnippet}
             </div>
           </div>
 
-          <div class="win-card" style="flex-direction:column;align-items:stretch;gap:10px;border-color:var(--accent);">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-              <div class="card-left">
-                <div class="card-icon">🧪</div>
-                <div class="card-text">
-                  <div class="card-title">
-                    <span>Test Without Flashing a Physical USB (Disposable VM &amp; Dashboard Tester)</span>
-                    <span class="badge badge-accent">No Old Laptop Needed</span>
-                  </div>
-                  <div class="card-desc">Builds a real bootable virtual USB image (<code>Instant_Server_Data/vm_test/instant-server-usb.img</code>) with your exact config, launches a disposable QEMU VM (port-forwarded to <code>http://127.0.0.1:18088</code>), or lets you preview the Web Dashboard right now.</div>
-                </div>
-              </div>
-              <div class="card-right" style="gap:8px;flex-wrap:wrap;">
-                <button type="button" class="win-btn win-btn-sm" data-action="open-dashboard-preview">🌐 Preview Web Dashboard</button>
-                <button type="button" class="win-btn win-btn-accent win-btn-sm" data-action="run-disposable-vm-test" ${state.vmTestBusy ? "disabled" : ""}>
-                  ${state.vmTestBusy ? "⏳ Building Virtual USB..." : "🧪 Test Bootable USB in Disposable VM"}
-                </button>
-              </div>
-            </div>
-            ${state.vmTestStatusMessage ? `
-              <div style="font-family:var(--font-mono);font-size:12px;color:var(--success);background:var(--bg-input);padding:9px 12px;border-radius:var(--radius-sm);border:1px solid var(--border-subtle);">
-                ✓ ${esc(state.vmTestStatusMessage)}
-              </div>
-            ` : ""}
-          </div>
-
           <div class="win-card" style="flex-direction:column;align-items:stretch;gap:10px;border-color:var(--success);">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
               <div class="card-left">
                 <div class="card-icon">💾</div>
                 <div class="card-text">
                   <div class="card-title">
-                    <span>Downloaded ISO &amp; App Files After Flashing</span>
-                    <span class="badge badge-success">Kept by Default on Exit</span>
+                    <span>Cached ISO &amp; App Files</span>
+                    <span class="badge badge-success">Kept by Default</span>
                   </div>
-                  <div class="card-desc">Choose whether to keep the downloaded Ubuntu ISO and staged app files in <code>Instant_Server_Data</code> so you can reflash or add new apps later (only newly added/changed apps will be installed), or delete them to free disk space. <strong>If you exit without selecting, files are kept by default.</strong></div>
+                  <div class="card-desc">Keep downloaded files in <code>Instant_Server_Data</code> for faster reflashing, or delete them after flashing to free disk space.</div>
                 </div>
               </div>
               <div class="card-right" style="gap:8px;flex-wrap:wrap;">
                 <button type="button" class="win-btn win-btn-sm ${state.cacheRetentionMode !== "delete" ? "win-btn-accent" : ""}" data-action="cache-keep">
-                  ✓ Keep Files for Fast Reflash / Adding Apps (Default)
+                  ✓ Keep Files (Default)
                 </button>
                 <button type="button" class="win-btn win-btn-sm ${state.cacheRetentionMode === "delete" ? "win-btn-danger" : ""}" data-action="cache-delete">
-                  🗑 Delete Cached Files to Free Space
+                  🗑 Delete Cached Files
                 </button>
               </div>
             </div>
@@ -6713,11 +6735,11 @@ ${storageSnippet}
             <div class="card-left">
               <div class="card-icon">📺</div>
               <div class="card-text">
-                <div class="card-title">Beginner Guide: What happens after you plug the USB into your old laptop/PC?</div>
+                <div class="card-title">Next steps after flashing</div>
                 <div class="card-desc">
-                  <strong>1. Power on &amp; boot from USB:</strong> Tap the boot menu key (<strong>F12</strong> on Dell/Lenovo/Acer, <strong>F9</strong> on HP, <strong>F8</strong> on Asus, <strong>F11</strong> on MSI) and select your USB drive.<br/>
-                  <strong>2. 100% hands-free install:</strong> Do not press anything! Ubuntu Server installs automatically, survives accidental power cuts (auto-resuming interrupted packages on next boot), and sets up your apps in the background.<br/>
-                  <strong>3. Read the Dashboard URL right off the laptop screen:</strong> When finished, the server terminal screen automatically displays your exact Web Dashboard address (<code>http://${esc(state.hostname || "instant-server")}.local:${state.dashboard_port}</code> and your LAN IP <code>http://192.168.x.x:${state.dashboard_port}</code>) right above <code>login:</code> — you never need to type a single Linux command!
+                  <strong>1. Boot from USB:</strong> Plug the USB into your target computer, power it on, and select the USB drive from the boot menu (F12 / F9 / F8 / F11).<br/>
+                  <strong>2. Automatic setup:</strong> Ubuntu Server and your selected apps install automatically.<br/>
+                  <strong>3. Open Web Dashboard:</strong> Once complete, the screen displays your Web Dashboard URL (<code>http://${esc(state.hostname || "instant-server")}.local:${state.dashboard_port}</code>).
                 </div>
               </div>
             </div>
@@ -6998,8 +7020,6 @@ ${storageSnippet}
               `).join("")}
             </div>
 
-            <div class="section-label">Generated cloud-init configuration</div>
-            <div class="code-viewer">${esc(generateYamlPreview())}</div>
           </div>
         `;
       }
@@ -7686,8 +7706,9 @@ ${storageSnippet}
         await handleCacheRetentionAction("keep");
       } else if (action === "cache-delete") {
         await handleCacheRetentionAction("delete");
-      } else if (action === "run-disposable-vm-test") {
-        await runDisposableVMTest();
+      } else if (action === "toggle-expand-apps") {
+        state.appsExpanded = !state.appsExpanded;
+        refreshAppGridInPlace();
       } else if (action === "open-dashboard-preview") {
         window.open("server_dashboard.html", "_blank", "noopener");
         showToast("Opened live Server Web Dashboard preview");
@@ -7806,7 +7827,66 @@ ${storageSnippet}
         const t = document.getElementById("lblSwappinessTitle");
         if (t) t.textContent = `Memory swap tendency (${state.vm_swappiness}%)`;
       }
+
+      if (e.target && e.target.type === "range") {
+        updateSliderBubblePosition(e.target, true);
+      }
     });
+
+    function updateSliderBubblePosition(rangeEl, showBubble) {
+      if (!rangeEl) return;
+      const wrap = rangeEl.closest(".win-slider-wrap");
+      if (!wrap) return;
+      const bubble = wrap.querySelector(".win-slider-bubble");
+      if (!bubble) return;
+      const min = Number(rangeEl.min) || 0;
+      const max = Number(rangeEl.max) || 100;
+      const val = Number(rangeEl.value ?? min);
+      const unit = rangeEl.getAttribute("data-unit") || "%";
+      const ratio = Math.max(0, Math.min(1, (val - min) / Math.max(1, max - min)));
+      const trackWidth = rangeEl.offsetWidth || 160;
+      const leftPx = 8 + ratio * Math.max(0, trackWidth - 16);
+      bubble.style.left = `${leftPx.toFixed(1)}px`;
+      bubble.textContent = `${val}${unit}`;
+      if (showBubble) {
+        wrap.classList.add("active");
+        if (wrap._hideTimer) clearTimeout(wrap._hideTimer);
+      }
+    }
+
+    function hideSliderBubble(rangeEl) {
+      if (!rangeEl) return;
+      const wrap = rangeEl.closest(".win-slider-wrap");
+      if (!wrap) return;
+      if (wrap._hideTimer) clearTimeout(wrap._hideTimer);
+      wrap.classList.remove("active");
+    }
+
+    document.body.addEventListener("pointerdown", (e) => {
+      if (e.target && e.target.type === "range") {
+        updateSliderBubblePosition(e.target, true);
+      }
+    });
+    document.body.addEventListener("pointerup", (e) => {
+      if (e.target && e.target.type === "range") {
+        hideSliderBubble(e.target);
+      }
+    });
+    document.body.addEventListener("pointercancel", (e) => {
+      if (e.target && e.target.type === "range") {
+        hideSliderBubble(e.target);
+      }
+    });
+    document.body.addEventListener("mouseout", (e) => {
+      if (e.target && e.target.type === "range" && !e.target.matches(":active")) {
+        hideSliderBubble(e.target);
+      }
+    });
+    document.body.addEventListener("blur", (e) => {
+      if (e.target && e.target.type === "range") {
+        hideSliderBubble(e.target);
+      }
+    }, true);
 
     window.__showCloseWhileFlashingWarning = () => {
       state.closeWarningOpen = true;
