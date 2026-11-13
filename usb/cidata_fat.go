@@ -3,7 +3,6 @@ package usb
 
 import (
 	"encoding/binary"
-	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -11,26 +10,26 @@ import (
 )
 
 const (
-	fatBytesPerSector    = 512
-	fatSectorsPerCluster = 8 // 4096 bytes per cluster
-	fatBytesPerCluster   = fatBytesPerSector * fatSectorsPerCluster
-	fatReservedSectors   = 1
-	fatNumTables         = 2
-	fatRootDirEntries    = 512
-	fatRootDirSectors    = (fatRootDirEntries * 32) / fatBytesPerSector // 32 sectors
-	fatTotalClusters     = 4100                                         // > 4085 clusters guarantees strict FAT16 detection in Linux vfat/blkid
-	fatSectorsPerTable   = 32                                           // 32 * 512 = 16,384 bytes (8,192 FAT16 entries)
-	fatDataStartSector   = fatReservedSectors + (fatNumTables * fatSectorsPerTable) + fatRootDirSectors
-	fatTotalSectors      = fatDataStartSector + (fatTotalClusters * fatSectorsPerCluster)
-	fatTotalImageBytes   = fatTotalSectors * fatBytesPerSector // ~16.8 MB default FAT16 volume
+	// 32,896 sectors * 512 bytes = 16,842,752 bytes (~16.06 MB)
+	// Guarantees > 4,096 data clusters (>= 4,085 clusters is required by the Microsoft FAT specification
+	// and Linux kernel vfat driver to mount as strict FAT16 instead of FAT12).
+	fatTotalSectors    = 32896
+	fatBytesPerSector  = 512
+	fatSectorsPerClust = 8 // 4,096 bytes per cluster
+	fatReservedSectors = 8 // 4,096 bytes aligned
+	fatNumTables       = 2
+	fatSectorsPerTable = 16 // 16 * 512 = 8,192 bytes (holds 4,096 16-bit cluster entries)
+	fatRootDirEntries  = 512
+	fatRootDirSectors  = (fatRootDirEntries * 32) / fatBytesPerSector // 32 sectors (16,384 bytes)
+	fatDataStartSector = fatReservedSectors + (fatNumTables * fatSectorsPerTable) + fatRootDirSectors
 )
 
 type fatStagedFile struct {
-	RelName string
-	Data    []byte
+	Name string
+	Data []byte
 }
 
-func computeVFATChecksum(shortName [11]byte) byte {
+func vfatChecksum(shortName [11]byte) byte {
 	var sum byte
 	for i := 0; i < 11; i++ {
 		sum = ((sum & 1) << 7) + (sum >> 1) + shortName[i]
@@ -44,13 +43,15 @@ func makeShort83Name(name string, index int) [11]byte {
 		out[i] = ' '
 	}
 	upper := strings.ToUpper(name)
-	ext := ""
-	base := upper
-	if dot := strings.LastIndexByte(upper, '.'); dot > 0 {
-		base = upper[:dot]
-		ext = upper[dot+1:]
+	dotIdx := strings.LastIndex(upper, ".")
+	basePart := upper
+	extPart := ""
+	if dotIdx > 0 {
+		basePart = upper[:dotIdx]
+		extPart = upper[dotIdx+1:]
 	}
-	cleanChars := func(s string) string {
+
+	clean := func(s string) string {
 		var b strings.Builder
 		for _, r := range s {
 			if (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
@@ -59,36 +60,47 @@ func makeShort83Name(name string, index int) [11]byte {
 		}
 		return b.String()
 	}
-	cBase := cleanChars(base)
-	cExt := cleanChars(ext)
-	if cBase == "" {
-		cBase = "FILE"
+
+	bClean := clean(basePart)
+	eClean := clean(extPart)
+	if len(bClean) == 0 {
+		bClean = "FILE"
 	}
-	if name == strings.ToLower(name) && len(base) <= 8 && len(ext) <= 3 && !strings.Contains(name, "-") && len(cBase) == len(base) && len(cExt) == len(ext) {
-		for i := 0; i < len(cBase) && i < 8; i++ {
-			out[i] = cBase[i]
+
+	// If simple 8.3 and no hyphen/mixed-case/long name, use exact 8.3 short name
+	isSimple83 := (dotIdx < 0 && len(name) <= 8 && bClean == upper) ||
+		(dotIdx > 0 && len(basePart) <= 8 && len(extPart) <= 3 && bClean == basePart && eClean == extPart)
+
+	if isSimple83 {
+		for i := 0; i < len(bClean) && i < 8; i++ {
+			out[i] = bClean[i]
 		}
-	} else {
-		suffix := fmt.Sprintf("~%d", index)
-		maxPrefix := 8 - len(suffix)
-		if len(cBase) < maxPrefix {
-			maxPrefix = len(cBase)
+		for i := 0; i < len(eClean) && i < 3; i++ {
+			out[8+i] = eClean[i]
 		}
-		for i := 0; i < maxPrefix; i++ {
-			out[i] = cBase[i]
-		}
-		for i := 0; i < len(suffix); i++ {
-			out[maxPrefix+i] = suffix[i]
-		}
+		return out
 	}
-	for i := 0; i < len(cExt) && i < 3; i++ {
-		out[8+i] = cExt[i]
+
+	prefix := bClean
+	if len(prefix) > 5 {
+		prefix = prefix[:5]
+	}
+	suffix := "~" + string(rune('0'+(index%9)+1))
+	if index >= 9 {
+		suffix = "~" + string(rune('A'+((index-9)%26)))
+	}
+	combined := prefix + suffix
+	for i := 0; i < len(combined) && i < 8; i++ {
+		out[i] = combined[i]
+	}
+	for i := 0; i < len(eClean) && i < 3; i++ {
+		out[8+i] = eClean[i]
 	}
 	return out
 }
 
 func buildLFNEntries(longName string, shortName [11]byte) [][32]byte {
-	chk := computeVFATChecksum(shortName)
+	chk := vfatChecksum(shortName)
 	utf16Chars := make([]uint16, 0, len(longName)+1)
 	for _, r := range longName {
 		utf16Chars = append(utf16Chars, uint16(r))
@@ -98,39 +110,31 @@ func buildLFNEntries(longName string, shortName [11]byte) [][32]byte {
 		utf16Chars = append(utf16Chars, 0xFFFF)
 	}
 
-	numChunks := len(utf16Chars) / 13
-	entries := make([][32]byte, 0, numChunks)
-	offsets := [13]int{1, 3, 5, 7, 9, 14, 16, 18, 20, 22, 24, 28, 30}
+	numSlots := len(utf16Chars) / 13
+	entries := make([][32]byte, 0, numSlots)
+	byteOffsets := []int{1, 3, 5, 7, 9, 14, 16, 18, 20, 22, 24, 28, 30}
 
-	for seq := numChunks; seq >= 1; seq-- {
+	for slot := numSlots; slot >= 1; slot-- {
 		var ent [32]byte
-		ord := byte(seq)
-		if seq == numChunks {
-			ord |= 0x40
+		seq := byte(slot)
+		if slot == numSlots {
+			seq |= 0x40 // Last LFN entry marker
 		}
-		ent[0] = ord
+		ent[0] = seq
 		ent[11] = 0x0F // ATTR_LONG_NAME
 		ent[12] = 0x00
 		ent[13] = chk
 		ent[26] = 0x00
 		ent[27] = 0x00
-		chunk := utf16Chars[(seq-1)*13 : seq*13]
-		for j := 0; j < 13; j++ {
-			binary.LittleEndian.PutUint16(ent[offsets[j]:offsets[j]+2], chunk[j])
+
+		chunk := utf16Chars[(slot-1)*13 : slot*13]
+		for i, code := range chunk {
+			off := byteOffsets[i]
+			binary.LittleEndian.PutUint16(ent[off:off+2], code)
 		}
 		entries = append(entries, ent)
 	}
 	return entries
-}
-
-func shouldSkipNonCidataFile(name string) bool {
-	lower := strings.ToLower(strings.TrimSpace(name))
-	for _, ext := range []string{".iso", ".img", ".dmg", ".part", ".exe", ".bin"} {
-		if strings.HasSuffix(lower, ext) {
-			return true
-		}
-	}
-	return false
 }
 
 // BuildCidataFAT16Image creates a standard-compliant FAT16 (vfat) partition image
@@ -142,166 +146,165 @@ func BuildCidataFAT16Image(stageDir string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	var files []fatStagedFile
-	totalRequiredClusters := 0
+	var totalFileClusters int
+	bytesPerCluster := fatSectorsPerClust * fatBytesPerSector
 	for _, ent := range entries {
-		if ent.IsDir() || shouldSkipNonCidataFile(ent.Name()) {
+		if ent.IsDir() || strings.HasSuffix(ent.Name(), ".img") || strings.HasSuffix(ent.Name(), ".iso") {
 			continue
 		}
-		raw, rErr := os.ReadFile(filepath.Join(stageDir, ent.Name()))
-		if rErr == nil {
-			files = append(files, fatStagedFile{RelName: ent.Name(), Data: raw})
-			if len(raw) > 0 {
-				totalRequiredClusters += (len(raw) + fatBytesPerCluster - 1) / fatBytesPerCluster
-			}
+		raw, err := os.ReadFile(filepath.Join(stageDir, ent.Name()))
+		if err != nil {
+			return nil, err
 		}
-	}
-	hasInstallLog := false
-	for _, f := range files {
-		if strings.EqualFold(f.RelName, "INSTANT-SERVER-INSTALL.log") {
-			hasInstallLog = true
-			break
+		files = append(files, fatStagedFile{
+			Name: ent.Name(),
+			Data: raw,
+		})
+		c := (len(raw) + bytesPerCluster - 1) / bytesPerCluster
+		if c == 0 {
+			c = 1
 		}
+		totalFileClusters += c
 	}
-	if !hasInstallLog {
-		initLog := []byte("================================================================================\n INSTANT SERVER USB LOGFILE INITIALIZED\n All boot, Subiquity, Curtin, Netplan, and setup logs are saved here automatically.\n================================================================================\n")
-		files = append(files, fatStagedFile{RelName: "INSTANT-SERVER-INSTALL.log", Data: initLog})
-		totalRequiredClusters += 1
-	}
-	sort.Slice(files, func(i, j int) bool { return files[i].RelName < files[j].RelName })
+	sort.Slice(files, func(i, j int) bool {
+		return files[i].Name < files[j].Name
+	})
 
 	// Dynamically size the FAT16 volume so it is always >= 4100 clusters (strict FAT16)
 	// and never overflows even when large custom payloads are staged.
-	totalClusters := fatTotalClusters
-	if totalRequiredClusters+64 > totalClusters {
-		totalClusters = totalRequiredClusters + 64
+	reqClusters := totalFileClusters + 64
+	if reqClusters < 4100 {
+		reqClusters = 4100
 	}
-	if totalClusters > 65520 {
-		totalClusters = 65520
+	if reqClusters > 65520 {
+		reqClusters = 65520
 	}
-	sectorsPerTable := ((totalClusters+2)*2 + fatBytesPerSector - 1) / fatBytesPerSector
-	if sectorsPerTable < fatSectorsPerTable {
-		sectorsPerTable = fatSectorsPerTable
+	sectorsPerFAT := ((reqClusters + 2) * 2 + fatBytesPerSector - 1) / fatBytesPerSector
+	if sectorsPerFAT < fatSectorsPerTable {
+		sectorsPerFAT = fatSectorsPerTable
 	}
-	dataStartSector := fatReservedSectors + (fatNumTables * sectorsPerTable) + fatRootDirSectors
-	totalSectors := dataStartSector + (totalClusters * fatSectorsPerCluster)
-	totalImageBytes := totalSectors * fatBytesPerSector
+	dataStartSector := fatReservedSectors + (fatNumTables * sectorsPerFAT) + fatRootDirSectors
+	totalSectors := dataStartSector + reqClusters*fatSectorsPerClust
+	totalSectors = ((totalSectors + 7) / 8) * 8 // 4096-byte page aligned
 
-	img := make([]byte, totalImageBytes)
+	imgSize := totalSectors * fatBytesPerSector
+	img := make([]byte, imgSize)
 
 	// 1. Format Boot Sector (BIOS Parameter Block) at Sector 0
-	boot := img[0:fatBytesPerSector]
-	boot[0], boot[1], boot[2] = 0xEB, 0x3C, 0x90
-	copy(boot[3:11], []byte("MSDOS5.0"))
-	binary.LittleEndian.PutUint16(boot[11:13], fatBytesPerSector)
-	boot[13] = fatSectorsPerCluster
-	binary.LittleEndian.PutUint16(boot[14:16], fatReservedSectors)
-	boot[16] = fatNumTables
-	binary.LittleEndian.PutUint16(boot[17:19], fatRootDirEntries)
-	binary.LittleEndian.PutUint16(boot[19:21], 0) // TotalSectors16 = 0 (use TotalSectors32)
-	boot[21] = 0xF8                               // Fixed/removable media descriptor
-	binary.LittleEndian.PutUint16(boot[22:24], uint16(sectorsPerTable))
-	binary.LittleEndian.PutUint16(boot[24:26], 63)  // Sectors per track
-	binary.LittleEndian.PutUint16(boot[26:28], 255) // Heads
-	binary.LittleEndian.PutUint32(boot[28:32], 0)   // Hidden sectors
-	binary.LittleEndian.PutUint32(boot[32:36], uint32(totalSectors))
-	boot[36] = 0x80 // Drive number
-	boot[38] = 0x29 // Extended boot signature
-	binary.LittleEndian.PutUint32(boot[39:43], 0x20261108)
-	copy(boot[43:54], []byte("CIDATA     "))
-	copy(boot[54:62], []byte("FAT16   "))
-	boot[510] = 0x55
-	boot[511] = 0xAA
+	img[0] = 0xEB
+	img[1] = 0x3C
+	img[2] = 0x90
+	copy(img[3:11], []byte("MSDOS5.0"))
+	binary.LittleEndian.PutUint16(img[11:13], uint16(fatBytesPerSector))
+	img[13] = uint8(fatSectorsPerClust)
+	binary.LittleEndian.PutUint16(img[14:16], uint16(fatReservedSectors))
+	img[16] = uint8(fatNumTables)
+	binary.LittleEndian.PutUint16(img[17:19], uint16(fatRootDirEntries))
+	if totalSectors <= 0xFFFF {
+		binary.LittleEndian.PutUint16(img[19:21], uint16(totalSectors))
+		binary.LittleEndian.PutUint32(img[32:36], 0)
+	} else {
+		binary.LittleEndian.PutUint16(img[19:21], 0)
+		binary.LittleEndian.PutUint32(img[32:36], uint32(totalSectors))
+	}
+	img[21] = 0xF8 // Fixed / removable media descriptor
+	binary.LittleEndian.PutUint16(img[22:24], uint16(sectorsPerFAT))
+	binary.LittleEndian.PutUint16(img[24:26], 63)  // Sectors per track
+	binary.LittleEndian.PutUint16(img[26:28], 255) // Heads
+	img[36] = 0x80                                 // Drive number
+	img[38] = 0x29                                 // Extended boot signature
+	binary.LittleEndian.PutUint32(img[39:43], 0x20261108)
+	copy(img[43:54], []byte("CIDATA     "))
+	copy(img[54:62], []byte("FAT16   "))
+	img[510] = 0x55
+	img[511] = 0xAA
 
 	// 2. Initialize FAT #1 and FAT #2 reserved cluster entries 0 and 1
 	fat1Offset := fatReservedSectors * fatBytesPerSector
-	fat2Offset := (fatReservedSectors + sectorsPerTable) * fatBytesPerSector
-	setFATEntry := func(cluster uint16, val uint16) {
-		pos := int(cluster) * 2
-		if fat1Offset+pos+2 <= len(img) && fat2Offset+pos+2 <= len(img) {
-			binary.LittleEndian.PutUint16(img[fat1Offset+pos:fat1Offset+pos+2], val)
-			binary.LittleEndian.PutUint16(img[fat2Offset+pos:fat2Offset+pos+2], val)
+	fat2Offset := (fatReservedSectors + sectorsPerFAT) * fatBytesPerSector
+	writeFATEntry := func(cluster uint16, val uint16) {
+		off := int(cluster) * 2
+		if fat1Offset+off+2 <= len(img) && fat2Offset+off+2 <= len(img) {
+			binary.LittleEndian.PutUint16(img[fat1Offset+off:fat1Offset+off+2], val)
+			binary.LittleEndian.PutUint16(img[fat2Offset+off:fat2Offset+off+2], val)
 		}
 	}
-	setFATEntry(0, 0xFFF8)
-	setFATEntry(1, 0xFFFF)
+	writeFATEntry(0, 0xFFF8)
+	writeFATEntry(1, 0xFFFF)
 
 	// 3. Initialize Root Directory with Volume Label entry ("CIDATA     ", ATTR_VOLUME_ID = 0x08)
-	rootDirOffset := (fatReservedSectors + fatNumTables*sectorsPerTable) * fatBytesPerSector
+	rootDirOffset := (fatReservedSectors + fatNumTables*sectorsPerFAT) * fatBytesPerSector
 	dirCursor := rootDirOffset
-	writeDirEntry := func(entry [32]byte) {
-		if dirCursor+32 <= rootDirOffset+(fatRootDirSectors*fatBytesPerSector) {
-			copy(img[dirCursor:dirCursor+32], entry[:])
-			dirCursor += 32
-		}
-	}
-
-	var volEntry [32]byte
-	copy(volEntry[0:11], []byte("CIDATA     "))
-	volEntry[11] = 0x08 // ATTR_VOLUME_ID
-	writeDirEntry(volEntry)
+	copy(img[dirCursor:dirCursor+11], []byte("CIDATA     "))
+	img[dirCursor+11] = 0x08 // Volume Label attribute
+	dirCursor += 32
 
 	// 4. Write staged files into FAT16 data clusters
 	nextCluster := uint16(2)
+
 	for idx, f := range files {
-		shortName := makeShort83Name(f.RelName, idx+1)
-		for _, lfn := range buildLFNEntries(f.RelName, shortName) {
-			writeDirEntry(lfn)
+		shortName := makeShort83Name(f.Name, idx+1)
+		lfnList := buildLFNEntries(f.Name, shortName)
+		for _, lfn := range lfnList {
+			if dirCursor+32 <= rootDirOffset+(fatRootDirSectors*fatBytesPerSector) {
+				copy(img[dirCursor:dirCursor+32], lfn[:])
+				dirCursor += 32
+			}
 		}
 
-		firstCluster := uint16(0)
+		startCluster := uint16(0)
 		remaining := len(f.Data)
 		if remaining > 0 {
-			firstCluster = nextCluster
-			numClusters := (remaining + fatBytesPerCluster - 1) / fatBytesPerCluster
+			startCluster = nextCluster
+			numClusters := (remaining + bytesPerCluster - 1) / bytesPerCluster
 			for c := 0; c < numClusters; c++ {
 				curCluster := nextCluster
 				nextCluster++
 				if c == numClusters-1 {
-					setFATEntry(curCluster, 0xFFFF)
+					writeFATEntry(curCluster, 0xFFFF) // End of cluster chain
 				} else {
-					setFATEntry(curCluster, curCluster+1)
+					writeFATEntry(curCluster, nextCluster)
 				}
-				dataOffset := (dataStartSector * fatBytesPerSector) + int(curCluster-2)*fatBytesPerCluster
-				startByte := c * fatBytesPerCluster
-				endByte := startByte + fatBytesPerCluster
+				dataOffset := (dataStartSector*fatBytesPerSector) + int(curCluster-2)*bytesPerCluster
+				startByte := c * bytesPerCluster
+				endByte := startByte + bytesPerCluster
 				if endByte > len(f.Data) {
 					endByte = len(f.Data)
 				}
-				chunkLen := endByte - startByte
-				if dataOffset >= 0 && dataOffset+chunkLen <= len(img) {
-					copy(img[dataOffset:dataOffset+chunkLen], f.Data[startByte:endByte])
+				if dataOffset >= 0 && dataOffset+(endByte-startByte) <= len(img) {
+					copy(img[dataOffset:dataOffset+(endByte-startByte)], f.Data[startByte:endByte])
 				}
 			}
 		}
 
-		var stdEnt [32]byte
-		copy(stdEnt[0:11], shortName[:])
-		stdEnt[11] = 0x20 // ATTR_ARCHIVE
-		// Set Windows NT / Linux vfat lowercase 8.3 flags (0x18 = lowercase base + lowercase ext)
-		// whenever the filename is lowercase so even non-LFN shortname=winnt mounts see lowercase names.
-		if f.RelName == strings.ToLower(f.RelName) {
-			stdEnt[12] = 0x18
+		if dirCursor+32 <= rootDirOffset+(fatRootDirSectors*fatBytesPerSector) {
+			var stdEnt [32]byte
+			copy(stdEnt[0:11], shortName[:])
+			stdEnt[11] = 0x20 // ATTR_ARCHIVE
+			if f.Name == strings.ToLower(f.Name) {
+				stdEnt[12] = 0x18
+			}
+			binary.LittleEndian.PutUint16(stdEnt[26:28], startCluster)
+			binary.LittleEndian.PutUint32(stdEnt[28:32], uint32(len(f.Data)))
+			copy(img[dirCursor:dirCursor+32], stdEnt[:])
+			dirCursor += 32
 		}
-		binary.LittleEndian.PutUint16(stdEnt[26:28], firstCluster)
-		binary.LittleEndian.PutUint32(stdEnt[28:32], uint32(len(f.Data)))
-		writeDirEntry(stdEnt)
 	}
 
 	return img, nil
 }
 
-// BuildFAT16CidataVolume is a convenience alias for BuildCidataFAT16Image so callers
-// passing an explicit volume label compile cleanly.
 func BuildFAT16CidataVolume(stageDir string, _ string) ([]byte, error) {
 	return BuildCidataFAT16Image(stageDir)
 }
 
-// FormatRemainingUSBAsFAT32 formats the remaining unallocated sectors [startLBA .. endLBA]
-// on the USB drive as a clean, cross-platform FAT32 partition labeled "INSTANTUSB" and pre-creates
-// INSTANT-SERVER-INSTALL.log in its root directory so no USB capacity is wasted and live logs are stored.
+// FormatRemainingUSBAsFAT32 formats sectors [startLBA .. endLBA] on the USB drive
+// as a cross-platform FAT32 partition labeled "INSTANTUSB" and pre-creates
+// INSTANT-SERVER-INSTALL.log in its root directory.
 func FormatRemainingUSBAsFAT32(disk RawDiskHandle, startLBA uint64, endLBA uint64) error {
-	if endLBA <= startLBA+65536 {
+	if endLBA <= startLBA+4096 {
 		return nil
 	}
 	totalSectors64 := endLBA - startLBA + 1
@@ -313,6 +316,8 @@ func FormatRemainingUSBAsFAT32(disk RawDiskHandle, startLBA uint64, endLBA uint6
 	var secPerClus uint32 = 64 // 32 KB clusters (up to 64 GB)
 	if totalSectors > 134217728 {
 		secPerClus = 128 // 64 KB clusters (> 64 GB)
+	} else if totalSectors < 131072 {
+		secPerClus = 1 // 512 B clusters for compact test images (< 64 MB)
 	} else if totalSectors < 16777216 {
 		secPerClus = 16 // 8 KB clusters (< 8 GB)
 	}
@@ -320,14 +325,12 @@ func FormatRemainingUSBAsFAT32(disk RawDiskHandle, startLBA uint64, endLBA uint6
 	const reservedSectors uint32 = 32
 	const numFATs uint32 = 2
 	approxClusters := (totalSectors - reservedSectors) / secPerClus
-	fatSectors := ((approxClusters+2)*4 + 511) / 512
-	// Align fatSectors to 8 sectors (4096 bytes) for page-aligned DMA I/O
+	fatSectors := ((approxClusters + 2) * 4 + 511) / 512
 	fatSectors = ((fatSectors + 7) / 8) * 8
 	if fatSectors < 128 {
 		fatSectors = 128
 	}
 
-	// 1. Build the 32-sector (16 KB) Reserved Region (Boot Sector @ 0, FSInfo @ 1, Backup @ 6)
 	resBuf := AllocPageAlignedBuffer(int(reservedSectors*512), SectorAlignmentBytes)
 	for i := range resBuf {
 		resBuf[i] = 0
@@ -340,21 +343,20 @@ func FormatRemainingUSBAsFAT32(disk RawDiskHandle, startLBA uint64, endLBA uint6
 		b[13] = byte(secPerClus)
 		binary.LittleEndian.PutUint16(b[14:16], uint16(reservedSectors))
 		b[16] = byte(numFATs)
-		binary.LittleEndian.PutUint16(b[17:19], 0) // RootEntCnt = 0 for FAT32
-		binary.LittleEndian.PutUint16(b[19:21], 0) // TotSec16 = 0
-		b[21] = 0xF8                               // Media
-		binary.LittleEndian.PutUint16(b[22:24], 0) // FATSz16 = 0 for FAT32
+		binary.LittleEndian.PutUint16(b[17:19], 0)
+		binary.LittleEndian.PutUint16(b[19:21], 0)
+		b[21] = 0xF8
+		binary.LittleEndian.PutUint16(b[22:24], 0)
 		binary.LittleEndian.PutUint16(b[24:26], 63)
 		binary.LittleEndian.PutUint16(b[26:28], 255)
 		binary.LittleEndian.PutUint32(b[28:32], uint32(startLBA))
 		binary.LittleEndian.PutUint32(b[32:36], totalSectors)
-		// FAT32 Extended BPB
 		binary.LittleEndian.PutUint32(b[36:40], fatSectors)
-		binary.LittleEndian.PutUint16(b[40:42], 0) // ExtFlags
-		binary.LittleEndian.PutUint16(b[42:44], 0) // FSVer
-		binary.LittleEndian.PutUint32(b[44:48], 2) // RootClus = 2
-		binary.LittleEndian.PutUint16(b[48:50], 1) // FSInfo = 1
-		binary.LittleEndian.PutUint16(b[50:52], 6) // BkBootSec = 6
+		binary.LittleEndian.PutUint16(b[40:42], 0)
+		binary.LittleEndian.PutUint16(b[42:44], 0)
+		binary.LittleEndian.PutUint32(b[44:48], 2)
+		binary.LittleEndian.PutUint16(b[48:50], 1)
+		binary.LittleEndian.PutUint16(b[50:52], 6)
 		b[64] = 0x80
 		b[66] = 0x29
 		binary.LittleEndian.PutUint32(b[67:71], 0x20261112)
@@ -374,7 +376,7 @@ func FormatRemainingUSBAsFAT32(disk RawDiskHandle, startLBA uint64, endLBA uint6
 			freeClus = approxClusters - 4
 		}
 		binary.LittleEndian.PutUint32(fsi[488:492], freeClus)
-		binary.LittleEndian.PutUint32(fsi[492:496], 4) // Next free cluster = 4
+		binary.LittleEndian.PutUint32(fsi[492:496], 4)
 		fsi[510] = 0x55
 		fsi[511] = 0xAA
 	}
@@ -385,8 +387,6 @@ func FormatRemainingUSBAsFAT32(disk RawDiskHandle, startLBA uint64, endLBA uint6
 		return err
 	}
 
-	// 2. Initialize FAT #1 and FAT #2 (Clusters 0, 1, 2=RootDir, 3=INSTANT-SERVER-INSTALL.log)
-	// Cap zeroing per FAT table to 4 MB (1,048,576 cluster entries) so formatting even 128 GB USB drives is instant (<0.2s).
 	fatInitBytes := int(fatSectors * 512)
 	if fatInitBytes > 4*1024*1024 {
 		fatInitBytes = 4 * 1024 * 1024
@@ -395,10 +395,10 @@ func FormatRemainingUSBAsFAT32(disk RawDiskHandle, startLBA uint64, endLBA uint6
 	for i := range fatBuf {
 		fatBuf[i] = 0
 	}
-	binary.LittleEndian.PutUint32(fatBuf[0:4], 0x0FFFFFF8)   // Cluster 0: Media
-	binary.LittleEndian.PutUint32(fatBuf[4:8], 0x0FFFFFFF)   // Cluster 1: EOC
-	binary.LittleEndian.PutUint32(fatBuf[8:12], 0x0FFFFFFF)  // Cluster 2: Root Directory
-	binary.LittleEndian.PutUint32(fatBuf[12:16], 0x0FFFFFFF) // Cluster 3: INSTANT-SERVER-INSTALL.log
+	binary.LittleEndian.PutUint32(fatBuf[0:4], 0x0FFFFFF8)
+	binary.LittleEndian.PutUint32(fatBuf[4:8], 0x0FFFFFFF)
+	binary.LittleEndian.PutUint32(fatBuf[8:12], 0x0FFFFFFF)
+	binary.LittleEndian.PutUint32(fatBuf[12:16], 0x0FFFFFFF)
 
 	fat1StartLBA := startLBA + uint64(reservedSectors)
 	fat2StartLBA := fat1StartLBA + uint64(fatSectors)
@@ -409,17 +409,18 @@ func FormatRemainingUSBAsFAT32(disk RawDiskHandle, startLBA uint64, endLBA uint6
 		return err
 	}
 
-	// 3. Initialize Cluster 2 (Root Directory) and Cluster 3 (INSTANT-SERVER-INSTALL.log)
 	clusterBytes := int(secPerClus * 512)
+	if clusterBytes < 4096 {
+		clusterBytes = 4096
+	}
 	dataRegionStartLBA := fat2StartLBA + uint64(fatSectors)
 	twoClustersBuf := AllocPageAlignedBuffer(clusterBytes*2, SectorAlignmentBytes)
 	for i := range twoClustersBuf {
 		twoClustersBuf[i] = 0
 	}
 
-	// Volume Label entry in Root Directory
 	copy(twoClustersBuf[0:11], []byte("INSTANTUSB "))
-	twoClustersBuf[11] = 0x08 // ATTR_VOLUME_ID
+	twoClustersBuf[11] = 0x08
 
 	logFileName := "INSTANT-SERVER-INSTALL.log"
 	logContent := []byte("================================================================================\n INSTANT SERVER USB STORAGE & LIVE INSTALLATION LOG\n All boot, Subiquity, Curtin, Netplan, and setup logs are saved here automatically.\n================================================================================\n")
@@ -432,13 +433,12 @@ func FormatRemainingUSBAsFAT32(disk RawDiskHandle, startLBA uint64, endLBA uint6
 	}
 	var stdEnt [32]byte
 	copy(stdEnt[0:11], shortName[:])
-	stdEnt[11] = 0x20                               // ATTR_ARCHIVE
-	binary.LittleEndian.PutUint16(stdEnt[20:22], 0) // FirstClusterHigh = 0
-	binary.LittleEndian.PutUint16(stdEnt[26:28], 3) // FirstClusterLow = 3
+	stdEnt[11] = 0x20
+	binary.LittleEndian.PutUint16(stdEnt[20:22], 0)
+	binary.LittleEndian.PutUint16(stdEnt[26:28], 3)
 	binary.LittleEndian.PutUint32(stdEnt[28:32], uint32(len(logContent)))
 	copy(twoClustersBuf[cursor:cursor+32], stdEnt[:])
 
-	// Write initial log file content into Cluster 3
 	copy(twoClustersBuf[clusterBytes:clusterBytes+len(logContent)], logContent)
 
 	return writeAlignedChunks(disk, twoClustersBuf, int64(dataRegionStartLBA*512))
