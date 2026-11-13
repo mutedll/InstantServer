@@ -132,8 +132,6 @@ func (a *App) IsForceClosing() bool {
 	return a.forceClosing
 }
 
-// GracefulShutdownSupervisor safely stops any active DMA stream while keeping
-// downloaded ISO and staged app files on disk by default.
 func (a *App) GracefulShutdownSupervisor() {
 	a.mu.Lock()
 	a.forceClosing = true
@@ -155,10 +153,6 @@ func (a *App) ProbeHost() map[string]interface{} {
 	}
 }
 
-// ElevateAdmin triggers the native OS privilege elevation dialog (UAC on Windows,
-// Polkit on Linux, AuthorizationServices on macOS). When the new elevated instance
-// spawns (`res.ElevatedSpawned == true`), this unprivileged instance automatically
-// closes itself so the user never ends up with duplicate windows.
 func (a *App) ElevateAdmin() privilege.EscalationResult {
 	res := privilege.RequestNativePrivilegeEscalation(nil)
 	if res.ElevatedSpawned {
@@ -178,6 +172,76 @@ func (a *App) ElevateAdmin() privilege.EscalationResult {
 
 func (a *App) ScanUSBDevices() []usb.USBDeviceCandidate {
 	return usb.ScanRemovableUSBDrives()
+}
+
+// ResetUSBDrive clears write-protection / hybrid ISO9660 partition locks on a USB drive
+// and formats 100% of its capacity as a clean FAT32 volume.
+func (a *App) ResetUSBDrive(devicePath string) map[string]interface{} {
+	cleanDev := strings.TrimSpace(devicePath)
+	if cleanDev == "" {
+		return map[string]interface{}{
+			"ok":    false,
+			"error": "Select a removable USB drive first.",
+		}
+	}
+
+	a.mu.Lock()
+	if a.flashing {
+		a.mu.Unlock()
+		return map[string]interface{}{
+			"ok":    false,
+			"error": "Cannot reset USB drive while flashing is in progress.",
+		}
+	}
+	a.mu.Unlock()
+
+	passed, reasons := usb.EvaluateTripleLockSafety("usb", true, 32.0, nil, cleanDev)
+	if !passed {
+		return map[string]interface{}{
+			"ok":    false,
+			"error": fmt.Sprintf("Safety lock blocked %s: %s", cleanDev, strings.Join(reasons, "; ")),
+		}
+	}
+
+	if !privilege.IsProcessElevated() {
+		esc := privilege.RequestNativePrivilegeEscalation(nil)
+		if esc.ElevatedSpawned {
+			a.mu.Lock()
+			a.forceClosing = true
+			a.mu.Unlock()
+			go func() {
+				time.Sleep(250 * time.Millisecond)
+				if a.ctx != nil {
+					wailsRuntime.Quit(a.ctx)
+				}
+				os.Exit(0)
+			}()
+			return map[string]interface{}{
+				"ok":                false,
+				"elevated_relaunch": true,
+				"error":             "Launched Administrator window to reset the USB drive.",
+			}
+		}
+		if !esc.AlreadyElevated {
+			return map[string]interface{}{
+				"ok":    false,
+				"error": esc.Message,
+			}
+		}
+	}
+
+	if err := usb.ResetUSBToCleanFAT32(cleanDev); err != nil {
+		return map[string]interface{}{
+			"ok":    false,
+			"error": err.Error(),
+		}
+	}
+
+	return map[string]interface{}{
+		"ok":      true,
+		"device":  cleanDev,
+		"message": fmt.Sprintf("Cleared write-protection and formatted %s as a full-capacity FAT32 USB drive.", cleanDev),
+	}
 }
 
 func (a *App) AddCustomApp(payload map[string]interface{}) map[string]interface{} {
@@ -368,7 +432,7 @@ func (a *App) FlashUSBDevice(profile usb.ServerProfileConfig, isoPath string) ma
 						"stage_percent": ev.Percent,
 						"label":         "Downloading Ubuntu ISO",
 						"message":       ev.Message,
-						"terminal_line": fmt.Sprintf("⟳ Downloading Ubuntu ISO: %d%% │ %s", ev.Percent, ev.Message),
+						"terminal_line": fmt.Sprintf("[ISO] Downloading Ubuntu ISO: %d%% | %s", ev.Percent, ev.Message),
 					}
 					a.mu.Unlock()
 					if a.ctx != nil {
@@ -399,7 +463,7 @@ func (a *App) FlashUSBDevice(profile usb.ServerProfileConfig, isoPath string) ma
 			a.appendEventLog(startTime, "ISO_LOCAL", fmt.Sprintf("Using local ISO file: %s", resolvedISO))
 		}
 
-		a.appendEventLog(startTime, "USB_OPEN", fmt.Sprintf("Opening USB device %s...", profile.SelectedUSBDevice))
+		a.appendEventLog(startTime, "USB_OPEN", fmt.Sprintf("Preparing and unlocking USB device %s...", profile.SelectedUSBDevice))
 		finalEv, err := usb.StreamISOAndCidataToRawDisk(
 			ctx,
 			resolvedISO,
@@ -427,7 +491,7 @@ func (a *App) FlashUSBDevice(profile usb.ServerProfileConfig, isoPath string) ma
 					"stage_percent": ev.Percent,
 					"label":         "Writing Bootable USB",
 					"message":       ev.Message,
-					"terminal_line": fmt.Sprintf("⟳ Writing Bootable USB: %d%% │ %s (CRC32 %s)", ev.Percent, ev.Message, ev.CRC32Hex),
+					"terminal_line": fmt.Sprintf("[USB] Writing Bootable USB: %d%% | %s (CRC32 %s)", ev.Percent, ev.Message, ev.CRC32Hex),
 				}
 				a.mu.Unlock()
 				if a.ctx != nil {
@@ -457,7 +521,7 @@ func (a *App) FlashUSBDevice(profile usb.ServerProfileConfig, isoPath string) ma
 			return
 		}
 
-		a.appendEventLog(startTime, "USB_VERIFIED", fmt.Sprintf("Flashed & verified SHA-256 (%s) + FAT16 CIDATA partition on %s", finalEv.SHA256Hex[:16]+"...", profile.SelectedUSBDevice))
+		a.appendEventLog(startTime, "USB_VERIFIED", fmt.Sprintf("Flashed & verified SHA-256 (%s) + FAT16 CIDATA + FAT32 INSTANTUSB on %s", finalEv.SHA256Hex[:16]+"...", profile.SelectedUSBDevice))
 		a.mu.Lock()
 		a.lastStatus["status"] = "COMPLETED"
 		a.lastStatus["percent"] = 100
@@ -489,7 +553,7 @@ func (a *App) PauseFlashing() map[string]interface{} {
 	a.lastStatus["paused"] = true
 	a.lastStatus["active_progress"] = map[string]interface{}{
 		"message":       "Paused — partial progress saved as .part",
-		"terminal_line": "⏸ PAUSED │ Click Resume to continue",
+		"terminal_line": "[PAUSED] Click Resume to continue",
 	}
 	a.mu.Unlock()
 	a.appendEventLog(startTime, "PAUSED", "[PAUSED] Flashing paused (saved as .part).")
@@ -549,8 +613,6 @@ func (a *App) CancelFlashing() map[string]interface{} {
 	return map[string]interface{}{"cancelled": true, "status": "CANCELLED"}
 }
 
-// PauseAndPrepareExit pauses the current operation, keeps `.part` / `.iso`
-// files in `Instant_Server_Data`, and permits the window to close.
 func (a *App) PauseAndPrepareExit() map[string]interface{} {
 	a.pauseGate.Pause()
 	a.mu.Lock()
@@ -571,8 +633,6 @@ func (a *App) PauseAndPrepareExit() map[string]interface{} {
 	}
 }
 
-// ManageFlashCache inspects, keeps (default), or deletes the cached Ubuntu ISO and staged CIDATA files.
-// If the user exits or force-quits without selecting an option, files are kept by default.
 func (a *App) ManageFlashCache(action string) map[string]interface{} {
 	baseDir := resolveWritableDataDir()
 	isoDir := filepath.Join(baseDir, "iso_cache")
@@ -662,6 +722,16 @@ func (a *App) AssetAndAPIRouter() http.Handler {
 	})
 	mux.HandleFunc("/api/usb", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, a.ScanUSBDevices())
+	})
+	mux.HandleFunc("/api/reset-usb", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Device string `json:"device"`
+		}
+		readJSONBody(r, &body)
+		if body.Device == "" {
+			body.Device = r.URL.Query().Get("device")
+		}
+		writeJSON(w, a.ResetUSBDrive(body.Device))
 	})
 	mux.HandleFunc("/api/load-config", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, a.LoadConfig())

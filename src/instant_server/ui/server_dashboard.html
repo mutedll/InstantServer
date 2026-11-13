@@ -915,7 +915,7 @@
       <div class="search-box">
         <input type="search" id="dashSearchInput" class="search-input" placeholder="Search apps, Wikipedia, settings..." />
       </div>
-      <button type="button" class="win-btn win-btn-sm" id="btnThemeToggle" data-action="toggle-theme">☀ Light</button>
+      <button type="button" class="win-btn win-btn-sm" id="btnThemeToggle" data-action="toggle-theme">Light</button>
     </div>
   </header>
 
@@ -934,13 +934,13 @@
           <div style="font-size:15px;font-weight:600;" id="composeModalTitle">Inspect Container &amp; Volumes</div>
           <div style="font-size:12px;color:var(--text-secondary);" id="composeModalSub">Transparent Docker Compose &amp; host volume configuration</div>
         </div>
-        <button type="button" class="win-btn win-btn-sm" data-action="close-compose-modal">✕ Close</button>
+        <button type="button" class="win-btn win-btn-sm" data-action="close-compose-modal"> Close</button>
       </div>
       <div class="modal-body">
         <div class="diag-box" id="composeVolumeExplainBox"></div>
         <div class="diag-box" id="appDataFileManagerBox" style="gap:8px;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-            <span style="font-weight:600;color:var(--accent);">🗂️ Persistent <code>/DATA/AppData</code> Config File Explorer &amp; Editor</span>
+            <span style="font-weight:600;color:var(--accent);">EXT4 Persistent <code>/DATA/AppData</code> Config File Explorer &amp; Editor</span>
             <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;" id="appDataFilePills"></div>
           </div>
           <textarea id="appDataFileTextarea" class="compose-editor" style="min-height:125px;" spellcheck="false" placeholder="Select a file above to edit its contents inside /DATA/AppData..."></textarea>
@@ -949,14 +949,14 @@
             <div style="display:flex;gap:6px;">
               <input type="text" id="inputNewAppDataFileName" class="text-input" style="width:140px;height:28px;font-size:12px;" placeholder="new-config.yml" />
               <button type="button" class="win-btn win-btn-sm" data-action="create-appdata-file">＋ Create File</button>
-              <button type="button" class="win-btn win-btn-accent win-btn-sm" data-action="save-appdata-file">💾 Save Config File</button>
+              <button type="button" class="win-btn win-btn-accent win-btn-sm" data-action="save-appdata-file">FS Save Config File</button>
             </div>
           </div>
         </div>
         <div>
           <div style="font-size:12px;font-weight:600;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
             <span>Raw <code>docker-compose.yml</code> (Editable)</span>
-            <button type="button" class="win-btn win-btn-sm" data-action="validate-compose">✓ Validate &amp; Check Errors</button>
+            <button type="button" class="win-btn win-btn-sm" data-action="validate-compose"> Validate &amp; Check Errors</button>
           </div>
           <textarea id="composeYamlTextarea" class="compose-editor" spellcheck="false"></textarea>
         </div>
@@ -3940,7 +3940,7 @@ ${vols}`;
       if (pillsEl) {
         pillsEl.innerHTML = fNames.map(fn => `
           <button type="button" class="filter-pill ${state.activeAppDataFile === fn ? "active" : ""}" data-action="select-appdata-file" data-file="${esc(fn)}">
-            📄 ${esc(fn)}
+            CFG ${esc(fn)}
           </button>
         `).join("");
       }
@@ -3957,7 +3957,7 @@ ${vols}`;
       if (!box) return;
       box.innerHTML = list.map(item => {
         const color = item.severity === "error" ? "var(--danger)" : item.severity === "ok" ? "var(--success)" : "var(--accent)";
-        const icon = item.severity === "error" ? "✕" : "✓";
+        const icon = item.severity === "error" ? "" : "";
         return `<div style="color:${color};font-family:var(--font-mono);">${icon} ${esc(item.message)}</div>`;
       }).join("");
     }
@@ -4088,27 +4088,27 @@ ${vols}`;
         <div class="settings-group" style="margin-bottom:14px;border-color:var(--success);">
           <div class="setting-row">
             <div>
-              <div class="setting-title">🛠️ Custom Server Workflows, NAS Shares &amp; USB Triggers <span class="badge badge-success">Full Server Control</span></div>
+              <div class="setting-title">FIX Custom Server Workflows, NAS Shares &amp; USB Triggers <span class="badge badge-success">Full Server Control</span></div>
               <div class="setting-sub">Create and run custom automation scripts (<code>/DATA/CustomWorkflows</code>), custom Samba NAS shares (<code>smb://${esc(host)}.local/</code>), <code>udev</code> USB plug-in triggers, and scheduled <code>systemd</code> services.</div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              <button type="button" class="win-btn win-btn-sm" data-action="switch-tab" data-tab="files">🗂️ Edit System &amp; Workflow Files</button>
+              <button type="button" class="win-btn win-btn-sm" data-action="switch-tab" data-tab="files">EXT4 Edit System &amp; Workflow Files</button>
               <button type="button" class="win-btn win-btn-accent win-btn-sm" data-action="run-custom-workflow">▶ Run Custom Workflow Script</button>
             </div>
           </div>
           <div class="setting-row" style="background:var(--bg-input);font-size:12px;font-family:var(--font-mono);color:var(--success);">
-            <span>✓ ${esc(state.customWorkflowStatus)}</span>
+            <span> ${esc(state.customWorkflowStatus)}</span>
           </div>
         </div>
 
         <div class="settings-group" style="margin-bottom:14px;border-color:var(--accent);">
           <div class="setting-row">
             <div>
-              <div class="setting-title">🎮 Minecraft Server &amp; World File Studio <span class="badge badge-success">v${esc(state.minecraftStudio.version)} • 25565 TCP / 19132 UDP</span></div>
+              <div class="setting-title">MC Minecraft Server &amp; World File Studio <span class="badge badge-success">v${esc(state.minecraftStudio.version)} • 25565 TCP / 19132 UDP</span></div>
               <div class="setting-sub">Dedicated tab for Minecraft ${esc(state.minecraftStudio.version)} ("Wilderness Bound"), Paper/Fabric/Forge/Geyser Crossplay, live RCON console, Modrinth plugins, and <code>server.properties</code> world file editing.</div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              <button type="button" class="win-btn win-btn-accent win-btn-sm" data-action="switch-tab" data-tab="minecraft">🎮 Open Minecraft Studio Tab</button>
+              <button type="button" class="win-btn win-btn-accent win-btn-sm" data-action="switch-tab" data-tab="minecraft">MC Open Minecraft Studio Tab</button>
               <button type="button" class="win-btn win-btn-sm" data-action="inspect-compose" data-app="minecraft">Inspect Compose YAML</button>
             </div>
           </div>
@@ -4171,12 +4171,12 @@ ${vols}`;
       return `
         <div class="section-hdr">
           <div>
-            <div class="section-title">🎮 Minecraft Server &amp; World File Studio (v${esc(mc.version)})</div>
+            <div class="section-title">MC Minecraft Server &amp; World File Studio (v${esc(mc.version)})</div>
             <div class="section-desc">Manage your 24/7 Minecraft Java &amp; Bedrock Crossplay server (<code>${esc(host)}.local:25565</code>), edit <code>/DATA/AppData/minecraft/data</code> world files, install Modrinth plugins, and run live RCON commands.</div>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button type="button" class="win-btn win-btn-sm" data-action="mc-rcon-backup">💾 1-Click Safe World Backup</button>
-            <button type="button" class="win-btn win-btn-accent win-btn-sm" data-action="mc-save-apply-config">✓ Save &amp; Apply Server Settings</button>
+            <button type="button" class="win-btn win-btn-sm" data-action="mc-rcon-backup">FS 1-Click Safe World Backup</button>
+            <button type="button" class="win-btn win-btn-accent win-btn-sm" data-action="mc-save-apply-config"> Save &amp; Apply Server Settings</button>
           </div>
         </div>
 
@@ -4253,7 +4253,7 @@ ${vols}`;
         <div class="settings-group" style="margin-bottom:18px;">
           <div class="setting-row">
             <div>
-              <div class="setting-title">⚡ Live Minecraft RCON Admin Console (<code>127.0.0.1:25575</code>)</div>
+              <div class="setting-title">FAST Live Minecraft RCON Admin Console (<code>127.0.0.1:25575</code>)</div>
               <div class="setting-sub">Run server commands immediately without logging into the game.</div>
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;">
@@ -4275,19 +4275,19 @@ ${vols}`;
         <div class="settings-group">
           <div class="setting-row" style="flex-wrap:wrap;gap:10px;">
             <div>
-              <div class="setting-title">🗂️ Minecraft Server &amp; World Config Files (<code>/DATA/AppData/minecraft/data/</code>)</div>
+              <div class="setting-title">EXT4 Minecraft Server &amp; World Config Files (<code>/DATA/AppData/minecraft/data/</code>)</div>
               <div class="setting-sub">Directly edit <code>server.properties</code>, <code>ops.json</code>, <code>whitelist.json</code>, or <code>paper-global.yml</code> with automatic <code>.bak</code> backup protection.</div>
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;">
               ${fileKeys.map(fn => `
-                <button type="button" class="filter-pill ${activeFile === fn ? "active" : ""}" data-action="mc-select-file" data-file="${esc(fn)}">📄 ${esc(fn)}</button>
+                <button type="button" class="filter-pill ${activeFile === fn ? "active" : ""}" data-action="mc-select-file" data-file="${esc(fn)}">CFG ${esc(fn)}</button>
               `).join("")}
             </div>
           </div>
           <div class="setting-row" style="flex-direction:column;align-items:stretch;gap:10px;">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
               <span style="font-family:var(--font-mono);font-size:12px;color:var(--accent);">/DATA/AppData/minecraft/data/${esc(activeFile)}</span>
-              <button type="button" class="win-btn win-btn-accent win-btn-sm" data-action="mc-save-file">💾 Save ${esc(activeFile)}</button>
+              <button type="button" class="win-btn win-btn-accent win-btn-sm" data-action="mc-save-file">FS Save ${esc(activeFile)}</button>
             </div>
             <textarea id="textareaMcFileEditor" class="compose-editor" style="min-height:210px;" spellcheck="false">${esc(activeContent)}</textarea>
           </div>
@@ -4315,7 +4315,7 @@ ${vols}`;
           ${state.clusterActiveNodes.map(n => `
             <div class="setting-row">
               <div>
-                <div class="setting-title">🟢 ${esc(n.hostname)}.local <span class="badge badge-accent">${esc(n.ip)}</span></div>
+                <div class="setting-title">ON ${esc(n.hostname)}.local <span class="badge badge-accent">${esc(n.ip)}</span></div>
                 <div class="setting-sub">${esc(n.device)} • ${n.used_gb} GB used of ${n.total_gb} GB • ${n.ram_gb} GB RAM</div>
               </div>
               <span class="badge badge-success">Active in Server Pool</span>
@@ -4325,7 +4325,7 @@ ${vols}`;
           ${state.clusterDiscoveredNodes.map(n => `
             <div class="setting-row">
               <div>
-                <div class="setting-title">🟡 ${esc(n.hostname)}.local <span class="badge badge-warning">${esc(n.ip)}</span></div>
+                <div class="setting-title"> ${esc(n.hostname)}.local <span class="badge badge-warning">${esc(n.ip)}</span></div>
                 <div class="setting-sub">${esc(n.device)} • Has ${n.used_gb} GB of existing files on a ${n.total_gb} GB drive</div>
               </div>
               <button type="button" class="win-btn win-btn-sm" data-action="select-cluster-candidate" data-host="${esc(n.hostname)}" data-ip="${esc(n.ip)}">Select to Connect</button>
@@ -4367,7 +4367,7 @@ ${vols}`;
           ${isWipeMode ? `
             <div class="setting-row" style="background:var(--danger-soft);">
               <div>
-                <div class="setting-title" style="color:var(--danger);">⚠️ Crucial Warning: Erasing ${esc(state.clusterConnectHost)} will delete all existing files on that computer</div>
+                <div class="setting-title" style="color:var(--danger);">WARN Crucial Warning: Erasing ${esc(state.clusterConnectHost)} will delete all existing files on that computer</div>
                 <div class="setting-sub">If you want to keep the files on both computers, switch back to <strong>Keep all files on both computers</strong> above. To confirm erasing the second computer, type <code>${esc(expectedWipeCode)}</code>:</div>
               </div>
               <input type="text" class="text-input" data-field="clusterConfirmWipe" value="${esc(state.clusterConfirmWipe)}" placeholder="Type ${esc(expectedWipeCode)}" style="border-color:var(--danger);width:210px;" />
@@ -4501,21 +4501,21 @@ ${vols}`;
           ${s.ignore_lid_switch ? `
             <div class="setting-row" style="background:rgba(255, 159, 10, 0.10);border-left:3px solid var(--warning);">
               <div>
-                <div class="setting-title" style="color:var(--warning);">⚠️ Thermal Placement Advisory — Avoid the Closed-Lid Overheating Trap</div>
+                <div class="setting-title" style="color:var(--warning);">WARN Thermal Placement Advisory — Avoid the Closed-Lid Overheating Trap</div>
                 <div class="setting-sub">
                   Laptops vent heat upward through the keyboard deck. Never place a closed laptop inside an enclosed drawer, closet, or cabinet — trapped heat will degrade components over 24/7 uptime.
                   <strong>Stand the laptop vertically in an open-air stand, keep the lid propped 1–2 inches ajar, or use a cooling pad.</strong>
                 </div>
               </div>
               <button type="button" class="win-btn win-btn-sm" data-action="dash-enable-cool-mode">
-                ${s.disable_cpu_turbo_boost ? "✓ Cool Mode Active" : "🌡️ Enable Cool & Quiet Mode"}
+                ${s.disable_cpu_turbo_boost ? " Cool Mode Active" : "CPU Enable Cool & Quiet Mode"}
               </button>
             </div>
           ` : ""}
 
           <div class="setting-row" style="background:rgba(10, 132, 255, 0.07);border-left:3px solid var(--accent);">
             <div>
-              <div class="setting-title">📡 Ethernet vs. 2.4GHz Wi-Fi Throughput Expectations</div>
+              <div class="setting-title">LAN Ethernet vs. 2.4GHz Wi-Fi Throughput Expectations</div>
               <div class="setting-sub">
                 While automatic Wi-Fi failover keeps the server reachable if unplugged, older 2.4GHz laptop Wi-Fi cards average <strong>3–8 MB/s</strong> and will bottleneck 4K Jellyfin streaming and large Immich/Nextcloud backups. Keep a <strong>Gigabit Ethernet cable</strong> (or USB 3.0 Ethernet adapter) plugged in for <strong>110+ MB/s</strong> storage throughput.
               </div>
@@ -4622,7 +4622,7 @@ ${vols}`;
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <button type="button" class="win-btn win-btn-sm" data-action="check-updates">↻ Check Internet Updates</button>
-            <button type="button" class="win-btn win-btn-sm" data-action="apply-offline-usb-update">🔌 Apply Offline Updater USB</button>
+            <button type="button" class="win-btn win-btn-sm" data-action="apply-offline-usb-update">UPS Apply Offline Updater USB</button>
             <button type="button" class="win-btn win-btn-accent win-btn-sm" data-action="apply-updates" data-target="all">⬇ Auto-Update Dashboard, Apps &amp; OS</button>
           </div>
         </div>
@@ -4658,7 +4658,7 @@ ${vols}`;
         <div class="settings-group">
           ${u.os_updates.length === 0 ? `
             <div class="setting-row">
-              <div class="setting-title" style="color:var(--success);">✓ All Ubuntu LTS kernel and system packages are up to date.</div>
+              <div class="setting-title" style="color:var(--success);"> All Ubuntu LTS kernel and system packages are up to date.</div>
             </div>
           ` : u.os_updates.map(item => `
             <div class="setting-row">
@@ -4720,15 +4720,15 @@ ${vols}`;
             <div class="section-desc">Everything you need to know about how your server stores files, handles Wi-Fi failover, and heals common issues automatically.</div>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button type="button" class="win-btn win-btn-sm" data-action="clean-logs-now">🧹 Clean Old Logs &amp; Cache</button>
-            <button type="button" class="win-btn win-btn-accent win-btn-sm" data-action="run-system-doctor">🩺 Run 1-Click Health Check</button>
+            <button type="button" class="win-btn win-btn-sm" data-action="clean-logs-now">CLN Clean Old Logs &amp; Cache</button>
+            <button type="button" class="win-btn win-btn-accent win-btn-sm" data-action="run-system-doctor"> Run 1-Click Health Check</button>
           </div>
         </div>
 
         ${state.doctorStatusMsg ? `
           <div class="settings-group" style="border-color:var(--success);">
             <div class="setting-row">
-              <div class="setting-title" style="color:var(--success);">✓ ${esc(state.doctorStatusMsg)}</div>
+              <div class="setting-title" style="color:var(--success);"> ${esc(state.doctorStatusMsg)}</div>
             </div>
           </div>
         ` : ""}
@@ -4852,14 +4852,14 @@ ${vols}`;
     function renderTerminalTab() {
       const host = state.settings.hostname || "instant-server";
       const quickCmds = [
-        { label: "📊 System Status", cmd: "uptime && free -h && df -h /DATA" },
-        { label: "🐳 Running Containers", cmd: "docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'" },
-        { label: "🌐 IP & Failover", cmd: "ip -br addr" },
-        { label: "🛡️ Sleep Mask Check", cmd: "systemctl status sleep.target suspend.target --no-pager" },
-        { label: "📱 iPhone Backup Dir", cmd: "ls -lah /DATA/iPhone_Backups" },
-        { label: "🌡️ Temps & Battery", cmd: "cat /sys/class/power_supply/BAT*/capacity /sys/class/power_supply/BAT*/status 2>/dev/null || echo 'AC Power'" },
-        { label: "📜 Recent Logs", cmd: "journalctl -n 25 --no-pager" },
-        { label: "🧹 Clear", cmd: "clear" }
+        { label: "MON System Status", cmd: "uptime && free -h && df -h /DATA" },
+        { label: "DKR Running Containers", cmd: "docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'" },
+        { label: "NET IP & Failover", cmd: "ip -br addr" },
+        { label: " Sleep Mask Check", cmd: "systemctl status sleep.target suspend.target --no-pager" },
+        { label: "MOB iPhone Backup Dir", cmd: "ls -lah /DATA/iPhone_Backups" },
+        { label: "CPU Temps & Battery", cmd: "cat /sys/class/power_supply/BAT*/capacity /sys/class/power_supply/BAT*/status 2>/dev/null || echo 'AC Power'" },
+        { label: " Recent Logs", cmd: "journalctl -n 25 --no-pager" },
+        { label: "CLN Clear", cmd: "clear" }
       ];
       return `
         <div class="section-hdr">
@@ -4953,7 +4953,7 @@ ${vols}`;
             ${selected.is_system ? `
               <div class="setting-row" style="background:rgba(255, 159, 10, 0.12);border-left:4px solid var(--warning);">
                 <div>
-                  <div class="setting-title" style="color:var(--warning);">⚠️ System Configuration File Warning — ${esc(selected.risk_level)}</div>
+                  <div class="setting-title" style="color:var(--warning);">WARN System Configuration File Warning — ${esc(selected.risk_level)}</div>
                   <div class="setting-sub" style="margin-top:4px;">
                     ${esc(selected.warning)}<br/>
                     <strong>Safety Guarantee:</strong> Saving automatically creates <code>${esc(selected.path)}.bak</code> first so you can restore the previous working version in 1 click.
@@ -4967,7 +4967,7 @@ ${vols}`;
             ` : `
               <div class="setting-row" style="background:rgba(48, 209, 88, 0.08);border-left:4px solid var(--success);">
                 <div>
-                  <div class="setting-title" style="color:var(--success);">✓ Safe User Data / Custom Workflow File (${esc(selected.path)})</div>
+                  <div class="setting-title" style="color:var(--success);"> Safe User Data / Custom Workflow File (${esc(selected.path)})</div>
                   <div class="setting-sub">${esc(selected.warning)}</div>
                 </div>
               </div>
@@ -4985,7 +4985,7 @@ ${vols}`;
                     data-path="${esc(selected.path)}"
                     ${!canSave ? "disabled" : ""}
                   >
-                    ${!canSave ? "🔒 Check Warning Box Above to Save" : "💾 Save File & Create .bak"}
+                    ${!canSave ? "SEC Check Warning Box Above to Save" : "FS Save File & Create .bak"}
                   </button>
                 </div>
               </div>
@@ -5021,7 +5021,7 @@ ${vols}`;
       if (action === "toggle-theme") {
         state.theme = state.theme === "dark" ? "light" : "dark";
         document.documentElement.setAttribute("data-theme", state.theme);
-        btn.textContent = state.theme === "dark" ? "☀ Light" : "🌙 Dark";
+        btn.textContent = state.theme === "dark" ? "Light" : "Dark";
         return;
       }
 

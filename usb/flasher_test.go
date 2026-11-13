@@ -494,3 +494,36 @@ func TestReinstallModesOfflineUpdaterAndCustomWorkflows(t *testing.T) {
 		}
 	}
 }
+
+func TestResetUSBToCleanFAT32(t *testing.T) {
+	tmpDir := t.TempDir()
+	usbPath := filepath.Join(tmpDir, "write_protected_usb.img")
+	img := make([]byte, 16*1024*1024)
+	// Simulate an ISO9660 CD001 primary volume descriptor at offset 32768
+	copy(img[32768:32774], []byte("\x01CD001"))
+	if err := os.WriteFile(usbPath, img, 0644); err != nil {
+		t.Fatalf("failed creating synthetic USB image: %v", err)
+	}
+
+	if err := ResetUSBToCleanFAT32(usbPath); err != nil {
+		t.Fatalf("ResetUSBToCleanFAT32 failed: %v", err)
+	}
+
+	after, err := os.ReadFile(usbPath)
+	if err != nil {
+		t.Fatalf("failed reading reset USB image: %v", err)
+	}
+	if bytes.Equal(after[32768:32774], []byte("\x01CD001")) {
+		t.Fatalf("expected ISO9660 CD001 descriptor at offset 32768 to be wiped")
+	}
+	if string(after[512:520]) != "EFI PART" {
+		t.Fatalf("expected clean EFI PART GPT header at LBA 1 after reset")
+	}
+	if after[446+4] != 0xEE || after[510] != 0x55 || after[511] != 0xAA {
+		t.Fatalf("expected standard 0xEE Protective MBR at LBA 0 after reset")
+	}
+	// Verify FAT32 boot sector at 1MB boundary (offset 1048576)
+	if string(after[1048576+82:1048576+90]) != "FAT32   " {
+		t.Fatalf("expected FAT32 boot sector at 1MB offset (LBA 2048), got %q", string(after[1048576+82:1048576+90]))
+	}
+}

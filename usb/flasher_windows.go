@@ -4,6 +4,8 @@
 package usb
 
 import (
+	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -24,10 +26,9 @@ const (
 	fsctlAllowExtendedDasdIO = 0x00090083
 	ioctlDiskUpdateProps     = 0x00070140
 	ioctlDiskGetLengthInfo   = 0x0007405C
+	ioctlDiskCreateDisk      = 0x0007C058
+	ioctlDiskSetAttributes   = 0x0007C0F4
 
-	// winMaxUSBTransferChunk caps individual Win32 ReadFile/WriteFile IRPs to 1 MB
-	// so USBSTOR.SYS and UASPSTOR.SYS never fail with ERROR_INVALID_PARAMETER (87)
-	// or ERROR_NO_SYSTEM_RESOURCES (1450) on multi-megabyte buffers.
 	winMaxUSBTransferChunk = 1024 * 1024
 
 	esContinuous       = 0x80000000
@@ -36,8 +37,6 @@ const (
 	esAwayModeRequired = 0x00000040
 )
 
-// AcquireHostWakeLock prevents Windows from entering sleep, standby, or idle suspend
-// while an ISO download or raw USB DMA flash operation is running.
 func AcquireHostWakeLock() func() {
 	k32 := syscall.NewLazyDLL("kernel32.dll")
 	proc := k32.NewProc("SetThreadExecutionState")
@@ -55,15 +54,27 @@ type windowsRawDisk struct {
 	unbuffered    bool
 }
 
-func getDriveLettersForPhysicalDisk(physicalDrivePath string) []string {
+func parsePhysicalDriveNumber(physicalDrivePath string) string {
 	idx := strings.TrimPrefix(strings.ToUpper(strings.TrimSpace(physicalDrivePath)), `\\.\PHYSICALDRIVE`)
 	if idx == "" {
-		return nil
+		return ""
 	}
 	for _, ch := range idx {
 		if ch < '0' || ch > '9' {
-			return nil
+			return ""
 		}
+	}
+	// Never allow disk 0 (primary boot drive) in automated diskpart/raw reset helpers
+	if idx == "0" {
+		return ""
+	}
+	return idx
+}
+
+func getDriveLettersForPhysicalDisk(physicalDrivePath string) []string {
+	idx := parsePhysicalDriveNumber(physicalDrivePath)
+	if idx == "" {
+		return nil
 	}
 	ps := fmt.Sprintf("Get-Partition -DiskNumber %s -ErrorAction SilentlyContinue | Where-Object { $_.DriveLetter } | ForEach-Object { $_.DriveLetter }", idx)
 	cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", ps)
@@ -83,6 +94,81 @@ func getDriveLettersForPhysicalDisk(physicalDrivePath string) []string {
 		}
 	}
 	return letters
+}
+
+func clearReadOnlyAndResetRawDiskIOCTL(hDisk syscall.Handle) {
+	var bytesReturned uint32
+	// SET_DISK_ATTRIBUTES (40 bytes):
+	// Offset 0:  Version = 40
+	// Offset 4:  Persist = 1
+	// Offset 8:  Attributes = 0 (clear OFFLINE=0x01 and READ_ONLY=0x02)
+	// Offset 16: AttributesMask = 0x03 (DISK_ATTRIBUTE_OFFLINE | DISK_ATTRIBUTE_READ_ONLY)
+	var setAttr [40]byte
+	binary.LittleEndian.PutUint32(setAttr[0:4], 40)
+	setAttr[4] = 1
+	binary.LittleEndian.PutUint64(setAttr[8:16], 0)
+	binary.LittleEndian.PutUint64(setAttr[16:24], 0x03)
+	_ = syscall.DeviceIoControl(
+		hDisk,
+		ioctlDiskSetAttributes,
+		&setAttr[0],
+		uint32(len(setAttr)),
+		nil,
+		0,
+		&bytesReturned,
+		nil,
+	)
+
+	// CREATE_DISK (24 bytes) with PARTITION_STYLE_RAW (0) drops read-only hybrid ISO9660/GPT locks in partmgr.sys
+	var createRaw [24]byte
+	_ = syscall.DeviceIoControl(
+		hDisk,
+		ioctlDiskCreateDisk,
+		&createRaw[0],
+		uint32(len(createRaw)),
+		nil,
+		0,
+		&bytesReturned,
+		nil,
+	)
+	_ = syscall.DeviceIoControl(hDisk, ioctlDiskUpdateProps, nil, 0, nil, 0, &bytesReturned, nil)
+}
+
+// cleanAndUnlockWindowsPhysicalDisk clears the Windows read-only disk flag and removes
+// stale hybrid ISO9660/GPT partition locks (equivalent to running diskpart -> select disk N ->
+// attributes disk clear readonly -> clean) without flashing any console window.
+func cleanAndUnlockWindowsPhysicalDisk(physicalDrivePath string) {
+	idx := parsePhysicalDriveNumber(physicalDrivePath)
+	if idx == "" {
+		return
+	}
+
+	if pathPtr, err := syscall.UTF16PtrFromString(physicalDrivePath); err == nil {
+		if hPre, oErr := syscall.CreateFile(
+			pathPtr,
+			syscall.GENERIC_READ|syscall.GENERIC_WRITE,
+			syscall.FILE_SHARE_READ|syscall.FILE_SHARE_WRITE,
+			nil,
+			syscall.OPEN_EXISTING,
+			0,
+			0,
+		); oErr == nil {
+			clearReadOnlyAndResetRawDiskIOCTL(hPre)
+			_ = syscall.CloseHandle(hPre)
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	script := fmt.Sprintf("select disk %s\r\nattributes disk clear readonly noerr\r\nonline disk noerr\r\nclean\r\nrescan\r\nexit\r\n", idx)
+	cmd := exec.CommandContext(ctx, "diskpart.exe")
+	cmd.Stdin = bytes.NewBufferString(script)
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: winCreateNoWindow,
+	}
+	_ = cmd.Run()
+	time.Sleep(150 * time.Millisecond)
 }
 
 func lockAndDismountWindowsVolume(driveLetter string) (syscall.Handle, error) {
@@ -134,7 +220,7 @@ func OpenRawDisk(devicePath string) (RawDiskHandle, error) {
 	if !strings.HasPrefix(upperPath, `\\.\PHYSICALDRIVE`) {
 		f, err := os.OpenFile(cleanPath, os.O_RDWR, 0600)
 		if err != nil {
-			return nil, fmt.Errorf("IS-USB-301: no physical USB drive found at %s (plug in a removable USB flash drive and click Refresh Drives): %w", cleanPath, err)
+			return nil, fmt.Errorf("IS-USB-301: no physical USB drive found at %s (plug in a removable USB flash drive and click Refresh): %w", cleanPath, err)
 		}
 		return &windowsRawDisk{
 			file:       f,
@@ -144,14 +230,15 @@ func OpenRawDisk(devicePath string) (RawDiskHandle, error) {
 		}, nil
 	}
 
-	// Lock and dismount all mounted volume letters on this PhysicalDrive first
-	// so Windows Kernel PnP Manager permits raw sector writes across partition boundaries.
 	var lockedVols []syscall.Handle
 	for _, letter := range getDriveLettersForPhysicalDisk(cleanPath) {
 		if hVol, lErr := lockAndDismountWindowsVolume(letter); lErr == nil && hVol != syscall.InvalidHandle {
 			lockedVols = append(lockedVols, hVol)
 		}
 	}
+
+	// Automatically clear read-only flags and stale hybrid ISO9660/GPT partition locks before opening
+	cleanAndUnlockWindowsPhysicalDisk(cleanPath)
 
 	pathPtr, err := syscall.UTF16PtrFromString(cleanPath)
 	if err != nil {
@@ -174,11 +261,20 @@ func OpenRawDisk(devicePath string) (RawDiskHandle, error) {
 		for _, h := range lockedVols {
 			_ = syscall.CloseHandle(h)
 		}
-		return nil, fmt.Errorf("IS-USB-301: CreateFile failed on %s (ensure UAC Administrator elevation): %w", cleanPath, err)
+		return nil, fmt.Errorf("IS-USB-301: CreateFile failed on %s (ensure Administrator elevation): %w", cleanPath, err)
 	}
 
+	clearReadOnlyAndResetRawDiskIOCTL(hDisk)
 	var bytesReturned uint32
 	_ = syscall.DeviceIoControl(hDisk, fsctlAllowExtendedDasdIO, nil, 0, nil, 0, &bytesReturned, nil)
+
+	// Zero out the first 64 KB (including LBA 0 MBR, LBA 1 GPT, and offset 32768 ISO9660 CD001 superblock)
+	// so Windows MountMgr never treats the open drive as a write-protected CD-ROM.
+	zero64K := AllocPageAlignedBuffer(64*1024, SectorAlignmentBytes)
+	ovZero := syscall.Overlapped{}
+	var nZero uint32
+	_ = syscall.WriteFile(hDisk, zero64K, &nZero, &ovZero)
+	_ = syscall.DeviceIoControl(hDisk, ioctlDiskUpdateProps, nil, 0, nil, 0, &bytesReturned, nil)
 
 	f := os.NewFile(uintptr(hDisk), cleanPath)
 	return &windowsRawDisk{
@@ -245,6 +341,20 @@ func (d *windowsRawDisk) WriteAt(p []byte, off int64) (int, error) {
 		}
 		var n uint32
 		err := syscall.WriteFile(d.handle, p[totalWritten:totalWritten+chunkLen], &n, &ov)
+		if err != nil {
+			if pathPtr, pErr := syscall.UTF16PtrFromString(d.devicePath); pErr == nil {
+				if hBuf, oErr := syscall.CreateFile(pathPtr, syscall.GENERIC_READ|syscall.GENERIC_WRITE, syscall.FILE_SHARE_READ|syscall.FILE_SHARE_WRITE, nil, syscall.OPEN_EXISTING, winFileFlagWriteThrough, 0); oErr == nil {
+					var br uint32
+					_ = syscall.DeviceIoControl(hBuf, fsctlAllowExtendedDasdIO, nil, 0, nil, 0, &br, nil)
+					err2 := syscall.WriteFile(hBuf, p[totalWritten:totalWritten+chunkLen], &n, &ov)
+					_ = syscall.FlushFileBuffers(hBuf)
+					_ = syscall.CloseHandle(hBuf)
+					if err2 == nil {
+						err = nil
+					}
+				}
+			}
+		}
 		totalWritten += int(n)
 		if err != nil {
 			return totalWritten, err
@@ -283,16 +393,14 @@ func (d *windowsRawDisk) SyncAndFlush() error {
 }
 
 func (d *windowsRawDisk) Close() error {
-	_ = syscall.FlushFileBuffers(d.handle)
+	_ = d.SyncAndFlush()
 	var bytesReturned uint32
+	_ = syscall.DeviceIoControl(d.handle, ioctlDiskUpdateProps, nil, 0, nil, 0, &bytesReturned, nil)
 	for _, hVol := range d.lockedVolumes {
 		_ = syscall.DeviceIoControl(hVol, fsctlUnlockVolume, nil, 0, nil, 0, &bytesReturned, nil)
 		_ = syscall.CloseHandle(hVol)
 	}
 	d.lockedVolumes = nil
-	if d.unbuffered {
-		_ = syscall.DeviceIoControl(d.handle, ioctlDiskUpdateProps, nil, 0, nil, 0, &bytesReturned, nil)
-	}
 	return d.file.Close()
 }
 

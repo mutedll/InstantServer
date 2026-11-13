@@ -115,8 +115,6 @@ func b64From24Bit(b2, b1, b0 byte, n int) string {
 	return string(out[:n])
 }
 
-// Sha512Crypt implements the Ulrich Drepper glibc $6$ SHA-512 crypt algorithm
-// used by Ubuntu /etc/shadow, PAM, and cloud-init autoinstall.
 func Sha512Crypt(password string, salt string) string {
 	if strings.HasPrefix(password, "$6$") || strings.HasPrefix(password, "$y$") || strings.HasPrefix(password, "$5$") {
 		return password
@@ -397,8 +395,6 @@ func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
 	}
 	sizingLine := ""
 	if layout == "lvm" {
-		// Per Canonical Subiquity Reference, LVM defaults to `scaled` (which only uses 50% or max 100 GiB of large disks);
-		// `sizing-policy: all` ensures 100% of the server partition is allocated to the root LV.
 		sizingLine = "\n      sizing-policy: all"
 	}
 
@@ -415,11 +411,6 @@ func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
 		}
 	}
 
-	// Note: Subiquity strips YAML comments when writing /autoinstall.yaml, so select_target_disk.sh
-	// uses Python3 (yaml.safe_load/safe_dump) during early-commands to sanitize `network.wifis` out of
-	// /autoinstall.yaml and wraps /usr/sbin/netplan with a 10s D-Bus timeout guard before Subiquity runs
-	// Network/apply_config. Target Wi-Fi is configured in /target/etc/netplan/60-instant-wifi.yaml
-	// using the real kernel interface name (e.g. wlx7cc2c626d7ec) during late-commands.
 	ethSection := `      eth_en:
         match:
           name: "en*"
@@ -492,9 +483,6 @@ func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
     # END_INSTANT_WIFI`, safeSSID, authLine)
 	}
 
-	// Stop casper-md5check immediately so it does not thrash the USB stick during installation,
-	// mount CIDATA & INSTANTUSB rw+sync, start crash-proof live USB logging (`start_usb_logger.sh`),
-	// inhibit sleep/suspend, ignore laptop lid close, and run select_target_disk.sh.
 	liveNoSleepCmds := `    - systemctl stop casper-md5check.service 2>/dev/null || killall -9 casper-md5check 2>/dev/null || true
     - mkdir -p /mnt/cidata /mnt/usb_logs
     - cdev=$(blkid -L CIDATA 2>/dev/null || blkid -L cidata 2>/dev/null || true); [ -n "$cdev" ] && (mount -o rw,sync,flush,noatime "$cdev" /mnt/cidata 2>/dev/null || mount -o remount,rw,sync,flush /mnt/cidata 2>/dev/null || true)
@@ -809,10 +797,7 @@ func StageCIDATAPayload(targetDir string, cfg ServerProfileConfig, hardeningScri
 	if err := writeItem("meta-data", metaData, 0644); err != nil {
 		return nil, err
 	}
-	// Crash-Proof Real-Time USB Logger:
-	// Stops casper-md5check immediately, mounts both CIDATA and INSTANTUSB with `rw,sync,flush,noatime`,
-	// and streams every boot, hardware, early-commands, Subiquity, Curtin, Netplan, and kernel message
-	// directly onto the USB drive (`INSTANT-SERVER-INSTALL.log`) every 2 seconds with hardware `sync`.
+
 	startUSBLoggerScript := []byte(`#!/usr/bin/env bash
 set -uo pipefail
 systemctl stop casper-md5check.service 2>/dev/null || killall -9 casper-md5check 2>/dev/null || true
@@ -1009,12 +994,12 @@ log_usb() {
     sync
 }
 
-# 0. Stop casper-md5check immediately so it stops reading all 3 GB of the USB drive during installation
+# Stop casper-md5check immediately so it does not saturate USB I/O during installation
 systemctl stop casper-md5check.service 2>/dev/null || killall -9 casper-md5check 2>/dev/null || true
 
-# 0b. Install a fault-tolerant /usr/sbin/netplan wrapper on the live host so Subiquity's D-Bus call
-# (busctl -> io.netplan.Netplan -> /usr/sbin/netplan apply, which has a 25s D-Bus timeout) can NEVER
-# time out or exit with code 1 (`Call failed: Connection timed out`).
+# Install a fault-tolerant /usr/sbin/netplan wrapper on the live host so Subiquity's D-Bus call
+# (busctl -> io.netplan.Netplan -> /usr/sbin/netplan apply, which has a 25s D-Bus timeout) never
+# times out or exits with status 1 across slow or busy network adapters.
 chmod 600 /etc/netplan/*.yaml /lib/netplan/*.yaml /run/netplan/*.yaml 2>/dev/null || true
 if [ -x /usr/sbin/netplan ] && [ ! -f /usr/sbin/netplan.real ]; then
     cp -a /usr/sbin/netplan /usr/sbin/netplan.real
@@ -1034,9 +1019,10 @@ NPEOF
     log_usb "Installed fault-tolerant /usr/sbin/netplan wrapper (10s D-Bus timeout guard)."
 fi
 
-# 1. Identify both the ISO/cdrom disk and the CIDATA/INSTANTUSB disk so Subiquity NEVER overwrites installer media
+# Identify the installer media disk(s) (USB/SD/ISO) so Subiquity never overwrites installer media
 CDROM_PART=$(findmnt -n -o SOURCE /cdrom 2>/dev/null || true)
 CIDATA_PART=$(blkid -L CIDATA 2>/dev/null || blkid -L cidata 2>/dev/null || true)
+INSTANT_PART=$(blkid -L INSTANTUSB 2>/dev/null || true)
 USB_DISK=""
 CIDATA_DISK=""
 if [ -n "$CDROM_PART" ]; then
@@ -1048,11 +1034,16 @@ if [ -n "$CIDATA_PART" ]; then
     if [ -n "$PK2" ]; then CIDATA_DISK="/dev/${PK2}"; else CIDATA_DISK="$CIDATA_PART"; fi
     [ -z "$USB_DISK" ] && USB_DISK="$CIDATA_DISK"
 fi
+if [ -z "$CIDATA_DISK" ] && [ -n "$INSTANT_PART" ]; then
+    PK3=$(lsblk -no PKNAME "$INSTANT_PART" 2>/dev/null | head -n1)
+    [ -n "$PK3" ] && CIDATA_DISK="/dev/${PK3}"
+    [ -z "$USB_DISK" ] && USB_DISK="$CIDATA_DISK"
+fi
 log_usb "Detected installer media: USB_DISK=${USB_DISK} CIDATA_DISK=${CIDATA_DISK}"
 
-# 2. Guard against infinite reinstall loop if user left the USB plugged in during automatic reboot
+# Guard against infinite reinstall loop if the USB drive remains plugged in during reboot
 mkdir -p /mnt/check_existing
-for part in $(lsblk -lnpo NAME,FSTYPE | awk '$2 == "ext4" {print $1}'); do
+for part in $(lsblk -lnpo NAME,FSTYPE | awk '$2 ~ /ext4|btrfs|xfs/ {print $1}'); do
     [ -n "$USB_DISK" ] && [[ "$part" == "${USB_DISK}"* ]] && continue
     [ -n "$CIDATA_DISK" ] && [[ "$part" == "${CIDATA_DISK}"* ]] && continue
     if mount -o ro "$part" /mnt/check_existing 2>/dev/null; then
@@ -1073,27 +1064,29 @@ for part in $(lsblk -lnpo NAME,FSTYPE | awk '$2 == "ext4" {print $1}'); do
     fi
 done
 
-# 3. Pin largest internal non-USB disk in /autoinstall.yaml so a large USB stick never wipes itself
+# Select largest internal non-USB target disk across NVMe, SATA, SAS, eMMC, and VirtIO controllers
 BEST_DISK=""
 BEST_SIZE=0
 while read -r dname dsize drm dtype; do
     [ "$dtype" = "disk" ] || continue
     [ -n "$USB_DISK" ] && [ "$dname" = "$USB_DISK" ] && continue
     [ -n "$CIDATA_DISK" ] && [ "$dname" = "$CIDATA_DISK" ] && continue
-    [[ "$dname" == /dev/loop* || "$dname" == /dev/ram* || "$dname" == /dev/zram* || "$dname" == /dev/sr* ]] && continue
+    [[ "$dname" == /dev/loop* || "$dname" == /dev/ram* || "$dname" == /dev/zram* || "$dname" == /dev/sr* || "$dname" == /dev/mmcblk*boot* || "$dname" == /dev/mmcblk*rpmb* ]] && continue
+    grep -q "^${dname}" /proc/mounts 2>/dev/null && continue
     if [ "$drm" = "0" ] && [ "${dsize:-0}" -gt "$BEST_SIZE" ]; then
         BEST_SIZE="$dsize"
         BEST_DISK="$dname"
     fi
 done < <(lsblk -dbnpo NAME,SIZE,RM,TYPE 2>/dev/null)
 
-# Fallback for older laptops whose SATA/eMMC controller marks internal drives with RM=1
+# Fallback for laptops/mini-PCs whose SATA/eMMC/SD controller marks internal storage with RM=1
 if [ -z "$BEST_DISK" ]; then
     while read -r dname dsize drm dtype; do
         [ "$dtype" = "disk" ] || continue
         [ -n "$USB_DISK" ] && [ "$dname" = "$USB_DISK" ] && continue
         [ -n "$CIDATA_DISK" ] && [ "$dname" = "$CIDATA_DISK" ] && continue
-        [[ "$dname" == /dev/loop* || "$dname" == /dev/ram* || "$dname" == /dev/zram* || "$dname" == /dev/sr* ]] && continue
+        [[ "$dname" == /dev/loop* || "$dname" == /dev/ram* || "$dname" == /dev/zram* || "$dname" == /dev/sr* || "$dname" == /dev/mmcblk*boot* || "$dname" == /dev/mmcblk*rpmb* ]] && continue
+        grep -q "^${dname}" /proc/mounts 2>/dev/null && continue
         if [ "${dsize:-0}" -gt "$BEST_SIZE" ]; then
             BEST_SIZE="$dsize"
             BEST_DISK="$dname"
@@ -1111,24 +1104,26 @@ if [ -n "$BEST_DISK" ]; then
     for p in $(lsblk -lnpo NAME "$BEST_DISK" 2>/dev/null | tail -n +2); do
         umount -lf "$p" 2>/dev/null || true
     done
-    # If mode is auto_erase or reinstall_wipe_data, destroy any existing LVM volume groups (e.g. ubuntu-vg)
-    # on BEST_DISK now so Subiquity's probert.lvm (`vgchange -ay`) does NOT re-activate dm-0 during Filesystem/_probe.
+    # For auto_erase or reinstall_wipe_data, destroy any existing LVM/RAID/ZFS/LUKS metadata on BEST_DISK
+    # so Subiquity's probert.lvm (vgchange -ay) never re-activates old volume groups during Filesystem/_probe.
     if [ "${INSTANT_INSTALL_MODE:-}" = "auto_erase" ] || [ "${INSTANT_INSTALL_MODE:-}" = "reinstall_wipe_data" ]; then
         if [ "$BEST_DISK" != "$USB_DISK" ] && [ "$BEST_DISK" != "$CIDATA_DISK" ] && ! grep -q "^${BEST_DISK}" /proc/mounts 2>/dev/null; then
-            log_usb "Cleaning existing LVM volume groups and partition signatures on ${BEST_DISK} for ${INSTANT_INSTALL_MODE}..."
-            for vg in $(vgs --noheadings -o vg_name 2>/dev/null || true); do
+            log_usb "Cleaning existing LVM, RAID, and partition signatures on ${BEST_DISK} for ${INSTANT_INSTALL_MODE}..."
+            for vg in $(pvs --noheadings -o pv_name,vg_name 2>/dev/null | awk -v d="$BEST_DISK" '$1 ~ "^"d && $2 != "" {print $2}' | sort -u); do
                 lvremove -ff -y "$vg" >/dev/null 2>&1 || true
                 vgremove -ff -y "$vg" >/dev/null 2>&1 || true
             done
-            for pv in $(pvs --noheadings -o pv_name 2>/dev/null | grep "^${BEST_DISK}" || true); do
+            for pv in $(pvs --noheadings -o pv_name 2>/dev/null | awk -v d="$BEST_DISK" '$1 ~ "^"d {print $1}'); do
                 pvremove -ff -y "$pv" >/dev/null 2>&1 || true
             done
             dmsetup remove_all >/dev/null 2>&1 || true
+            mdadm --stop --scan >/dev/null 2>&1 || true
             for p in $(lsblk -lnpo NAME "$BEST_DISK" 2>/dev/null | tail -n +2 | tac); do
+                mdadm --zero-superblock "$p" >/dev/null 2>&1 || true
                 wipefs -a "$p" >/dev/null 2>&1 || true
             done
             wipefs -a "$BEST_DISK" >/dev/null 2>&1 || true
-            sgdisk --zap-all "$BEST_DISK" >/dev/null 2>&1 || true
+            sgdisk --zap-all "$BEST_DISK" >/dev/null 2>&1 || dd if=/dev/zero of="$BEST_DISK" bs=1M count=16 conv=fsync >/dev/null 2>&1 || true
             partprobe "$BEST_DISK" 2>/dev/null || true
         fi
     else
@@ -1143,11 +1138,10 @@ else
     log_usb "WARNING: No separate internal target disk detected beyond USB_DISK=${USB_DISK}"
 fi
 
-# 4. Sanitize /autoinstall.yaml using Python3 (since Subiquity's yaml.dump strips YAML comments):
-#    - Pin storage.layout.match.path to BEST_DISK
-#    - Remove `wifis` (wlan0) from `network` so Subiquity netplan apply and Curtin net-meta never fail
-#      on non-existent `wlan0` or missing target wpasupplicant (laptop_hardening.sh writes 60-instant-wifi.yaml
-#      with the real interface name in late-commands).
+# Sanitize /autoinstall.yaml using Python3 (since Subiquity's yaml.dump strips YAML comments):
+# 1. Pin storage.layout.match.path to BEST_DISK
+# 2. Remove wifis.wlan0 from network so Subiquity netplan apply and Curtin net-meta never fail
+#    on machines without wlan0 or before wpasupplicant is installed in /target.
 if [ -f /autoinstall.yaml ] && command -v python3 >/dev/null 2>&1; then
     python3 - "$BEST_DISK" << 'PYAUTOCFG'
 import sys, yaml
@@ -1171,12 +1165,12 @@ PYAUTOCFG
     log_usb "Sanitized /autoinstall.yaml via python3 (removed wifis.wlan0 and pinned storage path=${BEST_DISK})."
 fi
 
-# 5. Live Installer Network Check:
-#    If a wired Ethernet or USB-tether interface (en*, eth*, usb*) ALREADY has a global IPv4 address
-#    (e.g. enp7s0 DHCP), DO NOT install or spawn a conflicting wpa_supplicant/dhclient in the live installer!
+# Live Installer Network Check:
+# If any wired Ethernet or USB-tether interface (en*, eth*, usb*) already has a global IPv4 address,
+# keep it active without spawning a conflicting live wpa_supplicant or dhclient process.
 WIRED_IPV4=$(ip -4 -o addr show scope global 2>/dev/null | awk '$2 ~ /^(en|eth|usb)/ {print $2 ":" $4}' | head -n1 || true)
 if [ -n "$WIRED_IPV4" ]; then
-    log_usb "Wired interface already online (${WIRED_IPV4}); skipping live wpa_supplicant/dhclient to avoid D-Bus/route contention (target Wi-Fi will be configured in late-commands)."
+    log_usb "Wired interface already online (${WIRED_IPV4}); keeping live wired connection and deferring Wi-Fi setup to target OS."
 elif [ -n "${INSTANT_WIFI_SSID:-}" ]; then
     find /cdrom/pool -type f \( -name "libnl-*.deb" -o -name "libpcsclite*.deb" -o -name "wpasupplicant*.deb" -o -name "wireless-tools*.deb" -o -name "rfkill*.deb" \) -exec dpkg -i {} + >/dev/null 2>&1 || true
     WIFI_DEV=""
@@ -1213,15 +1207,6 @@ exit 0
 		return nil, err
 	}
 
-	// Non-destructive Dual-Boot & Stale Linux LVM Cleaner:
-	// - Only inspects actual disk partitions (`TYPE == "part"`), NEVER LVM logical volumes (`TYPE == "lvm"`).
-	// - If TARGET_DISK has a Windows NTFS partition (`ntfs` / `BitLocker`), shrinks the NTFS partition using
-	//   `ntfsresize` + `parted` (using true end offset `START_MB + NEW_SIZE_MB`) and sets `use-gap: largest`
-	//   in `/autoinstall.yaml` so Windows is preserved untouched.
-	// - If TARGET_DISK has NO Windows NTFS partition (e.g., it only contains a previous Ubuntu Server LVM
-	//   installation like `ubuntu-vg/ubuntu-lv` on `/dev/sda3`), removes the old LVM volume groups and
-	//   partition signatures so `probert.lvm` (`vgchange -ay`) does NOT lock `/dev/sda3` under `/dev/dm-0`
-	//   during `Filesystem/_probe`!
 	dualBootHelper := []byte(`#!/usr/bin/env bash
 set -uo pipefail
 REQ_GB="${1:-45}"
@@ -1238,7 +1223,6 @@ log_usb() {
 TARGET_DISK=$(cat /run/instant-target-disk 2>/dev/null || true)
 [ -z "$TARGET_DISK" ] && exit 0
 
-# Safety check: never modify the USB installer disk
 CDROM_PART=$(findmnt -n -o SOURCE /cdrom 2>/dev/null || true)
 USB_DISK=""
 if [ -n "$CDROM_PART" ]; then
@@ -1250,14 +1234,13 @@ if [ "$TARGET_DISK" = "$USB_DISK" ] || grep -q "^${TARGET_DISK}" /proc/mounts 2>
     exit 0
 fi
 
-# Count actual disk partitions (TYPE=="part") on TARGET_DISK
 PART_COUNT=$(lsblk -lnpo NAME,TYPE "$TARGET_DISK" 2>/dev/null | awk '$2=="part"{count++} END{print count+0}')
 if [ "${PART_COUNT:-0}" -eq 0 ]; then
     log_usb "Target disk ${TARGET_DISK} has no existing partitions; using full disk layout."
     exit 0
 fi
 
-# Inspect ONLY physical partitions (TYPE=="part", never TYPE=="lvm")
+# Inspect only physical disk partitions (TYPE=="part", never TYPE=="lvm")
 HAS_WINDOWS_NTFS=0
 SHRINK_PART=""
 SHRINK_FSTYPE=""
@@ -1275,24 +1258,26 @@ while read -r pname psize ptype pfstype; do
     fi
 done < <(lsblk -lnbpo NAME,SIZE,TYPE,FSTYPE "$TARGET_DISK" 2>/dev/null)
 
-# If TARGET_DISK has NO Windows NTFS partition (only old Linux/Ubuntu LVM or ext4 partitions),
-# remove the old Linux LVM volume groups and partition signatures so probert.lvm (`vgchange -ay`)
-# cannot re-activate `ubuntu-vg` (`/dev/dm-0`) and block Subiquity from partitioning TARGET_DISK!
+# If TARGET_DISK has no Windows NTFS partition (only previous Linux/LVM/RAID partitions),
+# remove old LVM volume groups and partition signatures on TARGET_DISK so probert.lvm (vgchange -ay)
+# cannot re-activate stale volume groups (/dev/dm-*) and block Subiquity from partitioning TARGET_DISK.
 if [ "$HAS_WINDOWS_NTFS" -eq 0 ]; then
     log_usb "No Windows NTFS partition found on ${TARGET_DISK} (only previous Linux/LVM partitions exist). Removing old Linux LVM/partitions for clean install..."
     swapoff -a 2>/dev/null || true
     for mp in $(lsblk -lnpo NAME "$TARGET_DISK" 2>/dev/null | tail -n +2); do
         umount -lf "$mp" 2>/dev/null || true
     done
-    for vg in $(vgs --noheadings -o vg_name 2>/dev/null || true); do
+    for vg in $(pvs --noheadings -o pv_name,vg_name 2>/dev/null | awk -v d="$TARGET_DISK" '$1 ~ "^"d && $2 != "" {print $2}' | sort -u); do
         lvremove -ff -y "$vg" >/dev/null 2>&1 || true
         vgremove -ff -y "$vg" >/dev/null 2>&1 || true
     done
-    for pv in $(pvs --noheadings -o pv_name 2>/dev/null | grep "^${TARGET_DISK}" || true); do
+    for pv in $(pvs --noheadings -o pv_name 2>/dev/null | awk -v d="$TARGET_DISK" '$1 ~ "^"d {print $1}'); do
         pvremove -ff -y "$pv" >/dev/null 2>&1 || true
     done
     dmsetup remove_all >/dev/null 2>&1 || true
+    mdadm --stop --scan >/dev/null 2>&1 || true
     for p in $(lsblk -lnpo NAME "$TARGET_DISK" 2>/dev/null | tail -n +2 | tac); do
+        mdadm --zero-superblock "$p" >/dev/null 2>&1 || true
         wipefs -a "$p" >/dev/null 2>&1 || true
     done
     wipefs -a "$TARGET_DISK" >/dev/null 2>&1 || true
@@ -1345,10 +1330,6 @@ exit 0
 		return nil, err
 	}
 
-	// Reinstall While Retaining Server Data helper script:
-	// Uses /dev/shm/instant-preserved-data (50% RAM tmpfs, never /run which is limited to 10% RAM),
-	// activates any existing LVM volumes first so `/DATA` on an LVM root can be backed up,
-	// and then removes old LVM locks after backup so Subiquity can cleanly partition the target disk.
 	reinstallPreserveScript := []byte(`#!/usr/bin/env bash
 set -uo pipefail
 ACTION="${1:-backup}"
@@ -1380,11 +1361,11 @@ if [ "$ACTION" = "backup" ]; then
     done
     TARGET_DISK=$(cat /run/instant-target-disk 2>/dev/null || true)
     if [ -n "$TARGET_DISK" ] && ! grep -q "^${TARGET_DISK}" /proc/mounts 2>/dev/null; then
-        for vg in $(vgs --noheadings -o vg_name 2>/dev/null || true); do
+        for vg in $(pvs --noheadings -o pv_name,vg_name 2>/dev/null | awk -v d="$TARGET_DISK" '$1 ~ "^"d && $2 != "" {print $2}' | sort -u); do
             lvremove -ff -y "$vg" >/dev/null 2>&1 || true
             vgremove -ff -y "$vg" >/dev/null 2>&1 || true
         done
-        for pv in $(pvs --noheadings -o pv_name 2>/dev/null | grep "^${TARGET_DISK}" || true); do
+        for pv in $(pvs --noheadings -o pv_name 2>/dev/null | awk -v d="$TARGET_DISK" '$1 ~ "^"d {print $1}'); do
             pvremove -ff -y "$pv" >/dev/null 2>&1 || true
         done
         dmsetup remove_all >/dev/null 2>&1 || true
@@ -1406,7 +1387,6 @@ exit 0
 		return nil, err
 	}
 
-	// Offline Updater USB helper script (for local-only / air-gapped servers or incremental app additions)
 	offlineUpdaterScript := []byte(`#!/usr/bin/env bash
 set -euo pipefail
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -1453,7 +1433,6 @@ fi
 		return nil, err
 	}
 
-	// Emergency Repair & Password Reset USB helper script
 	hashedPass := Sha512Crypt(cfg.Password, "instantserverlts")
 	sshPort := cfg.SSHPort
 	if sshPort <= 0 || sshPort > 65535 {
@@ -1570,8 +1549,6 @@ fi
 		}
 	}
 
-	// Build a self-extracting root-level script (instant_apps_bundle.sh) so the flat FAT16 CIDATA
-	// root directory carries every selected app's docker-compose.yml, SHA-256 fingerprint, and custom workflows.
 	var bundleBuilder strings.Builder
 	bundleBuilder.WriteString("#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p /DATA/AppData /opt/instant-server/casaos_apps /opt/instant-server/custom_system_configs /opt/instant-server/custom_systemd /opt/instant-server/custom_udev\n")
 	for _, appID := range cfg.SelectedApps {
@@ -1602,8 +1579,6 @@ fi
 			bundleBuilder.WriteString(fmt.Sprintf("printf '%%s\\n' %q > /DATA/AppData/%s/.compose_sha256\n", hashHex, ca.ID))
 		}
 	}
-	// Also bundle custom system configs, custom Samba shares, custom systemd units, and custom udev rules into instant_apps_bundle.sh
-	// so even when mounted from flat root FAT16 CIDATA, every custom user workflow is unpacked automatically.
 	for customPath, customContent := range cfg.CustomConfigFiles {
 		safeName := strings.ReplaceAll(strings.Trim(customPath, "/\\"), "/", "__")
 		if safeName != "" {

@@ -78,6 +78,7 @@ export namespace usb {
 export function ProbeHost(): Promise<Record<string, any>>;
 export function ElevateAdmin(): Promise<Record<string, any>>;
 export function ScanUSBDevices(): Promise<usb.USBDeviceCandidate[]>;
+export function ResetUSBDrive(devicePath: string): Promise<Record<string, any>>;
 export function AddCustomApp(payload: Record<string, any>): Promise<Record<string, any>>;
 export function SaveConfig(profile: usb.ServerProfileConfig): Promise<Record<string, any>>;
 export function LoadConfig(): Promise<Record<string, any>>;

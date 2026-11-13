@@ -122,9 +122,6 @@ type grubPatchPair struct {
 	repl   []byte
 }
 
-// Note: Setting `set timeout=1 ` (1 second) instead of `0` prevents Canonical's
-// patched grubx64.efi from overriding `timeout=0` back to 10 seconds when
-// `timeout_style=menu` is active.
 var grubFixedPatchPairs = []grubPatchPair{
 	{
 		needle: []byte("quiet splash ---"),
@@ -148,11 +145,6 @@ var grubFixedPatchPairs = []grubPatchPair{
 	},
 }
 
-// PatchGrubKernelCmdlineInPlace patches Ubuntu Live Server and Desktop GRUB configs
-// in-place without changing a single file offset or ISO9660 extent length:
-//  1. Sets GRUB menu timeout to 1 second (`set timeout=1 `) so the USB boots automatically without pressing Enter.
-//  2. Replaces `set gfxpayload=keep\n\tlinux\t/casper/... ---` (as well as standalone `/casper/vmlinuz` lines)
-//     with `linux /casper/... autoinstall noprompt ---` so Subiquity installs 100% unattended and reboots automatically.
 func PatchGrubKernelCmdlineInPlace(buf []byte) int {
 	count := 0
 	for _, pair := range grubFixedPatchPairs {
@@ -171,8 +163,6 @@ func PatchGrubKernelCmdlineInPlace(buf []byte) int {
 		}
 	}
 
-	// Universal byte-length-preserving scanner for Ubuntu Live Server menuentries:
-	// Matches `set gfxpayload=keep` followed within 110 bytes by `linux` + `/casper/` + `---`
 	gfxMarker := []byte("set gfxpayload=keep")
 	dashMarker := []byte("---")
 	searchIdx := 0
@@ -191,13 +181,11 @@ func PatchGrubKernelCmdlineInPlace(buf []byte) int {
 		casperPos := bytes.Index(window, []byte("/casper/"))
 		if dashPos > 0 && casperPos > 0 && casperPos < dashPos {
 			spanLen := dashPos + len(dashMarker)
-			// Extract the exact kernel binary path (e.g. "/casper/vmlinuz" or "/casper/hwe-vmlinuz")
 			kEnd := casperPos
 			for kEnd < dashPos && window[kEnd] != ' ' && window[kEnd] != '\t' && window[kEnd] != '\r' && window[kEnd] != '\n' {
 				kEnd++
 			}
 			kernelPath := string(window[casperPos:kEnd])
-			// Build candidate replacements from richest flags to compact flags that fit in spanLen
 			candidates := []string{
 				"linux\t" + kernelPath + " autoinstall noprompt noeject quiet ",
 				"linux " + kernelPath + " autoinstall noprompt ",
@@ -408,8 +396,6 @@ var microsoftBasicDataGUID = [16]byte{
 }
 
 // linuxFilesystemDataGUID in mixed-endian GPT binary format: 0FC63DAF-8483-4772-8E79-3D69D8477DE4
-// Used on the ISO9660 and Gap1 partitions so Windows MountMgr never attempts to mount raw ISO9660
-// sectors as an unformatted Windows drive ("You need to format the disk in drive X:").
 var linuxFilesystemDataGUID = [16]byte{
 	0xAF, 0x3D, 0xC6, 0x0F,
 	0x83, 0x84,
@@ -426,12 +412,20 @@ var cidataUniquePartGUID = [16]byte{
 	0x44, 0x41, 0x54, 0x41, 0x30, 0x31,
 }
 
+var instantUSBUniquePartGUID = [16]byte{
+	0x49, 0x4E, 0x53, 0x54,
+	0x41, 0x4E,
+	0x54, 0x53,
+	0x55, 0x53,
+	0x42, 0x44, 0x41, 0x54, 0x41, 0x32,
+}
+
 func RelocateGPTAndAppendCidataPartition(disk RawDiskHandle, isoBytes uint64) error {
 	return RelocateGPTAndWriteCidataPartition(disk, isoBytes, nil)
 }
 
 func writeAlignedChunks(disk RawDiskHandle, data []byte, baseOffset int64) error {
-	const chunkStep = 1024 * 1024 // 1 MB chunks for universal USBSTOR/UASP/NVMe compatibility
+	const chunkStep = 1024 * 1024
 	chunkBuf := AllocPageAlignedBuffer(chunkStep, SectorAlignmentBytes)
 	written := 0
 	for written < len(data) {
@@ -453,16 +447,30 @@ func writeAlignedChunks(disk RawDiskHandle, data []byte, baseOffset int64) error
 	return nil
 }
 
-var instantUSBUniquePartGUID = [16]byte{
-	0x49, 0x4E, 0x53, 0x54,
-	0x41, 0x4E,
-	0x54, 0x53,
-	0x55, 0x53,
-	0x42, 0x44, 0x41, 0x54, 0x41, 0x32,
+func writeStandardProtectiveMBR(mbrSector []byte, totalDiskSectors uint64) {
+	// Clear all 4 MBR partition entries at bytes 446..510 while preserving bootstrap code in 0..446
+	for i := 446; i < 510; i++ {
+		mbrSector[i] = 0
+	}
+	protSectors := totalDiskSectors - 1
+	if protSectors > 0xFFFFFFFF {
+		protSectors = 0xFFFFFFFF
+	}
+	mbrSector[446+0] = 0x00 // Non-bootable protective entry (UEFI spec 5.2.2)
+	mbrSector[446+1] = 0x00
+	mbrSector[446+2] = 0x02
+	mbrSector[446+3] = 0x00
+	mbrSector[446+4] = 0xEE // GPT Protective MBR type
+	mbrSector[446+5] = 0xFF
+	mbrSector[446+6] = 0xFF
+	mbrSector[446+7] = 0xFF
+	binary.LittleEndian.PutUint32(mbrSector[446+8:446+12], 1)
+	binary.LittleEndian.PutUint32(mbrSector[446+12:446+16], uint32(protSectors))
+	mbrSector[510] = 0x55
+	mbrSector[511] = 0xAA
 }
 
 func RelocateGPTAndWriteCidataPartition(disk RawDiskHandle, isoBytes uint64, cidataFATImage []byte) error {
-	// Read LBA 0..63 (64 sectors = 32,768 bytes = 8 * 4096-byte pages)
 	tableBuf := AllocPageAlignedBuffer(8*SectorAlignmentBytes, SectorAlignmentBytes)
 	if _, err := disk.ReadAt(tableBuf, 0); err != nil {
 		return err
@@ -473,11 +481,8 @@ func RelocateGPTAndWriteCidataPartition(disk RawDiskHandle, isoBytes uint64, cid
 		return nil
 	}
 
-	// Record the ISO's original embedded Backup GPT LBA so we can erase it if we relocate
-	// the Backup GPT to the true end of the physical USB drive.
 	origAlternateLBA := binary.LittleEndian.Uint64(gptHdr[32:40])
 
-	// Align CIDATA partition start to the next 1 MB boundary (2048 512-byte LBAs) after the ISO
 	cidataStartLBA := ((isoBytes + (1024*1024 - 1)) / (1024 * 1024)) * (1024 * 1024 / LPTSectorSize)
 	cidataSectors := uint64(len(cidataFATImage)) / LPTSectorSize
 	if cidataSectors == 0 {
@@ -485,7 +490,6 @@ func RelocateGPTAndWriteCidataPartition(disk RawDiskHandle, isoBytes uint64, cid
 	}
 	cidataEndLBA := cidataStartLBA + cidataSectors - 1
 
-	// Write the FAT16 CIDATA filesystem image in 1 MB aligned chunks
 	if len(cidataFATImage) > 0 {
 		if err := writeAlignedChunks(disk, cidataFATImage, int64(cidataStartLBA*LPTSectorSize)); err != nil {
 			return err
@@ -511,8 +515,6 @@ func RelocateGPTAndWriteCidataPartition(disk RawDiskHandle, isoBytes uint64, cid
 	}
 	arraySectors := uint64((arrayBytesLen + LPTSectorSize - 1) / LPTSectorSize)
 
-	// Determine true physical capacity of the USB drive so Backup GPT sits at exact LBA (totalDiskSectors - 1)
-	// per UEFI Spec 5.3.2, eliminating "The backup GPT table is not on the end of the device" and "PMBR size mismatch".
 	backupArrayLBA := ((cidataEndLBA + 1 + 7) / 8) * 8
 	backupHeaderLBA := backupArrayLBA + arraySectors
 	totalDiskSectors := backupHeaderLBA + 1
@@ -527,8 +529,6 @@ func RelocateGPTAndWriteCidataPartition(disk RawDiskHandle, isoBytes uint64, cid
 	}
 	lastUsableLBA := backupArrayLBA - 1
 
-	// If the Backup GPT moved beyond origAlternateLBA, zero out the ISO's old embedded Backup GPT Header
-	// so parted/sgdisk/kernel never sees a stale GPT header in the middle of the USB drive.
 	if origAlternateLBA > 1 && origAlternateLBA < cidataStartLBA && backupHeaderLBA > origAlternateLBA {
 		alignedOldLBA := (origAlternateLBA / 8) * 8
 		zeroPage := AllocPageAlignedBuffer(SectorAlignmentBytes, SectorAlignmentBytes)
@@ -543,9 +543,6 @@ func RelocateGPTAndWriteCidataPartition(disk RawDiskHandle, isoBytes uint64, cid
 		}
 	}
 
-	// Mark existing ISO9660 / Gap1 partitions (which xorriso tags with microsoftBasicDataGUID)
-	// as Linux Filesystem Data + Hidden + NoDriveLetter so Windows Explorer never prompts to format them.
-	// Find two free GPT partition slots: one for CIDATA (FAT16) and one for INSTANTUSB (FAT32 remaining storage).
 	var freeSlots []int
 	for i := 0; i < numEntries && (i+1)*entrySize <= len(partArray); i++ {
 		ent := partArray[i*entrySize : (i+1)*entrySize]
@@ -569,7 +566,6 @@ func RelocateGPTAndWriteCidataPartition(disk RawDiskHandle, isoBytes uint64, cid
 		freeSlots = append(freeSlots, entrySize)
 	}
 
-	// Slot A: CIDATA (FAT16)
 	cidataSlot := freeSlots[0]
 	if cidataSlot+128 <= len(partArray) {
 		ent := partArray[cidataSlot : cidataSlot+128]
@@ -586,8 +582,6 @@ func RelocateGPTAndWriteCidataPartition(disk RawDiskHandle, isoBytes uint64, cid
 		}
 	}
 
-	// Slot B: Allocate all remaining unallocated space on the USB drive as a writable FAT32 partition ("INSTANTUSB")
-	// if at least 64 MB (131,072 sectors) remains after CIDATA.
 	dataStartLBA := ((cidataEndLBA + 1 + 2047) / 2048) * 2048
 	dataEndLBA := (lastUsableLBA/2048)*2048 - 1
 	if len(freeSlots) >= 2 && dataEndLBA > dataStartLBA+131072 {
@@ -610,15 +604,13 @@ func RelocateGPTAndWriteCidataPartition(disk RawDiskHandle, isoBytes uint64, cid
 		}
 	}
 
-	binary.LittleEndian.PutUint64(gptHdr[24:32], 1)               // MyLBA = 1
-	binary.LittleEndian.PutUint64(gptHdr[32:40], backupHeaderLBA) // AlternateLBA = totalDiskSectors - 1
-	binary.LittleEndian.PutUint64(gptHdr[48:56], lastUsableLBA)   // LastUsableLBA
+	binary.LittleEndian.PutUint64(gptHdr[24:32], 1)
+	binary.LittleEndian.PutUint64(gptHdr[32:40], backupHeaderLBA)
+	binary.LittleEndian.PutUint64(gptHdr[48:56], lastUsableLBA)
 
-	// Recompute Partition Entry Array CRC-32 (offset 88)
 	partCRC := crc32.ChecksumIEEE(partArray[:arrayBytesLen])
 	binary.LittleEndian.PutUint32(gptHdr[88:92], partCRC)
 
-	// Recompute Primary GPT Header CRC-32 (offset 16)
 	hdrSize := int(binary.LittleEndian.Uint32(gptHdr[12:16]))
 	if hdrSize < 92 || hdrSize > LPTSectorSize {
 		hdrSize = 92
@@ -628,36 +620,21 @@ func RelocateGPTAndWriteCidataPartition(disk RawDiskHandle, isoBytes uint64, cid
 	hdrCRC := crc32.ChecksumIEEE(gptHdr[:hdrSize])
 	binary.LittleEndian.PutUint32(gptHdr[16:20], hdrCRC)
 
-	// Ensure LBA 0 Protective MBR (offset 446..510) conforms to UEFI Specification Section 5.2.2:
-	// Partition 1 (0xEE) spans LBA 1..(totalDiskSectors - 1) so Linux kernel never logs "GPT PMBR size mismatch".
-	if tableBuf[446+4] == 0xEE {
-		protSectors := totalDiskSectors - 1
-		if protSectors > 0xFFFFFFFF {
-			protSectors = 0xFFFFFFFF
-		}
-		binary.LittleEndian.PutUint32(tableBuf[446+12:446+16], uint32(protSectors))
-	}
-	tableBuf[510] = 0x55
-	tableBuf[511] = 0xAA
+	writeStandardProtectiveMBR(tableBuf[:LPTSectorSize], totalDiskSectors)
 
-	// Write the updated Protective MBR + Primary GPT Header + Partition Entry Array back to LBA 0..63
 	if _, err := disk.WriteAt(tableBuf, 0); err != nil {
 		return err
 	}
 
-	// Build the Backup GPT Header sector
 	var backupHdr [LPTSectorSize]byte
 	copy(backupHdr[:], gptHdr)
-	binary.LittleEndian.PutUint64(backupHdr[24:32], backupHeaderLBA) // MyLBA = backupHeaderLBA (totalDiskSectors - 1)
-	binary.LittleEndian.PutUint64(backupHdr[32:40], 1)               // AlternateLBA = 1
-	binary.LittleEndian.PutUint64(backupHdr[72:80], backupArrayLBA)  // PartitionEntryLBA = backupArrayLBA
+	binary.LittleEndian.PutUint64(backupHdr[24:32], backupHeaderLBA)
+	binary.LittleEndian.PutUint64(backupHdr[32:40], 1)
+	binary.LittleEndian.PutUint64(backupHdr[72:80], backupArrayLBA)
 	backupHdr[16], backupHdr[17], backupHdr[18], backupHdr[19] = 0, 0, 0, 0
 	backupHdrCRC := crc32.ChecksumIEEE(backupHdr[:hdrSize])
 	binary.LittleEndian.PutUint32(backupHdr[16:20], backupHdrCRC)
 
-	// Write Backup GPT Entry Array (at backupArrayLBA) + Backup GPT Header (at backupHeaderLBA = totalDiskSectors - 1)
-	// using a 4096-byte (8-sector) page-aligned window so Windows unbuffered disk handles succeed even when
-	// backupArrayLBA is not a multiple of 8.
 	alignedStartLBA := (backupArrayLBA / 8) * 8
 	endSpanSectors := (backupHeaderLBA + 1) - alignedStartLBA
 	alignedBytes := int(((endSpanSectors + 7) / 8) * 8 * LPTSectorSize)
@@ -675,7 +652,6 @@ func RelocateGPTAndWriteCidataPartition(disk RawDiskHandle, isoBytes uint64, cid
 
 	writeLen := int(endSpanSectors * LPTSectorSize)
 	if disk.RequiresPageAlignedTail() && (writeLen%SectorAlignmentBytes != 0) {
-		// If totalDiskSectors itself is not a multiple of 8, align down or write full aligned buffer
 		writeLen = (writeLen / SectorAlignmentBytes) * SectorAlignmentBytes
 		if writeLen < hdrOff+LPTSectorSize {
 			writeLen = len(backupWindow)
@@ -685,4 +661,118 @@ func RelocateGPTAndWriteCidataPartition(disk RawDiskHandle, isoBytes uint64, cid
 		return err
 	}
 	return disk.SyncAndFlush()
+}
+
+// ResetUSBToCleanFAT32 clears any hybrid ISO9660/GPT write-protection signatures on a USB drive
+// and formats 100% of its capacity as a standard single-partition FAT32 drive ("INSTANTUSB").
+func ResetUSBToCleanFAT32(targetDevice string) error {
+	releaseWakeLock := AcquireHostWakeLock()
+	defer releaseWakeLock()
+
+	rawDisk, err := OpenRawDisk(targetDevice)
+	if err != nil {
+		return err
+	}
+	defer rawDisk.Close()
+
+	diskEndBytes, err := rawDisk.Seek(0, io.SeekEnd)
+	if err != nil || diskEndBytes < 8*1024*1024 {
+		return fmt.Errorf("IS-USB-320: unable to determine capacity of USB drive %s (size=%d)", targetDevice, diskEndBytes)
+	}
+
+	totalDiskSectors := uint64(diskEndBytes) / LPTSectorSize
+	const numEntries = 128
+	const entrySize = 128
+	const arrayBytesLen = numEntries * entrySize
+	const arraySectors = uint64(arrayBytesLen / LPTSectorSize) // 32 sectors
+
+	backupHeaderLBA := totalDiskSectors - 1
+	backupArrayLBA := backupHeaderLBA - arraySectors
+	firstUsableLBA := uint64(34)
+	lastUsableLBA := backupArrayLBA - 1
+
+	// 1. Wipe first 1 MB (including LBA 0 MBR, LBA 1 GPT, and offset 32768 ISO9660 CD001 signature)
+	zero1M := AllocPageAlignedBuffer(1024*1024, SectorAlignmentBytes)
+	if _, err := rawDisk.WriteAt(zero1M, 0); err != nil {
+		return fmt.Errorf("IS-USB-321: failed clearing ISO9660/GPT header on %s: %w", targetDevice, err)
+	}
+
+	// 2. Format single FAT32 partition starting at LBA 2048 (1 MB) up to lastUsableLBA
+	dataStartLBA := uint64(2048)
+	dataEndLBA := (lastUsableLBA/2048)*2048 - 1
+	if dataEndLBA <= dataStartLBA+2048 {
+		dataEndLBA = lastUsableLBA
+	}
+	if err := FormatRemainingUSBAsFAT32(rawDisk, dataStartLBA, dataEndLBA); err != nil {
+		return fmt.Errorf("IS-USB-322: failed formatting FAT32 partition on %s: %w", targetDevice, err)
+	}
+
+	// 3. Write clean Protective MBR + Primary GPT Header + Partition Entry #1
+	tableBuf := AllocPageAlignedBuffer(8*SectorAlignmentBytes, SectorAlignmentBytes)
+	writeStandardProtectiveMBR(tableBuf[:LPTSectorSize], totalDiskSectors)
+
+	gptHdr := tableBuf[LPTSectorSize : LPTSectorSize*2]
+	partArray := tableBuf[LPTSectorSize*2:]
+
+	ent := partArray[0:128]
+	copy(ent[0:16], microsoftBasicDataGUID[:])
+	copy(ent[16:32], instantUSBUniquePartGUID[:])
+	binary.LittleEndian.PutUint64(ent[32:40], dataStartLBA)
+	binary.LittleEndian.PutUint64(ent[40:48], dataEndLBA)
+	binary.LittleEndian.PutUint64(ent[48:56], 0)
+	for idx, ch := range []uint16{'I', 'N', 'S', 'T', 'A', 'N', 'T', 'U', 'S', 'B'} {
+		binary.LittleEndian.PutUint16(ent[56+idx*2:58+idx*2], ch)
+	}
+
+	copy(gptHdr[0:8], []byte("EFI PART"))
+	binary.LittleEndian.PutUint32(gptHdr[8:12], 0x00010000)
+	binary.LittleEndian.PutUint32(gptHdr[12:16], 92)
+	binary.LittleEndian.PutUint64(gptHdr[24:32], 1)
+	binary.LittleEndian.PutUint64(gptHdr[32:40], backupHeaderLBA)
+	binary.LittleEndian.PutUint64(gptHdr[40:48], firstUsableLBA)
+	binary.LittleEndian.PutUint64(gptHdr[48:56], lastUsableLBA)
+	copy(gptHdr[56:72], cidataUniquePartGUID[:])
+	binary.LittleEndian.PutUint64(gptHdr[72:80], 2)
+	binary.LittleEndian.PutUint32(gptHdr[80:84], numEntries)
+	binary.LittleEndian.PutUint32(gptHdr[84:88], entrySize)
+	partCRC := crc32.ChecksumIEEE(partArray[:arrayBytesLen])
+	binary.LittleEndian.PutUint32(gptHdr[88:92], partCRC)
+	hdrCRC := crc32.ChecksumIEEE(gptHdr[:92])
+	binary.LittleEndian.PutUint32(gptHdr[16:20], hdrCRC)
+
+	if _, err := rawDisk.WriteAt(tableBuf, 0); err != nil {
+		return err
+	}
+
+	// 4. Write Backup GPT Entry Array + Backup GPT Header at totalDiskSectors - 1
+	var backupHdr [LPTSectorSize]byte
+	copy(backupHdr[:], gptHdr)
+	binary.LittleEndian.PutUint64(backupHdr[24:32], backupHeaderLBA)
+	binary.LittleEndian.PutUint64(backupHdr[32:40], 1)
+	binary.LittleEndian.PutUint64(backupHdr[72:80], backupArrayLBA)
+	backupHdr[16], backupHdr[17], backupHdr[18], backupHdr[19] = 0, 0, 0, 0
+	backupHdrCRC := crc32.ChecksumIEEE(backupHdr[:92])
+	binary.LittleEndian.PutUint32(backupHdr[16:20], backupHdrCRC)
+
+	alignedStartLBA := (backupArrayLBA / 8) * 8
+	endSpanSectors := (backupHeaderLBA + 1) - alignedStartLBA
+	alignedBytes := int(((endSpanSectors + 7) / 8) * 8 * LPTSectorSize)
+	backupWindow := AllocPageAlignedBuffer(alignedBytes, SectorAlignmentBytes)
+	arrOff := int((backupArrayLBA - alignedStartLBA) * LPTSectorSize)
+	hdrOff := int((backupHeaderLBA - alignedStartLBA) * LPTSectorSize)
+	if arrOff >= 0 && arrOff+arrayBytesLen <= len(backupWindow) {
+		copy(backupWindow[arrOff:arrOff+arrayBytesLen], partArray[:arrayBytesLen])
+	}
+	if hdrOff >= 0 && hdrOff+LPTSectorSize <= len(backupWindow) {
+		copy(backupWindow[hdrOff:hdrOff+LPTSectorSize], backupHdr[:])
+	}
+	writeLen := int(endSpanSectors * LPTSectorSize)
+	if rawDisk.RequiresPageAlignedTail() && (writeLen%SectorAlignmentBytes != 0) {
+		writeLen = len(backupWindow)
+	}
+	if _, err := rawDisk.WriteAt(backupWindow[:writeLen], int64(alignedStartLBA*LPTSectorSize)); err != nil {
+		return err
+	}
+
+	return rawDisk.SyncAndFlush()
 }
