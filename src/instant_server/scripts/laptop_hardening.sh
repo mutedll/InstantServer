@@ -45,7 +45,9 @@ INSTANT_CUSTOM_APT_PACKAGES="${INSTANT_CUSTOM_APT_PACKAGES:-}"
 
 log_info() {
     printf '[instant-server] %s\n' "$*"
-    printf '[instant-server] %s\n' "$*" >> /var/log/instant-server-install.log 2>/dev/null || true
+    if [ -w /var/log ] || [ -w /var/log/instant-server-install.log ]; then
+        printf '[instant-server] %s\n' "$*" >> /var/log/instant-server-install.log 2>/dev/null || true
+    fi
     if [ -d /mnt/cidata ] && [ -w /mnt/cidata ]; then
         printf '[instant-server] %s\n' "$*" >> /mnt/cidata/INSTANT-SERVER-INSTALL.log 2>/dev/null || true
     fi
@@ -225,7 +227,7 @@ configure_wifi_failover_and_powersave_off() {
                     "        \"${INSTANT_WIFI_SSID}\":"
                     "          password: \"${INSTANT_WIFI_PASSWORD}\""
                 )
-                printf %sn "${_bwifi[@]}" > /etc/netplan/60-instant-wifi.yaml
+                printf '%s\n' "${_bwifi[@]}" > /etc/netplan/60-instant-wifi.yaml
             else
                 local _bwifi_open=(
                     "network:"
@@ -239,7 +241,7 @@ configure_wifi_failover_and_powersave_off() {
                     "      access-points:"
                     "        \"${INSTANT_WIFI_SSID}\": {}"
                 )
-                printf %sn "${_bwifi_open[@]}" > /etc/netplan/60-instant-wifi.yaml
+                printf '%s\n' "${_bwifi_open[@]}" > /etc/netplan/60-instant-wifi.yaml
             fi
             chmod 600 /etc/netplan/60-instant-wifi.yaml 2>/dev/null || true
         else
