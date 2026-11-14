@@ -40,13 +40,29 @@ func hideScannerConsoleOnWindows(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &attr
 }
 
+func isVirtualDiskBusOrNode(cleanBus string, lowNode string) bool {
+	if cleanBus == "virtual" || cleanBus == "vhd" || cleanBus == "vhdx" || cleanBus == "file backed virtual" || strings.Contains(cleanBus, "virtual") || strings.Contains(cleanBus, "disk image") {
+		return true
+	}
+	if strings.HasSuffix(lowNode, ".vhd") || strings.HasSuffix(lowNode, ".vhdx") || strings.HasSuffix(lowNode, ".vmdk") || strings.HasSuffix(lowNode, ".img") || strings.HasSuffix(lowNode, ".raw") {
+		return true
+	}
+	if strings.HasPrefix(lowNode, "/dev/loop") || strings.HasPrefix(lowNode, "/dev/nbd") {
+		return true
+	}
+	return false
+}
+
 func EvaluateTripleLockSafety(bus string, removable bool, sizeGB float64, mountpoints []string, deviceNode string) (bool, []string) {
 	var reasons []string
 	cleanBus := strings.ToLower(strings.TrimSpace(bus))
-	if cleanBus != "usb" {
+	lowNode := strings.ToLower(strings.TrimSpace(deviceNode))
+	isVirtual := isVirtualDiskBusOrNode(cleanBus, lowNode)
+
+	if cleanBus != "usb" && !isVirtual {
 		reasons = append(reasons, "Non-USB bus ("+cleanBus+") is blocked")
 	}
-	if !removable {
+	if !removable && !isVirtual {
 		reasons = append(reasons, "Drive is marked non-removable")
 	}
 	if sizeGB < 4.0 {
@@ -58,7 +74,6 @@ func EvaluateTripleLockSafety(bus string, removable bool, sizeGB float64, mountp
 			reasons = append(reasons, "System OS partition ("+mp+") is hardware-protected")
 		}
 	}
-	lowNode := strings.ToLower(strings.TrimSpace(deviceNode))
 	if lowNode == `\\.\physicaldrive0` || lowNode == "/dev/sda" || lowNode == "/dev/nvme0n1" || lowNode == "/dev/disk0" || lowNode == "/dev/disk1" || lowNode == "/dev/rdisk0" || lowNode == "/dev/rdisk1" {
 		reasons = append(reasons, "Primary system boot disk is hardware-protected")
 	}
@@ -89,26 +104,52 @@ func ScanRemovableUSBDrives() []USBDeviceCandidate {
 		if err == nil {
 			for idx, entry := range entries {
 				name := entry.Name()
-				if strings.HasPrefix(name, "loop") || strings.HasPrefix(name, "ram") || strings.HasPrefix(name, "zram") || strings.HasPrefix(name, "dm-") || strings.HasPrefix(name, "sr") {
+				if strings.HasPrefix(name, "ram") || strings.HasPrefix(name, "zram") || strings.HasPrefix(name, "dm-") || strings.HasPrefix(name, "sr") {
 					continue
 				}
 				sysDir := filepath.Join("/sys/block", name)
-				remBytes, _ := os.ReadFile(filepath.Join(sysDir, "removable"))
-				removable := strings.TrimSpace(string(remBytes)) == "1"
 				sizeBytesRaw, _ := os.ReadFile(filepath.Join(sysDir, "size"))
 				sectors, _ := strconv.ParseUint(strings.TrimSpace(string(sizeBytesRaw)), 10, 64)
 				sizeGB := float64(sectors*512) / (1024.0 * 1024.0 * 1024.0)
+
+				isLoopVirtual := false
+				loopBackingFile := ""
+				if strings.HasPrefix(name, "loop") {
+					backingBytes, bErr := os.ReadFile(filepath.Join(sysDir, "loop", "backing_file"))
+					loopBackingFile = strings.TrimSpace(string(backingBytes))
+					if bErr != nil || loopBackingFile == "" || strings.HasSuffix(strings.ToLower(loopBackingFile), ".snap") || sizeGB < 4.0 {
+						continue
+					}
+					isLoopVirtual = true
+				}
+				if strings.HasPrefix(name, "nbd") && sizeGB < 4.0 {
+					continue
+				}
+
+				remBytes, _ := os.ReadFile(filepath.Join(sysDir, "removable"))
+				removable := strings.TrimSpace(string(remBytes)) == "1"
 				modelBytes, _ := os.ReadFile(filepath.Join(sysDir, "device", "model"))
 				model := strings.TrimSpace(string(modelBytes))
 				if model == "" {
-					model = "Block Storage Device"
+					if isLoopVirtual {
+						model = "Virtual Disk (" + filepath.Base(loopBackingFile) + ")"
+					} else if strings.HasPrefix(name, "nbd") {
+						model = "Virtual Disk (" + name + ")"
+					} else {
+						model = "Block Storage Device"
+					}
 				}
 				linkTarget, _ := os.Readlink(sysDir)
+				lowLink := strings.ToLower(linkTarget)
+				lowModel := strings.ToLower(model)
 				bus := "sata"
-				if strings.Contains(strings.ToLower(linkTarget), "usb") {
+				if strings.Contains(lowLink, "usb") {
 					bus = "usb"
 					// External USB-to-NVMe / USB-to-SATA UASP enclosures often report /sys/block/<dev>/removable == 0
 					// even though they are hot-plugged external USB devices.
+					removable = true
+				} else if isLoopVirtual || strings.HasPrefix(name, "nbd") || ((strings.Contains(lowModel, "virtual") || strings.Contains(lowModel, "vhd") || strings.Contains(lowModel, "msft")) && name != "sda" && name != "nvme0n1") {
+					bus = "virtual"
 					removable = true
 				} else if strings.HasPrefix(name, "nvme") {
 					bus = "nvme"
@@ -166,17 +207,21 @@ func ScanRemovableUSBDrives() []USBDeviceCandidate {
 							model = v
 						}
 					case "Protocol":
-						if strings.Contains(strings.ToLower(v), "usb") {
+						lowProto := strings.ToLower(v)
+						if strings.Contains(lowProto, "usb") {
 							bus = "usb"
+						} else if strings.Contains(lowProto, "disk image") || strings.Contains(lowProto, "virtual") {
+							bus = "virtual"
+							removable = true
 						} else if v != "" {
-							bus = strings.ToLower(v)
+							bus = lowProto
 						}
 					case "Removable Media":
 						if strings.EqualFold(v, "Removable") || strings.EqualFold(v, "Yes") {
 							removable = true
 						}
 					case "Device Location":
-						if strings.EqualFold(v, "External") && bus == "usb" {
+						if strings.EqualFold(v, "External") && (bus == "usb" || bus == "virtual") {
 							removable = true
 						}
 					case "Disk Size", "Total Size":
@@ -215,6 +260,9 @@ func ScanRemovableUSBDrives() []USBDeviceCandidate {
 	case "windows":
 		psScript := `Get-CimInstance Win32_DiskDrive | ForEach-Object {
   $d = $_
+  $gd = Get-Disk -Number $d.Index -ErrorAction SilentlyContinue
+  $busType = if ($gd -and $gd.BusType) { [string]$gd.BusType } else { "" }
+  $isBootOrSys = if ($gd -and ($gd.IsBoot -or $gd.IsSystem)) { "1" } else { "0" }
   $letters = @(Get-Partition -DiskNumber $d.Index -ErrorAction SilentlyContinue | Where-Object { $_.DriveLetter } | ForEach-Object { "$($_.DriveLetter):\" }) -join ";"
   [PSCustomObject]@{
     Index = $d.Index
@@ -223,6 +271,9 @@ func ScanRemovableUSBDrives() []USBDeviceCandidate {
     InterfaceType = $d.InterfaceType
     MediaType = $d.MediaType
     MountLetters = $letters
+    BusType = $busType
+    IsBootOrSys = $isBootOrSys
+    PNPDeviceID = $d.PNPDeviceID
   }
 } | ConvertTo-Csv -NoTypeInformation`
 		cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", psScript)
@@ -238,15 +289,40 @@ func ScanRemovableUSBDrives() []USBDeviceCandidate {
 					}
 					diskIdx := strings.TrimSpace(cols[0])
 					model := strings.TrimSpace(cols[1])
+					lowModel := strings.ToLower(model)
 					sizeRaw, _ := strconv.ParseUint(strings.TrimSpace(cols[2]), 10, 64)
 					sizeGB := float64(sizeRaw) / (1024.0 * 1024.0 * 1024.0)
 					iface := strings.ToLower(strings.TrimSpace(cols[3]))
 					media := strings.ToLower(strings.TrimSpace(cols[4]))
-					bus := "sata"
-					if strings.Contains(iface, "usb") {
-						bus = "usb"
+					busType := ""
+					if len(cols) >= 7 {
+						busType = strings.ToLower(strings.TrimSpace(cols[6]))
 					}
-					removable := bus == "usb" || strings.Contains(media, "removable") || strings.Contains(media, "external")
+					isBootOrSys := false
+					if len(cols) >= 8 {
+						isBootOrSys = strings.TrimSpace(cols[7]) == "1"
+					}
+					pnpID := ""
+					if len(cols) >= 9 {
+						pnpID = strings.ToLower(strings.TrimSpace(cols[8]))
+					}
+
+					isVirtual := strings.Contains(busType, "virtual") ||
+						strings.Contains(busType, "file backed") ||
+						strings.Contains(media, "virtual") ||
+						strings.Contains(lowModel, "virtual disk") ||
+						strings.Contains(lowModel, "msft virtual") ||
+						strings.Contains(lowModel, "vhd") ||
+						strings.Contains(pnpID, "ven_msft&prod_virtual_disk") ||
+						strings.Contains(pnpID, "virtual")
+
+					bus := "sata"
+					if strings.Contains(iface, "usb") || busType == "usb" {
+						bus = "usb"
+					} else if isVirtual && diskIdx != "0" && !isBootOrSys {
+						bus = "virtual"
+					}
+					removable := bus == "usb" || bus == "virtual" || strings.Contains(media, "removable") || strings.Contains(media, "external")
 					devNode := `\\.\PhysicalDrive` + diskIdx
 					var mounts []string
 					if len(cols) >= 6 && strings.TrimSpace(cols[5]) != "" {
@@ -256,7 +332,7 @@ func ScanRemovableUSBDrives() []USBDeviceCandidate {
 							}
 						}
 					}
-					if diskIdx == "0" && len(mounts) == 0 {
+					if (diskIdx == "0" || isBootOrSys) && len(mounts) == 0 {
 						mounts = []string{`C:\`}
 					}
 					passed, reasons := EvaluateTripleLockSafety(bus, removable, sizeGB, mounts, devNode)

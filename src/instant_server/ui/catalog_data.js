@@ -2310,12 +2310,12 @@ const APP_STORE_CATALOG = [
     ];
 
     const SETTINGS_TABS = [
-      { id: "system", label: "System", icon: "SYS" },
-      { id: "network", label: "Network & internet", icon: "NET" },
-      { id: "apps", label: "Apps & store", icon: "APP" },
-      { id: "storage", label: "Laptop & USB flash", icon: "USB" },
-      { id: "power", label: "Power & battery", icon: "PWR" },
-      { id: "config", label: "Configuration & LAN", icon: "CFG" }
+      { id: "system", label: "System", icon: "" },
+      { id: "network", label: "Network & internet", icon: "" },
+      { id: "apps", label: "Apps & store", icon: "" },
+      { id: "storage", label: "Laptop & USB flash", icon: "" },
+      { id: "power", label: "Power & battery", icon: "" },
+      { id: "config", label: "Configuration & LAN", icon: "" }
     ];
 
     let shouldAnimateTab = true;

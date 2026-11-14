@@ -121,6 +121,24 @@ func TestTripleLockSafetyValidation(t *testing.T) {
 	if !passedUSB || len(reasonsUSB) != 0 {
 		t.Fatalf("expected valid 32GB removable USB drive to pass Triple-Lock, got reasons: %v", reasonsUSB)
 	}
+
+	// Verify attached VHD / VHDX virtual drives (where Windows reports Fixed hard disk media / removable=false) pass Triple-Lock
+	passedVHD, reasonsVHD := EvaluateTripleLockSafety("virtual", false, 32.0, []string{"E:\\"}, `\\.\PhysicalDrive1`)
+	if !passedVHD || len(reasonsVHD) != 0 {
+		t.Fatalf("expected mounted VHD/VHDX virtual drive on PhysicalDrive1 to pass Triple-Lock, got reasons: %v", reasonsVHD)
+	}
+
+	// Verify direct .vhdx / .vhd / .vmdk file paths pass Triple-Lock
+	passedVHDXFile, reasonsVHDXFile := EvaluateTripleLockSafety("sata", false, 32.0, nil, `D:\VMs\instant-server-test.vhdx`)
+	if !passedVHDXFile || len(reasonsVHDXFile) != 0 {
+		t.Fatalf("expected .vhdx virtual disk file path to pass Triple-Lock, got reasons: %v", reasonsVHDXFile)
+	}
+
+	// Verify PhysicalDrive0 / C:\ is STILL blocked even if bus is reported as virtual (e.g. native VHD boot host OS)
+	passedSysVHD, reasonsSysVHD := EvaluateTripleLockSafety("virtual", true, 128.0, []string{"C:\\"}, `\\.\PhysicalDrive0`)
+	if passedSysVHD || len(reasonsSysVHD) == 0 {
+		t.Fatalf("expected system boot drive PhysicalDrive0/C: to remain blocked even when bus is virtual")
+	}
 }
 
 func TestAutoinstallAndDualBoot64TBValidation(t *testing.T) {

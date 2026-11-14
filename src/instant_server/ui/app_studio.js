@@ -3,6 +3,7 @@
   const st = document.createElement("style");
   st.id = "instant-server-core-styles";
   st.textContent = "    :root,\n    [data-theme=\"light\"] {\n      color-scheme: light;\n      --font-sans: -apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"Inter\", \"Segoe UI Variable Text\", system-ui, sans-serif;\n      --font-display: -apple-system, BlinkMacSystemFont, \"SF Pro Display\", \"Inter\", \"Segoe UI Variable Display\", sans-serif;\n      --font-mono: \"SF Mono\", \"JetBrains Mono\", \"Cascadia Code\", ui-monospace, monospace;\n\n      /* Sleek macOS / Mobbin Alabaster Surfaces (Light) */\n      --mica-bg: #F5F5F7;\n      --mica-tint: radial-gradient(ellipse 80% 50% at 50% -15%, rgba(0, 122, 255, 0.06), transparent 60%);\n      --acrylic-sidebar: rgba(255, 255, 255, 0.82);\n      --card-bg: #FFFFFF;\n      --card-bg-hover: #FAFAFC;\n      --card-bg-secondary: rgba(242, 242, 247, 0.75);\n      --control-bg: #FFFFFF;\n      --control-bg-hover: #F5F5F7;\n      --control-bg-active: #EAEAEE;\n      --input-bg: #FFFFFF;\n      --bg-input: #F2F2F7;\n      --bg-card: #FFFFFF;\n      --bg-card-hover: #F9F9FB;\n\n      /* Flyout / Dropdown Menu Tokens (Light) */\n      --flyout-bg: rgba(255, 255, 255, 0.96);\n      --flyout-border: rgba(0, 0, 0, 0.10);\n      --flyout-shadow: 0 12px 32px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.04);\n      --flyout-item-hover: rgba(0, 122, 255, 0.08);\n      --flyout-item-selected: rgba(0, 122, 255, 0.12);\n\n      /* Scrollbar Tokens (Light) */\n      --scroll-track-active: rgba(0, 0, 0, 0.04);\n      --scroll-thumb-idle: rgba(0, 0, 0, 0.15);\n      --scroll-thumb-active: rgba(0, 0, 0, 0.38);\n\n      /* Borders & Elevation */\n      --radius: 10px;\n      --radius-lg: 14px;\n      --radius-md: 10px;\n      --radius-sm: 8px;\n      --border-card: rgba(0, 0, 0, 0.075);\n      --border-subtle: rgba(0, 0, 0, 0.075);\n      --border-strong: rgba(0, 0, 0, 0.14);\n      --border-control: rgba(0, 0, 0, 0.12);\n      --border-control-bottom: rgba(0, 0, 0, 0.16);\n      --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.03), 0 1px 2px rgba(0, 0, 0, 0.02);\n      --shadow-control: 0 1px 2px rgba(0, 0, 0, 0.04);\n      --shadow-setup: 0 20px 50px rgba(0, 0, 0, 0.09), 0 1px 3px rgba(0, 0, 0, 0.04);\n\n      /* Text Hierarchy */\n      --text-primary: #1D1D1F;\n      --text-secondary: #515154;\n      --text-tertiary: #86868B;\n\n      /* Accent & Semantic Tokens */\n      --accent: #007AFF;\n      --accent-hover: #006CE6;\n      --accent-active: #005BB5;\n      --accent-text: #FFFFFF;\n      --accent-subtle: rgba(0, 122, 255, 0.08);\n      --accent-soft: rgba(0, 122, 255, 0.10);\n\n      --success: #1D8348;\n      --success-bg: rgba(40, 180, 99, 0.12);\n      --warning: #B76E00;\n      --warning-bg: rgba(245, 166, 35, 0.14);\n      --danger: #D70015;\n      --danger-bg: rgba(255, 59, 48, 0.10);\n      --nav-hover: rgba(0, 0, 0, 0.04);\n      --nav-active: rgba(0, 122, 255, 0.10);\n      --divider: rgba(0, 0, 0, 0.07);\n    }\n\n    [data-theme=\"dark\"] {\n      color-scheme: dark;\n      /* Sleek macOS Sequoia / Raycast / OrbStack Obsidian Surfaces (Dark) */\n      --mica-bg: #0B0C0E;\n      --mica-tint: radial-gradient(ellipse 80% 45% at 50% -15%, rgba(10, 132, 255, 0.075), transparent 60%);\n      --acrylic-sidebar: rgba(18, 19, 23, 0.82);\n      --card-bg: #141519;\n      --card-bg-hover: #1A1C22;\n      --card-bg-secondary: #101115;\n      --control-bg: #1C1E24;\n      --control-bg-hover: #24272F;\n      --control-bg-active: #16181D;\n      --input-bg: #121317;\n      --bg-input: #121317;\n      --bg-card: #141519;\n      --bg-card-hover: #1A1C22;\n\n      /* Flyout / Dropdown Menu Tokens (Dark) */\n      --flyout-bg: #1C1E24;\n      --flyout-border: rgba(255, 255, 255, 0.12);\n      --flyout-shadow: 0 16px 40px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.08);\n      --flyout-item-hover: rgba(255, 255, 255, 0.07);\n      --flyout-item-selected: rgba(10, 132, 255, 0.18);\n\n      /* Scrollbar Tokens (Dark) */\n      --scroll-track-active: rgba(255, 255, 255, 0.035);\n      --scroll-thumb-idle: rgba(255, 255, 255, 0.14);\n      --scroll-thumb-active: rgba(255, 255, 255, 0.36);\n\n      /* Borders & Elevation */\n      --radius: 10px;\n      --radius-lg: 14px;\n      --radius-md: 10px;\n      --radius-sm: 8px;\n      --border-card: rgba(255, 255, 255, 0.075);\n      --border-subtle: rgba(255, 255, 255, 0.075);\n      --border-strong: rgba(255, 255, 255, 0.14);\n      --border-control: rgba(255, 255, 255, 0.10);\n      --border-control-bottom: rgba(255, 255, 255, 0.14);\n      --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.04);\n      --shadow-control: 0 1px 2px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.05);\n      --shadow-setup: 0 24px 60px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.06);\n\n      /* Text Hierarchy */\n      --text-primary: #F4F4F6;\n      --text-secondary: #A1A1AA;\n      --text-tertiary: #71717A;\n\n      /* Accent & Semantic Tokens */\n      --accent: #0A84FF;\n      --accent-hover: #2492FF;\n      --accent-active: #0070E0;\n      --accent-text: #FFFFFF;\n      --accent-subtle: rgba(10, 132, 255, 0.12);\n      --accent-soft: rgba(10, 132, 255, 0.15);\n\n      --success: #30D158;\n      --success-bg: rgba(48, 209, 88, 0.14);\n      --warning: #FF9F0A;\n      --warning-bg: rgba(255, 159, 10, 0.14);\n      --danger: #FF453A;\n      --danger-bg: rgba(255, 69, 58, 0.14);\n      --nav-hover: rgba(255, 255, 255, 0.05);\n      --nav-active: rgba(10, 132, 255, 0.15);\n      --divider: rgba(255, 255, 255, 0.07);\n    }\n\n    * {\n      box-sizing: border-box;\n      margin: 0;\n      padding: 0;\n    }\n\n    *::-webkit-scrollbar {\n      width: 11px;\n      height: 11px;\n      background: transparent;\n    }\n    *::-webkit-scrollbar-track {\n      background: transparent;\n      border-radius: 999px;\n      margin: 4px 0;\n    }\n    *::-webkit-scrollbar-corner {\n      background: transparent;\n    }\n    *::-webkit-scrollbar-thumb {\n      background-color: var(--scroll-thumb-idle);\n      border-radius: 999px;\n      border: 2.5px solid transparent;\n      background-clip: padding-box;\n      min-height: 44px;\n    }\n    *::-webkit-scrollbar-thumb:hover {\n      background-color: var(--scroll-thumb-active);\n    }\n    *::-webkit-scrollbar-thumb:active {\n      background-color: var(--accent);\n    }\n\n    .select-all-checkbox-pill {\n      display: inline-flex;\n      align-items: center;\n      gap: 9px;\n      height: 32px;\n      padding: 0 13px;\n      border-radius: var(--radius-sm);\n      border: 1.5px solid var(--accent);\n      background: var(--accent-subtle);\n      color: var(--text-primary);\n      font-family: var(--font-sans);\n      font-size: 12.5px;\n      font-weight: 600;\n      cursor: pointer;\n      user-select: none;\n      transition: background 0.14s ease, border-color 0.14s ease, transform 0.1s ease;\n    }\n    .select-all-checkbox-pill:hover {\n      background: var(--accent-soft);\n    }\n    .select-all-checkbox-pill:active {\n      transform: scale(0.98);\n    }\n    .select-all-checkbox-pill input[type=\"checkbox\"] {\n      width: 16px;\n      height: 16px;\n      accent-color: var(--accent);\n      cursor: pointer;\n      pointer-events: none;\n      margin: 0;\n    }\n\n    html, body {\n      height: 100%;\n      font-family: var(--font-sans);\n      font-size: 13.5px;\n      line-height: 1.45;\n      color: var(--text-primary);\n      background-color: var(--mica-bg);\n      background-image: var(--mica-tint);\n      -webkit-font-smoothing: antialiased;\n      overflow: hidden;\n      user-select: none;\n    }\n\n    .app-window {\n      display: flex;\n      flex-direction: column;\n      width: 100vw;\n      height: 100vh;\n      overflow: hidden;\n      transition: background-color 0.25s ease;\n    }\n\n    /* Unified Native Titlebar (Zero Fake OS Buttons, Zero Version Clutter) */\n    .window-titlebar {\n      height: 50px;\n      display: flex;\n      align-items: center;\n      justify-content: space-between;\n      padding: 0 18px;\n      background: var(--acrylic-sidebar);\n      backdrop-filter: blur(28px) saturate(180%);\n      -webkit-backdrop-filter: blur(28px) saturate(180%);\n      border-bottom: 1px solid var(--divider);\n      flex-shrink: 0;\n      gap: 16px;\n      z-index: 20;\n    }\n\n    .titlebar-left {\n      display: flex;\n      align-items: center;\n      gap: 10px;\n      min-width: 170px;\n    }\n\n    .titlebar-back {\n      width: 30px;\n      height: 30px;\n      border-radius: var(--radius-sm);\n      border: 1px solid transparent;\n      background: transparent;\n      color: var(--text-primary);\n      display: inline-flex;\n      align-items: center;\n      justify-content: center;\n      cursor: pointer;\n      transition: background 0.14s ease, transform 0.1s ease;\n    }\n    .titlebar-back:hover {\n      background: var(--nav-hover);\n    }\n    .titlebar-back:active {\n      transform: scale(0.93);\n    }\n\n    .titlebar-logo {\n      width: 24px;\n      height: 24px;\n      border-radius: 6px;\n      background: #001E36;\n      border: 1.5px solid #31A8FF;\n      color: #66C4FF;\n      font-weight: 800;\n      font-size: 11px;\n      display: inline-flex;\n      align-items: center;\n      justify-content: center;\n      flex-shrink: 0;\n    }\n\n    .app-brand-title {\n      font-size: 13.5px;\n      font-weight: 600;\n      color: var(--text-primary);\n      letter-spacing: -0.01em;\n    }\n\n    .titlebar-center {\n      flex: 1;\n      max-width: 440px;\n      display: flex;\n      align-items: center;\n      position: relative;\n      transition: opacity 0.2s ease, transform 0.2s ease;\n    }\n    .titlebar-center.hidden-in-setup {\n      opacity: 0;\n      pointer-events: none;\n      transform: translateY(-4px);\n    }\n\n    .titlebar-search-input {\n      width: 100%;\n      height: 32px;\n      padding: 0 34px 0 12px;\n      border-radius: var(--radius-sm);\n      border: 1px solid var(--border-control);\n      background: var(--input-bg);\n      color: var(--text-primary);\n      font-family: var(--font-sans);\n      font-size: 13px;\n      outline: none;\n      transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;\n    }\n    .titlebar-search-input:focus {\n      border-color: var(--accent);\n      box-shadow: 0 0 0 3px var(--accent-subtle);\n      background: var(--control-bg);\n    }\n    .titlebar-search-icon {\n      position: absolute;\n      right: 10px;\n      top: 50%;\n      transform: translateY(-50%);\n      color: var(--text-tertiary);\n      pointer-events: none;\n      font-size: 13px;\n    }\n\n    .titlebar-right {\n      display: flex;\n      align-items: center;\n      justify-content: flex-end;\n      gap: 8px;\n      min-width: 170px;\n    }\n\n    @keyframes fadeSlideUp {\n      from {\n        opacity: 0;\n        transform: translateY(6px);\n      }\n      to {\n        opacity: 1;\n        transform: translateY(0);\n      }\n    }\n\n    .animate-tab-switch {\n      animation: fadeSlideUp 0.22s cubic-bezier(0.22, 1, 0.36, 1) forwards;\n    }\n\n    .tab-flow-stack {\n      display: flex;\n      flex-direction: column;\n      gap: 14px;\n    }\n\n    /* MODE 1: First-Run Setup Wizard Window */\n    .setup-shell {\n      flex: 1;\n      min-height: 0;\n      display: flex;\n      flex-direction: column;\n      align-items: center;\n      justify-content: center;\n      padding: 18px 24px;\n      overflow: hidden;\n    }\n\n    .setup-window-card {\n      width: 100%;\n      max-width: 880px;\n      max-height: 100%;\n      flex: 1;\n      min-height: 0;\n      background: var(--card-bg);\n      border: 1px solid var(--border-card);\n      border-radius: var(--radius-lg);\n      box-shadow: var(--shadow-setup);\n      display: flex;\n      flex-direction: column;\n      overflow: hidden;\n    }\n\n    .setup-top-tabs {\n      flex-shrink: 0;\n      min-height: 50px;\n      display: flex;\n      align-items: center;\n      gap: 4px;\n      padding: 8px 18px 0;\n      border-bottom: 1px solid var(--divider);\n      background: var(--card-bg-secondary);\n      overflow-x: auto;\n      overflow-y: hidden;\n    }\n\n    .setup-tab-btn {\n      flex-shrink: 0;\n      position: relative;\n      display: inline-flex;\n      align-items: center;\n      gap: 8px;\n      padding: 9px 16px 11px;\n      border: none;\n      background: transparent;\n      color: var(--text-secondary);\n      font-family: var(--font-sans);\n      font-size: 13px;\n      font-weight: 500;\n      cursor: pointer;\n      border-radius: var(--radius-sm) var(--radius-sm) 0 0;\n      transition: color 0.16s ease, background 0.16s ease;\n      white-space: nowrap;\n    }\n    .setup-tab-btn:hover {\n      color: var(--text-primary);\n      background: var(--nav-hover);\n    }\n    .setup-tab-btn.active {\n      color: var(--text-primary);\n      font-weight: 600;\n    }\n    .setup-tab-btn.active::after {\n      content: \"\";\n      position: absolute;\n      left: 14px;\n      right: 14px;\n      bottom: 0;\n      height: 2.5px;\n      border-radius: 3px 3px 0 0;\n      background: var(--accent);\n    }\n\n    .setup-tab-step-dot {\n      width: 20px;\n      height: 20px;\n      border-radius: 50%;\n      font-size: 11px;\n      font-weight: 600;\n      display: inline-flex;\n      align-items: center;\n      justify-content: center;\n      background: var(--control-bg);\n      border: 1px solid var(--border-control);\n      color: var(--text-secondary);\n      transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;\n    }\n    .setup-tab-btn.active .setup-tab-step-dot {\n      background: var(--accent);\n      color: var(--accent-text);\n      border-color: var(--accent);\n    }\n\n    .setup-body {\n      flex: 1;\n      min-height: 0;\n      overflow-y: auto;\n      overscroll-behavior: contain;\n      -webkit-overflow-scrolling: touch;\n      will-change: scroll-position;\n      padding: 24px 28px;\n      display: flex;\n      flex-direction: column;\n      gap: 16px;\n    }\n\n    .setup-header-title {\n      font-family: var(--font-display);\n      font-size: 22px;\n      font-weight: 600;\n      letter-spacing: -0.02em;\n      color: var(--text-primary);\n      margin-bottom: 4px;\n    }\n    .setup-header-desc {\n      font-size: 13.5px;\n      color: var(--text-secondary);\n    }\n\n    .setup-footer {\n      flex-shrink: 0;\n      display: flex;\n      align-items: center;\n      justify-content: space-between;\n      padding: 14px 28px;\n      border-top: 1px solid var(--divider);\n      background: var(--card-bg-secondary);\n      gap: 12px;\n      flex-wrap: wrap;\n    }\n    .setup-footer-right {\n      display: flex;\n      align-items: center;\n      gap: 10px;\n      flex-wrap: wrap;\n    }\n\n    /* Animated Advanced Options Expander */\n    .expander-wrap {\n      border-radius: var(--radius);\n      border: 1px solid var(--border-card);\n      background: var(--card-bg-secondary);\n      transition: border-color 0.2s ease;\n      flex-shrink: 0;\n    }\n    .expander-header {\n      width: 100%;\n      padding: 13px 18px;\n      background: transparent;\n      border: none;\n      border-radius: var(--radius);\n      color: var(--text-primary);\n      font-family: var(--font-sans);\n      font-size: 13.5px;\n      font-weight: 600;\n      display: flex;\n      align-items: center;\n      justify-content: space-between;\n      cursor: pointer;\n      transition: background 0.15s ease;\n      text-align: left;\n    }\n    .expander-header:hover {\n      background: var(--nav-hover);\n    }\n    .expander-chevron {\n      display: inline-flex;\n      align-items: center;\n      justify-content: center;\n      width: 24px;\n      height: 24px;\n      color: var(--text-secondary);\n      transition: transform 0.32s cubic-bezier(0.25, 1, 0.5, 1);\n      font-size: 14px;\n    }\n    .expander-wrap.open .expander-chevron {\n      transform: rotate(180deg);\n    }\n    .expander-content-grid {\n      display: grid;\n      grid-template-rows: 0fr;\n      opacity: 0;\n      transition:\n        grid-template-rows 0.32s cubic-bezier(0.25, 1, 0.5, 1),\n        opacity 0.26s cubic-bezier(0.25, 1, 0.5, 1);\n      will-change: grid-template-rows, opacity;\n    }\n    .expander-wrap.open .expander-content-grid {\n      grid-template-rows: 1fr;\n      opacity: 1;\n    }\n    .expander-content-inner {\n      min-height: 0;\n      overflow: hidden;\n    }\n    .expander-wrap.open.dropdown-open-inside .expander-content-inner {\n      overflow: visible;\n    }\n    .expander-body {\n      padding: 0 14px;\n      border-top: 1px solid transparent;\n      display: flex;\n      flex-direction: column;\n      gap: 8px;\n      transform: translateY(-4px);\n      transition:\n        padding 0.32s cubic-bezier(0.25, 1, 0.5, 1),\n        transform 0.32s cubic-bezier(0.25, 1, 0.5, 1),\n        border-color 0.26s ease;\n    }\n    .expander-wrap.open .expander-body {\n      padding: 12px 14px 14px;\n      border-top-color: var(--divider);\n      transform: translateY(0);\n    }\n\n    /* MODE 2: Settings Two-Column Layout */\n    .settings-shell {\n      display: flex;\n      flex: 1;\n      min-height: 0;\n      overflow: hidden;\n    }\n\n    .nav-sidebar {\n      width: 248px;\n      flex-shrink: 0;\n      background: var(--acrylic-sidebar);\n      backdrop-filter: blur(28px) saturate(180%);\n      -webkit-backdrop-filter: blur(28px) saturate(180%);\n      padding: 14px 10px 16px;\n      display: flex;\n      flex-direction: column;\n      gap: 4px;\n      border-right: 1px solid var(--divider);\n      overflow-y: auto;\n    }\n\n    .nav-list {\n      display: flex;\n      flex-direction: column;\n      gap: 3px;\n    }\n\n    .nav-item {\n      position: relative;\n      display: flex;\n      align-items: center;\n      gap: 11px;\n      height: 36px;\n      padding: 0 12px;\n      border-radius: var(--radius-sm);\n      border: none;\n      background: transparent;\n      color: var(--text-secondary);\n      font-family: var(--font-sans);\n      font-size: 13px;\n      font-weight: 500;\n      cursor: pointer;\n      text-align: left;\n      transition: background 0.14s ease, color 0.14s ease;\n    }\n    .nav-item:hover {\n      background: var(--nav-hover);\n      color: var(--text-primary);\n    }\n    .nav-item.active {\n      background: var(--nav-active);\n      color: var(--accent);\n      font-weight: 600;\n    }\n    .nav-icon {\n      width: 18px;\n      height: 18px;\n      display: inline-flex;\n      align-items: center;\n      justify-content: center;\n      font-size: 14px;\n      flex-shrink: 0;\n    }\n\n    .content-area {\n      flex: 1;\n      min-height: 0;\n      overflow-y: auto;\n      overscroll-behavior: contain;\n      -webkit-overflow-scrolling: touch;\n      will-change: scroll-position;\n      padding: 24px 36px 44px;\n    }\n\n    .content-inner {\n      max-width: 900px;\n      margin: 0 auto;\n      display: flex;\n      flex-direction: column;\n      gap: 16px;\n    }\n\n    .page-header {\n      display: flex;\n      align-items: center;\n      justify-content: space-between;\n      margin-bottom: 4px;\n      gap: 12px;\n    }\n\n    .breadcrumb-bar {\n      display: flex;\n      align-items: center;\n      gap: 8px;\n      font-family: var(--font-display);\n      font-size: 24px;\n      font-weight: 600;\n      letter-spacing: -0.02em;\n      color: var(--text-primary);\n    }\n    .breadcrumb-link {\n      color: var(--text-secondary);\n      cursor: pointer;\n      transition: color 0.12s ease;\n    }\n    .breadcrumb-link:hover {\n      color: var(--text-primary);\n    }\n    .breadcrumb-sep {\n      color: var(--text-tertiary);\n      font-size: 18px;\n      font-weight: 400;\n    }\n\n    .system-summary-banner {\n      display: flex;\n      align-items: center;\n      justify-content: space-between;\n      gap: 20px;\n      padding: 18px 22px;\n      border-radius: var(--radius-lg);\n      background: var(--card-bg);\n      border: 1px solid var(--border-card);\n      box-shadow: var(--shadow-card);\n      flex-wrap: wrap;\n    }\n    .summary-left {\n      display: flex;\n      flex-direction: column;\n      gap: 2px;\n    }\n    .summary-title {\n      font-family: var(--font-display);\n      font-size: 19px;\n      font-weight: 600;\n      color: var(--text-primary);\n    }\n    .summary-subtitle {\n      font-size: 13px;\n      color: var(--text-secondary);\n    }\n    .summary-pills {\n      display: flex;\n      align-items: center;\n      gap: 8px;\n      flex-wrap: wrap;\n    }\n    .summary-pill {\n      padding: 6px 12px;\n      border-radius: var(--radius-sm);\n      background: var(--card-bg-secondary);\n      border: 1px solid var(--border-card);\n      font-size: 12px;\n      color: var(--text-secondary);\n    }\n    .summary-pill strong {\n      color: var(--text-primary);\n      font-weight: 600;\n    }\n\n    /* Setting Cards */\n    .section-label {\n      font-size: 12.5px;\n      font-weight: 600;\n      color: var(--text-secondary);\n      margin: 4px 0 0;\n    }\n\n    .card-stack {\n      display: flex;\n      flex-direction: column;\n      gap: 8px;\n    }\n\n    .win-card {\n      display: flex;\n      align-items: center;\n      justify-content: space-between;\n      gap: 16px;\n      padding: 14px 18px;\n      border-radius: var(--radius);\n      background: var(--card-bg);\n      border: 1px solid var(--border-card);\n      box-shadow: var(--shadow-card);\n      transition: background 0.14s ease, border-color 0.14s ease, transform 0.1s ease;\n    }\n    .win-card.clickable {\n      cursor: pointer;\n    }\n    .win-card.clickable:hover {\n      background: var(--card-bg-hover);\n      border-color: var(--border-strong);\n    }\n    .win-card.clickable:active {\n      transform: scale(0.996);\n    }\n    .win-card.selected-accent {\n      border-color: var(--accent);\n      background: var(--accent-subtle);\n    }\n\n    .card-left {\n      display: flex;\n      align-items: center;\n      gap: 14px;\n      min-width: 0;\n      flex: 1;\n    }\n    .card-icon {\n      width: 28px;\n      height: 28px;\n      border-radius: 7px;\n      background: var(--card-bg-secondary);\n      border: 1px solid var(--border-card);\n      display: inline-flex;\n      align-items: center;\n      justify-content: center;\n      font-size: 15px;\n      color: var(--text-primary);\n      flex-shrink: 0;\n    }\n    .card-text {\n      min-width: 0;\n    }\n    .card-title {\n      font-size: 13.5px;\n      font-weight: 500;\n      color: var(--text-primary);\n      display: flex;\n      align-items: center;\n      gap: 8px;\n      flex-wrap: wrap;\n    }\n    .card-desc {\n      font-size: 12px;\n      color: var(--text-secondary);\n      margin-top: 2px;\n    }\n    .card-right {\n      display: flex;\n      align-items: center;\n      gap: 10px;\n      flex-shrink: 0;\n    }\n\n    /* Self-Hosted App Store Toolbar & Grid */\n    .appstore-toolbar {\n      display: flex;\n      flex-direction: column;\n      gap: 10px;\n      padding: 14px 16px;\n      border-radius: var(--radius);\n      background: var(--card-bg-secondary);\n      border: 1px solid var(--border-card);\n    }\n    .appstore-top-row {\n      display: flex;\n      align-items: center;\n      justify-content: space-between;\n      gap: 10px;\n      flex-wrap: wrap;\n    }\n    .appstore-filter-pills {\n      display: flex;\n      align-items: center;\n      gap: 6px;\n      flex-wrap: wrap;\n    }\n    .filter-pill {\n      height: 28px;\n      padding: 0 12px;\n      border-radius: 999px;\n      border: 1px solid var(--border-control);\n      background: var(--control-bg);\n      color: var(--text-secondary);\n      font-family: var(--font-sans);\n      font-size: 12px;\n      font-weight: 500;\n      cursor: pointer;\n      transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;\n    }\n    .filter-pill:hover {\n      background: var(--control-bg-hover);\n      color: var(--text-primary);\n    }\n    .filter-pill.active {\n      background: var(--accent);\n      color: var(--accent-text);\n      border-color: var(--accent);\n      font-weight: 600;\n    }\n\n    .appstore-grid {\n      display: grid;\n      grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));\n      gap: 8px;\n    }\n    .app-card {\n      contain: layout paint;\n      display: flex;\n      align-items: flex-start;\n      justify-content: space-between;\n      gap: 12px;\n      padding: 13px 15px;\n      border-radius: var(--radius);\n      background: var(--card-bg);\n      border: 1px solid var(--border-card);\n      box-shadow: var(--shadow-card);\n      cursor: pointer;\n      transition: background 0.14s ease, border-color 0.14s ease, transform 0.1s ease;\n    }\n    .app-card:hover {\n      background: var(--card-bg-hover);\n      border-color: var(--border-strong);\n    }\n    .app-card:active {\n      transform: scale(0.994);\n    }\n    .app-card.checked {\n      border-color: var(--accent);\n      background: var(--accent-subtle);\n    }\n    .app-checkbox {\n      width: 17px;\n      height: 17px;\n      accent-color: var(--accent);\n      margin-top: 2px;\n      flex-shrink: 0;\n      pointer-events: none;\n    }\n\n    /* Controls */\n    .win-btn {\n      height: 33px;\n      padding: 0 14px;\n      border-radius: var(--radius-sm);\n      border: 1px solid var(--border-control);\n      background: var(--control-bg);\n      color: var(--text-primary);\n      font-family: var(--font-sans);\n      font-size: 12.5px;\n      font-weight: 500;\n      box-shadow: var(--shadow-control);\n      cursor: pointer;\n      display: inline-flex;\n      align-items: center;\n      justify-content: center;\n      gap: 7px;\n      transition: background 0.14s ease, transform 0.1s ease, border-color 0.14s ease;\n    }\n    .win-btn:hover:not(:disabled) {\n      background: var(--control-bg-hover);\n      border-color: var(--border-strong);\n    }\n    .win-btn:active:not(:disabled) {\n      transform: scale(0.97);\n      background: var(--control-bg-active);\n    }\n    .win-btn:disabled {\n      opacity: 0.42;\n      cursor: not-allowed;\n    }\n\n    .win-btn-sm {\n      height: 28px;\n      padding: 0 11px;\n      font-size: 12px;\n    }\n\n    .win-btn-accent {\n      background: var(--accent);\n      color: var(--accent-text);\n      border-color: rgba(255, 255, 255, 0.16);\n      font-weight: 600;\n    }\n    .win-btn-accent:hover:not(:disabled) {\n      background: var(--accent-hover);\n    }\n    .win-btn-accent:active:not(:disabled) {\n      background: var(--accent-active);\n      transform: scale(0.97);\n    }\n\n    .win-btn-large {\n      height: 38px;\n      padding: 0 24px;\n      font-size: 13.5px;\n    }\n\n    .win-input {\n      height: 33px;\n      min-width: 200px;\n      padding: 0 11px;\n      border-radius: var(--radius-sm);\n      border: 1px solid var(--border-control);\n      background: var(--input-bg);\n      color: var(--text-primary);\n      font-family: var(--font-sans);\n      font-size: 13px;\n      outline: none;\n      transition: border-color 0.14s ease, box-shadow 0.14s ease;\n    }\n    .win-input:focus {\n      border-color: var(--accent);\n      box-shadow: 0 0 0 3px var(--accent-subtle);\n      background: var(--control-bg);\n    }\n\n    /* Custom ComboBox Dropdown */\n    .win-combobox {\n      position: relative;\n      min-width: 240px;\n      user-select: none;\n    }\n    .win-combobox-trigger {\n      width: 100%;\n      height: 33px;\n      padding: 0 12px;\n      border-radius: var(--radius-sm);\n      border: 1px solid var(--border-control);\n      background: var(--control-bg);\n      color: var(--text-primary);\n      font-family: var(--font-sans);\n      font-size: 12.5px;\n      font-weight: 500;\n      box-shadow: var(--shadow-control);\n      cursor: pointer;\n      display: flex;\n      align-items: center;\n      justify-content: space-between;\n      gap: 12px;\n      transition: background 0.14s ease, border-color 0.14s ease;\n    }\n    .win-combobox-trigger:hover {\n      background: var(--control-bg-hover);\n    }\n    .win-combobox.open .win-combobox-trigger {\n      border-color: var(--accent);\n    }\n    .win-combobox-chevron {\n      font-size: 12px;\n      color: var(--text-secondary);\n      transition: transform 0.18s ease;\n    }\n    .win-combobox.open .win-combobox-chevron {\n      transform: rotate(180deg);\n    }\n    .win-combobox {\n      max-width: 100%;\n    }\n    #minecraftCustomizationStudioCard .win-combobox {\n      min-width: 0;\n      width: 100%;\n      flex: 1 1 0%;\n    }\n    #minecraftCustomizationStudioCard > div > div {\n      min-width: 0;\n    }\n\n    /* Smooth Floating Value Box for Range Sliders */\n    .win-slider-wrap {\n      position: relative;\n      display: inline-flex;\n      align-items: center;\n      padding: 6px 0;\n    }\n    .win-slider-wrap input[type=\"range\"] {\n      margin: 0;\n      cursor: pointer;\n    }\n    .win-slider-bubble {\n      position: absolute;\n      bottom: calc(100% + 4px);\n      left: 50%;\n      transform: translateX(-50%) translateY(6px) scale(0.88);\n      background: var(--dropdown-bg);\n      color: var(--text-primary);\n      border: 1px solid var(--accent);\n      border-radius: 6px;\n      padding: 3px 8px;\n      font-family: var(--font-sans);\n      font-size: 11.5px;\n      font-weight: 600;\n      line-height: 1.2;\n      white-space: nowrap;\n      pointer-events: none;\n      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.28);\n      opacity: 0;\n      visibility: hidden;\n      transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1),\n                  transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),\n                  left 0.05s linear,\n                  visibility 0.18s;\n      z-index: 60;\n    }\n    .win-slider-wrap.active .win-slider-bubble {\n      opacity: 1;\n      visibility: visible;\n      transform: translateX(-50%) translateY(0) scale(1);\n    }\n    .win-combobox-label {\n      overflow: hidden;\n      text-overflow: ellipsis;\n      white-space: nowrap;\n    }\n    .win-combobox-menu {\n      position: absolute;\n      top: calc(100% + 5px);\n      left: 0;\n      right: auto;\n      min-width: 100%;\n      max-width: min(88vw, 390px);\n      max-height: 260px;\n      overflow-y: auto;\n      padding: 5px;\n      border-radius: var(--radius);\n      background: var(--flyout-bg);\n      backdrop-filter: blur(24px);\n      border: 1px solid var(--flyout-border);\n      box-shadow: var(--flyout-shadow);\n      z-index: 120;\n      display: none;\n      flex-direction: column;\n      gap: 2px;\n      animation: fadeSlideUp 0.14s cubic-bezier(0.22, 1, 0.36, 1) forwards;\n    }\n    .card-right .win-combobox-menu,\n    .win-combobox.align-right .win-combobox-menu {\n      left: auto;\n      right: 0;\n    }\n    .win-combobox.drop-up .win-combobox-menu {\n      top: auto;\n      bottom: calc(100% + 5px);\n    }\n    .win-combobox.open .win-combobox-menu {\n      display: flex;\n    }\n    .win-card.has-open-dropdown {\n      z-index: 95 !important;\n      overflow: visible !important;\n      position: relative;\n    }\n    .win-combobox-option {\n      position: relative;\n      width: 100%;\n      padding: 8px 12px 8px 14px;\n      border: none;\n      border-radius: 6px;\n      background: transparent;\n      color: var(--text-primary);\n      font-family: var(--font-sans);\n      font-size: 12.5px;\n      line-height: 1.35;\n      text-align: left;\n      cursor: pointer;\n      display: flex;\n      align-items: center;\n      transition: background 0.12s ease;\n      white-space: normal;\n      word-break: break-word;\n    }\n    input[type=\"number\"].win-input,\n    .storage-num-input {\n      padding-right: 8px !important;\n      min-width: 96px;\n      font-variant-numeric: tabular-nums;\n    }\n    .win-combobox-option:hover {\n      background: var(--flyout-item-hover);\n    }\n    .win-combobox-option.selected {\n      background: var(--flyout-item-selected);\n      color: var(--accent);\n      font-weight: 600;\n    }\n\n    /* Sleek macOS Toggle Switch */\n    .win-switch {\n      display: inline-flex;\n      align-items: center;\n      gap: 10px;\n      cursor: pointer;\n    }\n    .win-switch-label {\n      font-size: 12.5px;\n      color: var(--text-secondary);\n      min-width: 24px;\n      text-align: right;\n    }\n    .win-switch-track {\n      width: 40px;\n      height: 22px;\n      border-radius: 999px;\n      border: 1px solid var(--border-strong);\n      background: var(--bg-input);\n      position: relative;\n      transition: background 0.18s ease, border-color 0.18s ease;\n    }\n    .win-switch-thumb {\n      width: 16px;\n      height: 16px;\n      border-radius: 50%;\n      background: #FFFFFF;\n      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);\n      position: absolute;\n      top: 2px;\n      left: 2px;\n      transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);\n    }\n    .win-switch.on .win-switch-track {\n      background: var(--accent);\n      border-color: var(--accent);\n    }\n    .win-switch.on .win-switch-thumb {\n      transform: translateX(18px);\n    }\n\n    /* Badges */\n    .badge {\n      display: inline-flex;\n      align-items: center;\n      padding: 2px 8px;\n      border-radius: 999px;\n      font-size: 11px;\n      font-weight: 600;\n    }\n    .badge-accent {\n      background: var(--accent-subtle);\n      color: var(--accent);\n    }\n    .badge-success {\n      background: var(--success-bg);\n      color: var(--success);\n    }\n    .badge-warning {\n      background: var(--warning-bg);\n      color: var(--warning);\n    }\n    .badge-danger {\n      background: var(--danger-bg);\n      color: var(--danger);\n    }\n\n    .notice-banner {\n      padding: 13px 16px;\n      border-radius: var(--radius);\n      border: 1px solid var(--danger);\n      background: var(--danger-bg);\n      display: flex;\n      flex-direction: column;\n      gap: 8px;\n      font-size: 13px;\n      flex-shrink: 0;\n    }\n    .notice-banner-warning {\n      border-color: var(--warning);\n      background: var(--warning-bg);\n    }\n\n    /* Flashing Progress & Live Logs Card */\n    .flash-panel {\n      padding: 18px 20px;\n      border-radius: var(--radius-lg);\n      background: var(--card-bg);\n      border: 1px solid var(--border-card);\n      box-shadow: var(--shadow-card);\n      display: flex;\n      flex-direction: column;\n      gap: 12px;\n      flex-shrink: 0;\n    }\n    .progress-track {\n      width: 100%;\n      height: 7px;\n      border-radius: 999px;\n      background: var(--card-bg-secondary);\n      border: 1px solid var(--border-card);\n      overflow: hidden;\n    }\n    .progress-fill {\n      height: 100%;\n      width: 0%;\n      border-radius: 999px;\n      background: var(--accent);\n      transition: width 0.25s ease;\n    }\n    .flash-terminal-wrap {\n      position: relative;\n      display: flex;\n      flex-direction: column;\n    }\n    .flash-log-box {\n      background: #090A0D;\n      border: 1px solid var(--border-card);\n      border-radius: var(--radius-sm);\n      padding: 12px 14px;\n      font-family: var(--font-mono);\n      font-size: 12px;\n      line-height: 1.6;\n      color: #D4DCE8;\n      max-height: 210px;\n      overflow-y: auto;\n      user-select: text;\n      overscroll-behavior: contain;\n    }\n    .term-log-line {\n      white-space: pre-wrap;\n      word-break: break-word;\n      padding: 1px 0;\n    }\n    .term-live-progress {\n      margin-top: 6px;\n      padding: 6px 10px;\n      border-radius: 6px;\n      background: rgba(10, 132, 255, 0.14);\n      border: 1px solid rgba(10, 132, 255, 0.30);\n      color: #5AC8FA;\n      font-family: var(--font-mono);\n      font-size: 12px;\n      font-weight: 600;\n      white-space: pre-wrap;\n      word-break: break-word;\n    }\n    .resume-scroll-pill {\n      position: absolute;\n      right: 14px;\n      bottom: 12px;\n      padding: 5px 12px;\n      border-radius: 999px;\n      background: var(--accent);\n      color: var(--accent-text);\n      border: none;\n      font-family: var(--font-sans);\n      font-size: 11.5px;\n      font-weight: 600;\n      cursor: pointer;\n      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);\n      z-index: 5;\n    }\n    .win-btn-danger {\n      background: var(--danger-bg);\n      border-color: var(--danger);\n      color: var(--danger);\n      font-weight: 600;\n    }\n    .win-btn-danger:hover:not(:disabled) {\n      background: var(--danger);\n      color: #ffffff;\n    }\n    .modal-backdrop {\n      position: fixed;\n      inset: 0;\n      background: rgba(0, 0, 0, 0.60);\n      backdrop-filter: blur(8px);\n      display: none;\n      align-items: center;\n      justify-content: center;\n      z-index: 120;\n      padding: 20px;\n    }\n    .modal-backdrop.open {\n      display: flex;\n    }\n    .modal-dialog {\n      width: 100%;\n      max-width: 460px;\n      background: var(--card-bg);\n      border: 1px solid var(--border-strong);\n      border-radius: var(--radius-lg);\n      box-shadow: var(--shadow-setup);\n      padding: 22px 24px 20px;\n      display: flex;\n      flex-direction: column;\n      gap: 14px;\n    }\n    .modal-title {\n      font-family: var(--font-display);\n      font-size: 18px;\n      font-weight: 600;\n      color: var(--text-primary);\n    }\n    .modal-body {\n      font-size: 13.5px;\n      line-height: 1.5;\n      color: var(--text-secondary);\n    }\n    .modal-actions {\n      display: flex;\n      align-items: center;\n      justify-content: flex-end;\n      gap: 10px;\n      margin-top: 4px;\n    }\n\n    .bottom-nav-row {\n      display: flex;\n      align-items: center;\n      justify-content: space-between;\n      padding-top: 14px;\n      margin-top: 6px;\n      border-top: 1px solid var(--divider);\n      gap: 12px;\n    }\n    .center-flash-row {\n      display: flex;\n      flex-direction: column;\n      align-items: center;\n      justify-content: center;\n      padding: 14px 0 4px;\n      gap: 12px;\n    }\n\n    .code-viewer {\n      background: var(--card-bg-secondary);\n      border: 1px solid var(--border-card);\n      border-radius: var(--radius);\n      padding: 14px;\n      font-family: var(--font-mono);\n      font-size: 12px;\n      line-height: 1.55;\n      color: var(--text-primary);\n      max-height: 300px;\n      overflow: auto;\n      white-space: pre;\n      user-select: text;\n    }\n\n    .toast-msg {\n      position: fixed;\n      bottom: 20px;\n      right: 24px;\n      padding: 10px 16px;\n      border-radius: var(--radius);\n      background: var(--card-bg);\n      border: 1px solid var(--border-strong);\n      box-shadow: var(--shadow-setup);\n      font-size: 13px;\n      font-weight: 500;\n      color: var(--text-primary);\n      z-index: 90;\n      opacity: 0;\n      transform: translateY(10px);\n      pointer-events: none;\n      transition: opacity 0.2s ease, transform 0.2s ease;\n    }\n    .toast-msg.visible {\n      opacity: 1;\n      transform: translateY(0);\n    }\n\n    /* Standard / Pro Segmented Mode Switch & Preset Cards */\n    .mode-segmented-switch {\n      display: inline-flex;\n      align-items: center;\n      background: var(--bg-input);\n      border: 1px solid var(--border-control);\n      border-radius: 999px;\n      padding: 2px;\n      gap: 2px;\n    }\n    .mode-seg-btn {\n      border: none;\n      background: transparent;\n      color: var(--text-secondary);\n      font-family: var(--font-sans);\n      font-size: 12px;\n      font-weight: 600;\n      padding: 4px 12px;\n      border-radius: 999px;\n      cursor: pointer;\n      transition: all 0.16s ease;\n    }\n    .mode-seg-btn.active-standard {\n      background: var(--accent);\n      color: #FFFFFF;\n    }\n    .mode-seg-btn.active-pro {\n      background: linear-gradient(135deg, #0A84FF 0%, #5E5CE6 100%);\n      color: #FFFFFF;\n    }\n    .presets-grid {\n      display: grid;\n      grid-template-columns: repeat(auto-fill, minmax(245px, 1fr));\n      gap: 10px;\n    }\n    .preset-card {\n      background: var(--bg-card);\n      border: 1px solid var(--border-subtle);\n      border-radius: var(--radius-md);\n      padding: 12px 14px;\n      cursor: pointer;\n      display: flex;\n      flex-direction: column;\n      gap: 6px;\n      transition: all 0.15s ease;\n    }\n    .preset-card:hover {\n      background: var(--bg-card-hover);\n      border-color: var(--border-strong);\n    }\n    .preset-card.selected {\n      border-color: var(--accent);\n      background: var(--accent-soft);\n    }\n    .admin-top-banner {\n      background: var(--warning-bg);\n      border-bottom: 1px solid var(--warning);\n      padding: 8px 20px;\n      display: flex;\n      align-items: center;\n      justify-content: space-between;\n      gap: 12px;\n      font-size: 12.5px;\n    }\n\n    .storage-input-group {\n      display: flex;\n      align-items: center;\n      gap: 8px;\n      flex-wrap: wrap;\n    }\n    .storage-num-input {\n      width: 115px;\n      background: var(--bg-input);\n      border: 1px solid var(--border-strong);\n      color: var(--text-primary);\n      border-radius: var(--radius-sm);\n      padding: 6px 10px;\n      font-size: 13.5px;\n      font-weight: 600;\n      font-family: var(--font-mono);\n      outline: none;\n    }\n    .storage-num-input:focus {\n      border-color: var(--accent);\n    }\n    .storage-num-input.invalid {\n      border-color: var(--danger);\n    }\n    .storage-presets-row {\n      display: flex;\n      align-items: center;\n      gap: 6px;\n      flex-wrap: wrap;\n      margin-top: 8px;\n    }\n    .storage-preset-pill {\n      border: 1px solid var(--border-subtle);\n      background: var(--bg-input);\n      color: var(--text-secondary);\n      border-radius: 999px;\n      padding: 3px 10px;\n      font-size: 11.5px;\n      font-weight: 500;\n      cursor: pointer;\n      transition: all 0.14s ease;\n    }\n    .storage-preset-pill:hover, .storage-preset-pill.active {\n      border-color: var(--accent);\n      background: var(--accent-soft);\n      color: var(--accent);\n    }\n\n    @media (max-width: 820px) {\n      .settings-shell {\n        flex-direction: column;\n      }\n      .nav-sidebar {\n        width: 100%;\n        flex-direction: row;\n        overflow-x: auto;\n        border-right: none;\n        border-bottom: 1px solid var(--divider);\n      }\n      .nav-list {\n        flex-direction: row;\n      }\n      .content-area {\n        padding: 18px 16px 32px;\n      }\n      .win-card {\n        flex-direction: column;\n        align-items: flex-start;\n      }\n      .card-right, .win-input, .win-combobox {\n        width: 100%;\n      }\n      .titlebar-left, .titlebar-right {\n        min-width: auto;\n      }\n      .appstore-grid {\n        grid-template-columns: 1fr;\n      }\n    }\n\n    @media (max-height: 760px) {\n      .window-titlebar {\n        height: 42px;\n        padding: 0 12px;\n      }\n      .setup-shell {\n        padding: 8px 12px;\n      }\n      .setup-top-tabs {\n        min-height: 42px;\n        padding: 4px 12px 0;\n      }\n      .setup-body {\n        padding: 12px 16px;\n      }\n      .setup-footer {\n        padding: 10px 16px;\n      }\n    }\n  \n    /* Lock and grey out all configuration controls while flashing/downloading is active */\n    body.is-flashing-locked .setup-tab-btn,\n    body.is-flashing-locked .nav-item,\n    body.is-flashing-locked .mode-seg-btn,\n    body.is-flashing-locked #btnToggleModeView,\n    body.is-flashing-locked #btnTitleBack,\n    body.is-flashing-locked #globalSearchInput,\n    body.is-flashing-locked #adminPrivilegeBanner,\n    body.is-flashing-locked .win-card:not(#flashPanelCard),\n    body.is-flashing-locked .expander-wrap,\n    body.is-flashing-locked .system-summary-banner,\n    body.is-flashing-locked .setup-footer-bar button:not([data-action=\"pause-resume-flash\"]):not([data-action=\"cancel-flash\"]),\n    body.is-flashing-locked .bottom-nav-row button:not([data-action=\"pause-resume-flash\"]):not([data-action=\"cancel-flash\"]) {\n      opacity: 0.45 !important;\n      pointer-events: none !important;\n      filter: grayscale(0.45);\n      user-select: none;\n    }";
+  st.textContent += '\n  html, body {\n    overflow-x: hidden !important;\n    overscroll-behavior: none !important;\n    max-width: 100vw !important;\n  }\n  .app-window,\n  .setup-shell,\n  .setup-window-card,\n  .setup-body,\n  .settings-shell,\n  .nav-sidebar,\n  .content-area,\n  .content-inner {\n    overflow-x: hidden !important;\n    overscroll-behavior-x: none !important;\n    overscroll-behavior-y: none !important;\n    max-width: 100% !important;\n    min-width: 0 !important;\n    box-sizing: border-box !important;\n  }\n  .tab-flow-stack,\n  .card-stack,\n  .win-card,\n  .card-left,\n  .card-right,\n  .card-text,\n  .app-store-grid,\n  .app-store-card {\n    max-width: 100% !important;\n    min-width: 0 !important;\n    box-sizing: border-box !important;\n  }\n  .card-icon,\n  .nav-icon,\n  .app-store-icon,\n  .titlebar-search-icon {\n    display: none !important;\n  }\n  .titlebar-search-input {\n    padding-right: 12px !important;\n  }\n  .titlebar-back {\n    display: inline-flex !important;\n    align-items: center !important;\n    justify-content: center !important;\n    width: 30px !important;\n    height: 28px !important;\n    padding: 0 !important;\n  }\n  .win-input,\n  .combo-trigger {\n    max-width: 100% !important;\n    box-sizing: border-box !important;\n  }\n';
   document.head.appendChild(st);
 })();
 
@@ -1343,7 +1344,6 @@ ${storageSnippet}
         <div class="card-stack">
           <div class="win-card">
             <div class="card-left">
-              <div class="card-icon">LTS</div>
               <div class="card-text">
                 <div class="card-title">Server name</div>
                 <div class="card-desc" id="descServerHostname">Name used to reach your server on your home network (${esc(state.hostname || "instant-server")}.local)</div>
@@ -1356,7 +1356,6 @@ ${storageSnippet}
 
           <div class="win-card">
             <div class="card-left">
-              <div class="card-icon">USR</div>
               <div class="card-text">
                 <div class="card-title">Admin username &amp; password</div>
                 <div class="card-desc">Login credentials for the web dashboard and SSH</div>
@@ -1371,7 +1370,6 @@ ${storageSnippet}
           <div class="win-card" style="flex-direction:column;align-items:stretch;gap:10px;">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
               <div class="card-left">
-                <div class="card-icon">NET</div>
                 <div class="card-text">
                   <div class="card-title">
                     <span>Wi-Fi network &amp; backup failover</span>
@@ -1393,7 +1391,6 @@ ${storageSnippet}
           <div class="win-card" style="flex-direction:column;align-items:stretch;gap:10px;">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
               <div class="card-left">
-                <div class="card-icon">NET</div>
                 <div class="card-text">
                   <div class="card-title">
                     <span>Remote access outside home (Tailscale VPN)</span>
@@ -1428,7 +1425,6 @@ ${storageSnippet}
       const clusterStorageHtml = state.cluster_mode !== "standalone" ? `
         <div class="win-card">
           <div class="card-left">
-            <div class="card-icon">NAS</div>
             <div class="card-text">
               <div class="card-title">Existing files on the second computer</div>
               <div class="card-desc">Choose whether to keep all existing files on both computers or start with empty space on the second one</div>
@@ -1456,7 +1452,6 @@ ${storageSnippet}
       const advHtml = `
         <div class="win-card">
           <div class="card-left">
-            <div class="card-icon">URL</div>
             <div class="card-text">
               <div class="card-title">Combine multiple computers into one server</div>
               <div class="card-desc">Use this same USB stick on multiple laptops/PCs to link them automatically, or connect another server later in the web dashboard</div>
@@ -1474,7 +1469,6 @@ ${storageSnippet}
 
         <div class="win-card">
           <div class="card-left">
-            <div class="card-icon">MOB</div>
             <div class="card-text">
               <div class="card-title">Phone USB tethering</div>
               <div class="card-desc">Automatically use internet from a plugged-in Android or iPhone if Wi-Fi is unavailable</div>
@@ -1487,7 +1481,6 @@ ${storageSnippet}
 
         <div class="win-card">
           <div class="card-left">
-            <div class="card-icon">UPD</div>
             <div class="card-text">
               <div class="card-title">Seamless Ethernet-to-Wi-Fi failover</div>
               <div class="card-desc">Keeps Wi-Fi awake while Ethernet is plugged in so unplugging the cable never drops your connection</div>
@@ -1500,7 +1493,6 @@ ${storageSnippet}
 
         <div class="win-card">
           <div class="card-left">
-            <div class="card-icon">CLU</div>
             <div class="card-text">
               <div class="card-title">Static IP address</div>
               <div class="card-desc">Optional fixed IP (leave empty for automatic DHCP)</div>
@@ -1514,7 +1506,6 @@ ${storageSnippet}
 
         <div class="win-card">
           <div class="card-left">
-            <div class="card-icon">SSH</div>
             <div class="card-text">
               <div class="card-title">SSH public key</div>
               <div class="card-desc">Optional key for passwordless SSH login</div>
@@ -1528,7 +1519,6 @@ ${storageSnippet}
         ${state.ui_mode === "pro" ? `
           <div class="win-card">
             <div class="card-left">
-              <div class="card-icon"></div>
               <div class="card-text">
                 <div class="card-title">TCP BBR fast network streaming</div>
                 <div class="card-desc">Improves local network and VPN speed for Jellyfin video streaming and Nextcloud file transfers</div>
@@ -1539,7 +1529,6 @@ ${storageSnippet}
 
           <div class="win-card">
             <div class="card-left">
-              <div class="card-icon">FW</div>
               <div class="card-text">
                 <div class="card-title">Firewall &amp; SSH login protection</div>
                 <div class="card-desc">Blocks repeated failed SSH login attempts and protects open ports</div>
@@ -1667,7 +1656,6 @@ ${storageSnippet}
         <div class="win-card" style="flex-direction:column;align-items:stretch;gap:12px;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
             <div class="card-left">
-              <div class="card-icon">EXT4</div>
               <div class="card-text">
                 <div class="card-title">
                   <span>Universal App Config &amp; <code>/DATA/AppData</code> File Studio</span>
@@ -1755,7 +1743,6 @@ ${storageSnippet}
 
         <div class="win-card" style="border-color:var(--accent);">
           <div class="card-left">
-            <div class="card-icon">MON</div>
             <div class="card-text">
               <div class="card-title">Estimated Memory &amp; Server Homepage</div>
               <div class="card-desc">Selected apps (${state.selected_apps.length}) use ~<strong>${estRamGb} GB RAM</strong> • Idle power ~<strong>${estWatts}</strong> • Includes Server Homepage at <code>http://${esc(state.hostname || "instant-server")}.local:${state.dashboard_port}</code></div>
@@ -1773,7 +1760,6 @@ ${storageSnippet}
             return `
               <div class="win-card clickable ${active ? "selected-accent" : ""}" data-action="select-dashboard" data-value="${d.id}">
                 <div class="card-left">
-                  <div class="card-icon">${d.icon}</div>
                   <div class="card-text">
                     <div class="card-title">
                       ${esc(d.title)}
@@ -1808,7 +1794,6 @@ ${storageSnippet}
 
         <div class="win-card" style="padding:10px 14px;">
           <div class="card-left">
-            <div class="card-icon">NET</div>
             <div class="card-text">
               <div class="card-title">Add custom app or any app from the web</div>
               <div class="card-desc">Paste a Docker image, <code>docker run</code> command, or GitHub / Docker Hub URL</div>
@@ -1856,7 +1841,6 @@ ${storageSnippet}
         <div class="win-card" id="minecraftCustomizationStudioCard" style="flex-direction:column;align-items:stretch;gap:12px;border-color:var(--accent);display:${(state.selected_apps.includes("minecraft") || state.selected_apps.includes("minecraft_bedrock")) ? "flex" : "none"};">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
             <div class="card-left">
-              <div class="card-icon">MC</div>
               <div class="card-text">
                 <div class="card-title">
                   <span>Minecraft Server Settings</span>
@@ -1962,7 +1946,6 @@ ${storageSnippet}
       const advHtml = `
         <div class="win-card">
           <div class="card-left">
-            <div class="card-icon">PKG</div>
             <div class="card-text">
               <div class="card-title">Pre-download container images on this PC (Offline bundle)</div>
               <div class="card-desc">Downloads the full Docker image layers onto the USB stick from this PC so apps install even without internet</div>
@@ -1973,7 +1956,6 @@ ${storageSnippet}
 
         <div class="win-card">
           <div class="card-left">
-            <div class="card-icon"></div>
             <div class="card-text">
               <div class="card-title">Pi-hole DNS</div>
               <div class="card-desc">Prepare DNS settings so Pi-hole or AdGuard Home can run without port conflicts</div>
@@ -1984,7 +1966,6 @@ ${storageSnippet}
 
         <div class="win-card">
           <div class="card-left">
-            <div class="card-icon">DIR</div>
             <div class="card-text">
               <div class="card-title">Samba File Share</div>
               <div class="card-desc">Share folders across Windows, macOS, and Linux computers on your home network</div>
@@ -1995,7 +1976,6 @@ ${storageSnippet}
 
         <div class="win-card">
           <div class="card-left">
-            <div class="card-icon">VID</div>
             <div class="card-text">
               <div class="card-title">Hardware Video Transcoding</div>
               <div class="card-desc">Enable Intel, AMD, or NVIDIA graphics acceleration for Jellyfin and Plex</div>
@@ -2006,7 +1986,6 @@ ${storageSnippet}
 
         <div class="win-card">
           <div class="card-left">
-            <div class="card-icon">SEC</div>
             <div class="card-text">
               <div class="card-title">Tailscale VPN</div>
               <div class="card-desc">Access your server remotely without opening router ports</div>
@@ -2027,7 +2006,6 @@ ${storageSnippet}
 
         <div class="win-card">
           <div class="card-left">
-            <div class="card-icon">ZIM</div>
             <div class="card-text">
               <div class="card-title">Offline Wikipedia &amp; survival pack for Kiwix</div>
               <div class="card-desc">Choose which offline encyclopedia (.zim) to pre-configure in your Server Homepage &amp; Kiwix library</div>
@@ -2041,7 +2019,6 @@ ${storageSnippet}
         <div class="win-card" style="flex-direction:column;align-items:stretch;gap:10px;border:1px solid var(--accent);">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
             <div class="card-left">
-              <div class="card-icon">FIX</div>
               <div class="card-text">
                 <div class="card-title">Custom Server Workflow &amp; Automation Builder <span class="badge badge-accent">Full Control</span></div>
                 <div class="card-desc">Build any custom server workflow: install extra Ubuntu packages (<code>apt</code>), create custom Samba NAS shares, add USB hardware trigger rules (<code>/etc/udev/rules.d/</code>), add background <code>systemd</code> services/timers, or stage any <code>/etc</code> / <code>/DATA</code> config file &amp; post-install script (${Object.keys(state.custom_config_files || {}).length} file(s) staged).</div>
@@ -2065,7 +2042,6 @@ ${storageSnippet}
 
         <div class="win-card">
           <div class="card-left">
-            <div class="card-icon">UPD</div>
             <div class="card-text">
               <div class="card-title">Automatic OS security &amp; web app updates</div>
               <div class="card-desc">Automatically installs Ubuntu security patches and updates Docker apps at ${esc(state.auto_update_window)}</div>
@@ -2076,7 +2052,6 @@ ${storageSnippet}
 
         <div class="win-card">
           <div class="card-left">
-            <div class="card-icon">NAS</div>
             <div class="card-text">
               <div class="card-title">Automated weekly AppData backups</div>
               <div class="card-desc">Automatically creates compressed snapshots of /DATA/AppData in /DATA/Backups</div>
@@ -2088,7 +2063,6 @@ ${storageSnippet}
         ${state.ui_mode === "pro" ? `
           <div class="win-card">
             <div class="card-left">
-              <div class="card-icon">DKR</div>
               <div class="card-text">
                 <div class="card-title">Docker network range &amp; Prometheus metrics</div>
                 <div class="card-desc">Custom Docker bridge network range and optional system metrics endpoint</div>
@@ -2141,7 +2115,6 @@ ${storageSnippet}
         <div class="win-card" style="flex-direction:column;align-items:stretch;gap:10px;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
             <div class="card-left">
-              <div class="card-icon">LIM</div>
               <div class="card-text">
                 <div class="card-title" id="lblDualBootSize">Server partition size (${esc(displaySizeLabel)})</div>
                 <div class="card-desc" id="lblStorageValidation" style="${state.storageInputError ? "color:var(--danger);font-weight:600;" : ""}">
@@ -2215,12 +2188,11 @@ ${storageSnippet}
                ${dev.triple_lock_passed ? `data-action="select-usb" data-usb="${esc(dev.device_id)}"` : ""}
                style="${!dev.triple_lock_passed ? "opacity:0.55;" : ""}">
             <div class="card-left">
-              <div class="card-icon">${dev.triple_lock_passed ? "UPS" : "SEC"}</div>
               <div class="card-text">
                 <div class="card-title">
                   ${esc(dev.model)} (${dev.size_gb} GB)
                   <span class="badge ${dev.triple_lock_passed ? "badge-success" : "badge-danger"}">
-                    ${dev.triple_lock_passed ? "Ready" : "Protected System Drive"}
+                    ${dev.triple_lock_passed ? (dev.bus === "virtual" ? "Ready (Virtual Disk)" : "Ready") : "Protected System Drive"}
                   </span>
                 </div>
                 <div class="card-desc">${esc(dev.device_node)} ${dev.mountpoints && dev.mountpoints.length ? "(" + esc(dev.mountpoints.join(", ")) + ")" : ""} ${dev.block_reasons && dev.block_reasons.length ? "• " + esc(dev.block_reasons[0]) : ""}</div>
@@ -2238,7 +2210,6 @@ ${storageSnippet}
       const advHtml = `
         <div class="win-card">
           <div class="card-left">
-            <div class="card-icon">GPT</div>
             <div class="card-text">
               <div class="card-title">USB partition scheme &amp; target firmware</div>
               <div class="card-desc">Automatically set from your computer age answer above, or override manually</div>
@@ -2255,7 +2226,6 @@ ${storageSnippet}
 
         <div class="win-card">
           <div class="card-left">
-            <div class="card-icon">ISO</div>
             <div class="card-text">
               <div class="card-title">Ubuntu Server ISO source</div>
               <div class="card-desc">Pull official ISO automatically from Ubuntu, or use a downloaded .iso file on your PC</div>
@@ -2279,7 +2249,6 @@ ${storageSnippet}
 
         <div class="win-card">
           <div class="card-left">
-            <div class="card-icon">LTS</div>
             <div class="card-text">
               <div class="card-title">Ubuntu Server LTS release</div>
               <div class="card-desc">Official Ubuntu Server LTS version</div>
@@ -2296,7 +2265,6 @@ ${storageSnippet}
 
         <div class="win-card">
           <div class="card-left">
-            <div class="card-icon">EXT4</div>
             <div class="card-text">
               <div class="card-title">Target filesystem layout</div>
               <div class="card-desc">Partition structure on the hard drive</div>
@@ -2318,7 +2286,6 @@ ${storageSnippet}
           <div class="card-stack">
             <div class="win-card">
               <div class="card-left">
-                <div class="card-icon">PC</div>
                 <div class="card-text">
                   <div class="card-title">What type of computer is this?</div>
                   <div class="card-desc">Automatically enables battery &amp; lid care on laptops, or low-power desktop settings on Mini-PCs and Desktops</div>
@@ -2338,7 +2305,6 @@ ${storageSnippet}
 
             <div class="win-card">
               <div class="card-left">
-                <div class="card-icon">BOOT</div>
                 <div class="card-text">
                   <div class="card-title">How old is the computer?</div>
                   <div class="card-desc">Selects the right boot loader (UEFI GPT vs Legacy BIOS MBR). "I don't know" creates a universal hybrid boot USB.</div>
@@ -2355,7 +2321,6 @@ ${storageSnippet}
 
             <div class="win-card">
               <div class="card-left">
-                <div class="card-icon">RAM</div>
                 <div class="card-text">
                   <div class="card-title">How much RAM does it have?</div>
                   <div class="card-desc">Tunes memory compression (zram) so even 2 GB – 4 GB computers run containers smoothly</div>
@@ -2379,7 +2344,6 @@ ${storageSnippet}
               return `
                 <div class="win-card clickable ${active ? "selected-accent" : ""}" data-action="select-install-mode" data-value="${m.id}">
                   <div class="card-left">
-                    <div class="card-icon">${m.icon}</div>
                     <div class="card-text">
                       <div class="card-title">
                         ${esc(m.title)}
@@ -2424,7 +2388,6 @@ ${storageSnippet}
           <div class="win-card" style="flex-direction:column;align-items:stretch;gap:10px;">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
               <div class="card-left">
-                <div class="card-icon">DOC</div>
                 <div class="card-text">
                   <div class="card-title">How to Boot From USB &amp; Reset Forgotten Passwords (Quick Guide)</div>
                   <div class="card-desc">Press the Boot Menu key repeatedly right after powering on the target laptop/PC • Sleep is automatically inhibited during install</div>
@@ -2458,7 +2421,6 @@ ${storageSnippet}
         <div class="card-stack">
           <div class="win-card">
             <div class="card-left">
-              <div class="card-icon">SYS</div>
               <div class="card-text">
                 <div class="card-title">Keep running with the laptop lid closed</div>
                 <div class="card-desc">Prevents the laptop from going to sleep when you close the screen (automatically skipped on desktop PCs)</div>
@@ -2481,7 +2443,6 @@ ${storageSnippet}
 
           <div class="win-card">
             <div class="card-left">
-              <div class="card-icon">PWR</div>
               <div class="card-text">
                 <div class="card-title" id="lblBatCapTitle">Battery health limiter (${state.battery_charge_start_pct}% – ${state.battery_charge_stop_pct}%)</div>
                 <div class="card-desc" id="lblBatCapDesc">Caps charging at ${state.battery_charge_stop_pct}% while plugged in 24/7 to protect the battery</div>
@@ -2494,7 +2455,6 @@ ${storageSnippet}
 
           <div class="win-card">
             <div class="card-left">
-              <div class="card-icon">FAST</div>
               <div class="card-text">
                 <div class="card-title" id="lblUpsTitle">Safe shutdown during power outage (${state.ups_shutdown_battery_pct}%)</div>
                 <div class="card-desc" id="lblUpsDesc">Uses the laptop battery as a built-in UPS and shuts down cleanly when battery drops to ${state.ups_shutdown_battery_pct}%</div>
@@ -2510,7 +2470,6 @@ ${storageSnippet}
       const advHtml = `
         <div class="win-card">
           <div class="card-left">
-            <div class="card-icon">PC</div>
             <div class="card-text">
               <div class="card-title" id="lblScreenBlankTitle">Turn off screen after ${esc(state.screen_blank_seconds)} seconds</div>
               <div class="card-desc">Saves power and prevents screen burn-in</div>
@@ -2527,7 +2486,6 @@ ${storageSnippet}
 
         <div class="win-card">
           <div class="card-left">
-            <div class="card-icon">RAM</div>
             <div class="card-text">
               <div class="card-title">Low-RAM memory compression</div>
               <div class="card-desc">Enables zram swap so older 2 GB and 4 GB RAM computers run smoothly</div>
@@ -2538,7 +2496,6 @@ ${storageSnippet}
 
         <div class="win-card">
           <div class="card-left">
-            <div class="card-icon">MC</div>
             <div class="card-text">
               <div class="card-title">Safe graphics mode</div>
               <div class="card-desc">Use if the computer has an older NVIDIA or AMD graphics chip</div>
@@ -2550,7 +2507,6 @@ ${storageSnippet}
         ${state.ui_mode === "pro" ? `
           <div class="win-card">
             <div class="card-left">
-              <div class="card-icon">CFG</div>
               <div class="card-text">
                 <div class="card-title">CPU power &amp; fan profile</div>
                 <div class="card-desc">Select Quiet &amp; Low Power for silent fans, or Balanced for automatic speed boost</div>
@@ -2567,7 +2523,6 @@ ${storageSnippet}
 
           <div class="win-card">
             <div class="card-left">
-              <div class="card-icon">CPU</div>
               <div class="card-text">
                 <div class="card-title">Limit peak CPU heat (Disable Turbo Boost)</div>
                 <div class="card-desc">Lowers peak CPU temperatures and fan noise on older computers</div>
@@ -2578,7 +2533,6 @@ ${storageSnippet}
 
           <div class="win-card">
             <div class="card-left">
-              <div class="card-icon">SIM</div>
               <div class="card-text">
                 <div class="card-title" id="lblSwappinessTitle">Memory swap tendency (${state.vm_swappiness}%)</div>
                 <div class="card-desc">Keeps apps in physical RAM longer and reduces drive wear</div>
@@ -2604,7 +2558,6 @@ ${storageSnippet}
         <div class="win-card" style="flex-direction:column;align-items:stretch;gap:10px;border-color:var(--success);">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
             <div class="card-left">
-              <div class="card-icon">FS</div>
               <div class="card-text">
                 <div class="card-title">
                   <span>Cached ISO &amp; App Files</span>
@@ -2637,7 +2590,6 @@ ${storageSnippet}
           <div class="card-stack">
             <div class="win-card">
               <div class="card-left">
-                <div class="card-icon">SYS</div>
                 <div class="card-text">
                   <div class="card-title">${esc(state.hostname || "instant-server")}.local</div>
                   <div class="card-desc">Ubuntu Server ${esc(state.ubuntu_release)} LTS • Admin user: ${esc(state.username || "admin")}</div>
@@ -2652,7 +2604,6 @@ ${storageSnippet}
 
             <div class="win-card">
               <div class="card-left">
-                <div class="card-icon">NET</div>
                 <div class="card-text">
                   <div class="card-title">Network</div>
                   <div class="card-desc">${esc(sum.wifiLabel)}${state.cluster_mode !== "standalone" ? " • Multi-computer cluster enabled" : ""}</div>
@@ -2665,7 +2616,6 @@ ${storageSnippet}
 
             <div class="win-card">
               <div class="card-left">
-                <div class="card-icon">APP</div>
                 <div class="card-text">
                   <div class="card-title">Dashboards &amp; ${selectedTitles.length} pre-selected apps</div>
                   <div class="card-desc">${esc(selectedTitles.join(", ") || "None selected")}</div>
@@ -2678,7 +2628,6 @@ ${storageSnippet}
 
             <div class="win-card">
               <div class="card-left">
-                <div class="card-icon">USB</div>
                 <div class="card-text">
                   <div class="card-title">Bootable USB &amp; target installation mode</div>
                   <div class="card-desc">${esc(sum.modeLabel)} • ${esc(sum.usbLabel)} • Scheme: ${esc(state.usb_partition_scheme.toUpperCase())}</div>
@@ -2697,7 +2646,6 @@ ${storageSnippet}
 
           <div class="win-card" style="flex-direction:column;align-items:stretch;gap:8px;">
             <div class="card-left">
-              <div class="card-icon">WEB</div>
               <div class="card-text">
                 <div class="card-title">Next steps after flashing</div>
                 <div class="card-desc">
@@ -2764,12 +2712,12 @@ ${storageSnippet}
 
       footerEl.innerHTML = `
         <div>
-          <button type="button" class="win-btn" data-action="setup-prev" ${isFirst ? "disabled" : ""}>← Previous</button>
+          <button type="button" class="win-btn" data-action="setup-prev" ${isFirst ? "disabled" : ""}>Previous</button>
         </div>
         <div class="setup-footer-right">
           ${!isLast ? `
             <button type="button" class="win-btn" data-action="setup-skip">Skip</button>
-            <button type="button" class="win-btn win-btn-accent" data-action="setup-next">Proceed →</button>
+            <button type="button" class="win-btn win-btn-accent" data-action="setup-next">Proceed</button>
           ` : `
             <button type="button" class="win-btn" data-action="save-config-home">Save configuration</button>
             <span class="footer-cancel-flash-wrap" style="display:${state.flashing ? "inline-flex" : "none"};gap:8px;">
@@ -2792,7 +2740,6 @@ ${storageSnippet}
         const active = state.settingsTab === item.id && !state.searchQuery.trim();
         return `
           <button type="button" class="nav-item ${active ? "active" : ""}" data-action="switch-settings-tab" data-tab="${item.id}">
-            <span class="nav-icon">${item.icon}</span>
             <span>${esc(item.label)}</span>
           </button>
         `;
@@ -2813,7 +2760,7 @@ ${storageSnippet}
 
       const bottomPagerHtml = `
         <div class="bottom-nav-row">
-          <button type="button" class="win-btn" data-action="settings-prev" ${isFirst ? "disabled" : ""}>← Previous</button>
+          <button type="button" class="win-btn" data-action="settings-prev" ${isFirst ? "disabled" : ""}>Previous</button>
           <div style="display:flex;align-items:center;gap:10px;">
             <button type="button" class="win-btn" data-action="save-config-home">Save configuration</button>
             ${isLast ? `
@@ -2821,7 +2768,7 @@ ${storageSnippet}
                 ${state.flashing ? "Flashing Bootable USB..." : "Flash Bootable USB"}
               </button>
             ` : `
-              <button type="button" class="win-btn win-btn-accent" data-action="settings-next">Next →</button>
+              <button type="button" class="win-btn win-btn-accent" data-action="settings-next">Next</button>
             `}
           </div>
         </div>
@@ -2853,7 +2800,6 @@ ${storageSnippet}
             <div class="card-stack">
               <div class="win-card clickable" data-action="switch-settings-tab" data-tab="network">
                 <div class="card-left">
-                  <div class="card-icon">NET</div>
                   <div class="card-text">
                     <div class="card-title">Network &amp; multi-server</div>
                     <div class="card-desc">Server name (${esc(state.hostname || "instant-server")}), admin login, Wi-Fi (${esc(sum.wifiLabel)}), combine multiple computers</div>
@@ -2864,7 +2810,6 @@ ${storageSnippet}
 
               <div class="win-card clickable" data-action="switch-settings-tab" data-tab="apps">
                 <div class="card-left">
-                  <div class="card-icon">APP</div>
                   <div class="card-text">
                     <div class="card-title">Apps &amp; store (${selectedTitles.length} selected)</div>
                     <div class="card-desc">${esc(selectedTitles.join(", ") || "No extra apps selected")}</div>
@@ -2875,7 +2820,6 @@ ${storageSnippet}
 
               <div class="win-card clickable" data-action="switch-settings-tab" data-tab="storage">
                 <div class="card-left">
-                  <div class="card-icon">USB</div>
                   <div class="card-text">
                     <div class="card-title">Laptop, PC &amp; USB flash</div>
                     <div class="card-desc">${esc(sum.modeLabel)} • Target USB: ${esc(sum.usbLabel)} • Boot scheme: ${esc(state.usb_partition_scheme.toUpperCase())}</div>
@@ -2886,7 +2830,6 @@ ${storageSnippet}
 
               <div class="win-card clickable" data-action="switch-settings-tab" data-tab="power">
                 <div class="card-left">
-                  <div class="card-icon">PWR</div>
                   <div class="card-text">
                     <div class="card-title">Power &amp; battery</div>
                     <div class="card-desc">Lid-close sleep ignore (${state.ignore_lid_switch ? "On" : "Off"}), battery charge cap (${state.battery_charge_stop_pct}%), outage auto-shutdown (${state.ups_shutdown_battery_pct}%)</div>
@@ -2928,7 +2871,6 @@ ${storageSnippet}
             <div class="card-stack">
               <div class="win-card">
                 <div class="card-left">
-                  <div class="card-icon">FS</div>
                   <div class="card-text">
                     <div class="card-title">Local configuration &amp; workspace folder</div>
                     <div class="card-desc">Automatically saved in ${esc(state.savedConfigPath)}</div>
@@ -2944,7 +2886,6 @@ ${storageSnippet}
 
               <div class="win-card">
                 <div class="card-left">
-                  <div class="card-icon">LAN</div>
                   <div class="card-text">
                     <div class="card-title">Find Instant Server on your network</div>
                     <div class="card-desc">Scan your home network for running Instant Server computers</div>
@@ -2961,7 +2902,6 @@ ${storageSnippet}
                 ${state.lanScanResults.map(s => `
                   <div class="win-card">
                     <div class="card-left">
-                      <div class="card-icon">ON</div>
                       <div class="card-text">
                         <div class="card-title">${esc(s.ip)}</div>
                         <div class="card-desc">Open ports: ${esc((s.open_ports || []).join(", "))}</div>
@@ -2977,7 +2917,6 @@ ${storageSnippet}
               ${QUICK_HELP_ITEMS.map(item => `
                 <div class="win-card">
                   <div class="card-left">
-                    <div class="card-icon">INFO</div>
                     <div class="card-text">
                       <div class="card-title">${esc(item.title)}</div>
                       <div class="card-desc">${esc(item.desc)}</div>
@@ -3032,7 +2971,6 @@ ${storageSnippet}
             ${items.length ? items.map(it => `
               <div class="win-card clickable" data-action="switch-settings-tab" data-tab="${it.tab}">
                 <div class="card-left">
-                  <div class="card-icon">⌕</div>
                   <div class="card-text">
                     <div class="card-title">${esc(it.title)}</div>
                     <div class="card-desc">${esc(it.desc)}</div>

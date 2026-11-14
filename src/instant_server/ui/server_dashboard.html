@@ -892,7 +892,15 @@
       }
     }
 
-  </style>
+  
+  html, body, .dash-shell, .dash-main, .dash-sidebar {
+    overflow-x: hidden !important;
+    overscroll-behavior: none !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+  .card-icon, .nav-icon, .app-icon { display: none !important; }
+</style>
 </head>
 <body>
   <header class="app-header">
