@@ -274,6 +274,7 @@ func StreamISOAndCidataToRawDisk(
 
 	var writtenBytes int64
 	var totalGrubPatches int
+	var deferredHeader64K []byte
 	startTime := time.Now()
 
 	for writtenBytes < totalBytes {
@@ -313,6 +314,13 @@ func StreamISOAndCidataToRawDisk(
 			writeSlice = dmaBuf[:paddedLen]
 		}
 
+		if injectGPTCidata && writtenBytes == 0 && len(writeSlice) >= 65536 {
+			deferredHeader64K = AllocPageAlignedBuffer(65536, SectorAlignmentBytes)
+			copy(deferredHeader64K, writeSlice[:65536])
+			for z := 0; z < 65536; z++ {
+				writeSlice[z] = 0
+			}
+		}
 		if _, wErr := rawDisk.WriteAt(writeSlice, writtenBytes); wErr != nil {
 			if isHardwareDisconnectError(wErr) {
 				return nil, fmt.Errorf("IS-USB-304: USB drive %s was physically unplugged mid-flash at %d bytes: %w", targetDevice, writtenBytes, wErr)
@@ -360,6 +368,11 @@ func StreamISOAndCidataToRawDisk(
 		cidataFAT = fatImg
 	}
 
+	if len(deferredHeader64K) == 65536 {
+		if _, hErr := rawDisk.WriteAt(deferredHeader64K, 0); hErr != nil {
+			return nil, fmt.Errorf("IS-USB-302: failed writing deferred boot header on %s: %w", targetDevice, hErr)
+		}
+	}
 	if injectGPTCidata {
 		if gptErr := RelocateGPTAndWriteCidataPartition(rawDisk, uint64(totalBytes), cidataFAT); gptErr != nil {
 			return nil, fmt.Errorf("IS-USB-311: failed writing GPT & CIDATA partition table on %s: %w", targetDevice, gptErr)

@@ -1,6 +1,21 @@
 //go:build windows
 
 // usb/flasher_windows.go
+// -----------------------------------------------------------------------------
+// Windows raw physical disk & virtual disk (VHD/VHDX) I/O implementation.
+//
+// How reflashing without manual diskpart works safely on Windows:
+//  1. Before locking volumes in this process, cleanAndUnlockWindowsPhysicalDisk
+//     clears read-only flags, disables Windows auto-mounting temporarily, and
+//     removes existing hybrid ISO9660/GPT partitions on the target USB stick.
+//  2. IOCTL_DISK_CREATE_DISK (PARTITION_STYLE_RAW) and IOCTL_DISK_UPDATE_PROPERTIES
+//     instruct the Windows kernel partition manager (partmgr.sys) to drop all
+//     cached partition objects so raw sector writes never fail with
+//     "ERROR_INVALID_FUNCTION (Incorrect function)".
+//  3. Writes use 256 KB aligned blocks (with automatic 64 KB retry + raw IOCTL
+//     reset if Windows MountMgr probes the disk mid-stream).
+//
+// -----------------------------------------------------------------------------
 package usb
 
 import (
@@ -29,7 +44,9 @@ const (
 	ioctlDiskCreateDisk      = 0x0007C058
 	ioctlDiskSetAttributes   = 0x0007C0F4
 
-	winMaxUSBTransferChunk = 1024 * 1024
+	// 256 KB transfer chunk avoids USB bridge buffer rejections ("Incorrect function")
+	// on Silicon Motion (090c:2000), Realtek, and Alcor USB mass storage controllers.
+	winMaxUSBTransferChunk = 256 * 1024
 
 	esContinuous       = 0x80000000
 	esSystemRequired   = 0x00000001
@@ -119,7 +136,8 @@ func clearReadOnlyAndResetRawDiskIOCTL(hDisk syscall.Handle) {
 		nil,
 	)
 
-	// CREATE_DISK (24 bytes) with PARTITION_STYLE_RAW (0) drops read-only hybrid ISO9660/GPT locks in partmgr.sys
+	// CREATE_DISK (24 bytes) with PARTITION_STYLE_RAW (0) drops read-only hybrid ISO9660/GPT
+	// partition objects in partmgr.sys so raw writes never fail with ERROR_INVALID_FUNCTION.
 	var createRaw [24]byte
 	_ = syscall.DeviceIoControl(
 		hDisk,
@@ -135,8 +153,7 @@ func clearReadOnlyAndResetRawDiskIOCTL(hDisk syscall.Handle) {
 }
 
 // cleanAndUnlockWindowsPhysicalDisk clears the Windows read-only disk flag and removes
-// stale hybrid ISO9660/GPT partition locks (equivalent to running diskpart -> select disk N ->
-// attributes disk clear readonly -> clean) without flashing any console window.
+// stale hybrid ISO9660/GPT partition locks BEFORE volume handles are opened in this process.
 func cleanAndUnlockWindowsPhysicalDisk(physicalDrivePath string) {
 	idx := parsePhysicalDriveNumber(physicalDrivePath)
 	if idx == "" {
@@ -158,7 +175,7 @@ func cleanAndUnlockWindowsPhysicalDisk(physicalDrivePath string) {
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	defer cancel()
 	script := fmt.Sprintf("select disk %s\r\nattributes disk clear readonly noerr\r\nonline disk noerr\r\nclean\r\nrescan\r\nexit\r\n", idx)
 	cmd := exec.CommandContext(ctx, "diskpart.exe")
@@ -230,15 +247,16 @@ func OpenRawDisk(devicePath string) (RawDiskHandle, error) {
 		}, nil
 	}
 
+	// 1. Clean and unlock the physical disk FIRST (before holding open volume handles in this process)
+	cleanAndUnlockWindowsPhysicalDisk(cleanPath)
+
+	// 2. Lock and dismount any remaining mounted volumes on the target disk
 	var lockedVols []syscall.Handle
 	for _, letter := range getDriveLettersForPhysicalDisk(cleanPath) {
 		if hVol, lErr := lockAndDismountWindowsVolume(letter); lErr == nil && hVol != syscall.InvalidHandle {
 			lockedVols = append(lockedVols, hVol)
 		}
 	}
-
-	// Automatically clear read-only flags and stale hybrid ISO9660/GPT partition locks before opening
-	cleanAndUnlockWindowsPhysicalDisk(cleanPath)
 
 	pathPtr, err := syscall.UTF16PtrFromString(cleanPath)
 	if err != nil {
@@ -342,9 +360,41 @@ func (d *windowsRawDisk) WriteAt(p []byte, off int64) (int, error) {
 		var n uint32
 		err := syscall.WriteFile(d.handle, p[totalWritten:totalWritten+chunkLen], &n, &ov)
 		if err != nil {
-			if pathPtr, pErr := syscall.UTF16PtrFromString(d.devicePath); pErr == nil {
+			// Self-heal if Windows partmgr.sys or USB bridge rejected the transfer with "Incorrect function":
+			// 1. Reset partition manager state to PARTITION_STYLE_RAW and re-enable extended DASD I/O
+			clearReadOnlyAndResetRawDiskIOCTL(d.handle)
+			var br uint32
+			_ = syscall.DeviceIoControl(d.handle, fsctlAllowExtendedDasdIO, nil, 0, nil, 0, &br, nil)
+			time.Sleep(40 * time.Millisecond)
+
+			// 2. Retry in smaller 64 KB aligned sub-blocks
+			subWritten := 0
+			subErr := error(nil)
+			const fallbackStep = 64 * 1024
+			for subWritten < chunkLen {
+				sLen := chunkLen - subWritten
+				if sLen > fallbackStep {
+					sLen = fallbackStep
+				}
+				sOff := curOff + uint64(subWritten)
+				sOv := syscall.Overlapped{
+					Offset:     uint32(sOff & 0xFFFFFFFF),
+					OffsetHigh: uint32(sOff >> 32),
+				}
+				var sn uint32
+				wErr := syscall.WriteFile(d.handle, p[totalWritten+subWritten:totalWritten+subWritten+sLen], &sn, &sOv)
+				if wErr != nil {
+					subErr = wErr
+					break
+				}
+				subWritten += int(sn)
+			}
+			if subErr == nil && subWritten == chunkLen {
+				n = uint32(chunkLen)
+				err = nil
+			} else if pathPtr, pErr := syscall.UTF16PtrFromString(d.devicePath); pErr == nil {
 				if hBuf, oErr := syscall.CreateFile(pathPtr, syscall.GENERIC_READ|syscall.GENERIC_WRITE, syscall.FILE_SHARE_READ|syscall.FILE_SHARE_WRITE, nil, syscall.OPEN_EXISTING, winFileFlagWriteThrough, 0); oErr == nil {
-					var br uint32
+					clearReadOnlyAndResetRawDiskIOCTL(hBuf)
 					_ = syscall.DeviceIoControl(hBuf, fsctlAllowExtendedDasdIO, nil, 0, nil, 0, &br, nil)
 					err2 := syscall.WriteFile(hBuf, p[totalWritten:totalWritten+chunkLen], &n, &ov)
 					_ = syscall.FlushFileBuffers(hBuf)

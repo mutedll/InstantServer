@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -40,10 +41,11 @@ func NewApp(assets embed.FS) *App {
 		assets:    assets,
 		pauseGate: usb.NewPauseGate(),
 		lastStatus: map[string]interface{}{
-			"status":  "IDLE",
-			"percent": 0,
-			"paused":  false,
-			"events":  []map[string]interface{}{},
+			"status":      "IDLE",
+			"percent":     0,
+			"stage_index": 0,
+			"paused":      false,
+			"events":      []map[string]interface{}{},
 		},
 	}
 }
@@ -244,6 +246,86 @@ func (a *App) ResetUSBDrive(devicePath string) map[string]interface{} {
 	}
 }
 
+// BootUSBNextRestart configures the current Windows or Linux machine to boot directly
+// into the flashed Instant Server USB drive on next restart without entering BIOS/Boot Menu.
+func (a *App) BootUSBNextRestart() map[string]interface{} {
+	if !privilege.IsProcessElevated() {
+		esc := privilege.RequestNativePrivilegeEscalation(nil)
+		if esc.ElevatedSpawned {
+			a.mu.Lock()
+			a.forceClosing = true
+			a.mu.Unlock()
+			go func() {
+				time.Sleep(250 * time.Millisecond)
+				if a.ctx != nil {
+					wailsRuntime.Quit(a.ctx)
+				}
+				os.Exit(0)
+			}()
+			return map[string]interface{}{
+				"ok":                false,
+				"elevated_relaunch": true,
+				"error":             "Launched Administrator window to configure next-boot USB target.",
+			}
+		}
+		if !esc.AlreadyElevated {
+			return map[string]interface{}{
+				"ok":    false,
+				"error": esc.Message,
+			}
+		}
+	}
+
+	switch runtime.GOOS {
+	case "windows":
+		ps := `$out = bcdedit /enum firmware 2>$null | Out-String; ` +
+			`$blocks = $out -split '(?=identifier\s+\{)'; ` +
+			`$usbGuid = ''; ` +
+			`foreach ($b in $blocks) { if ($b -match 'identifier\s+(\{[0-9a-fA-F-]+\})' -and $b -match '(?i)(USB|Ubuntu|Removable|Flash|Instant)') { $usbGuid = $Matches[1]; break } }; ` +
+			`if ($usbGuid) { bcdedit /set '{fwbootmgr}' bootsequence $usbGuid | Out-Null; shutdown /r /t 3 /c "Instant Server: Rebooting directly into USB installer"; Write-Output "UEFI_USB:$usbGuid" } ` +
+			`else { shutdown /r /fw /t 2; Write-Output "UEFI_FW" }`
+		out, err := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", ps).CombinedOutput()
+		if err != nil {
+			return map[string]interface{}{
+				"ok":    false,
+				"error": fmt.Sprintf("Failed configuring Windows UEFI next-boot target: %v (%s)", err, strings.TrimSpace(string(out))),
+			}
+		}
+		return map[string]interface{}{
+			"ok":      true,
+			"message": "Configured UEFI one-time USB boot sequence. Rebooting into Instant Server USB in 3 seconds...",
+		}
+
+	case "linux":
+		sh := `if [ -d /sys/firmware/efi ] && command -v efibootmgr >/dev/null 2>&1; then ` +
+			`bnum=$(efibootmgr 2>/dev/null | grep -iE 'USB|Ubuntu|Linpus|Removable|UEFI:' | head -n1 | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\).*/\1/p'); ` +
+			`if [ -n "$bnum" ]; then efibootmgr -n "$bnum" && (sleep 2 && systemctl reboot) & exit 0; fi; ` +
+			`fi; ` +
+			`iso_part=$(blkid -t TYPE=iso9660 -o device 2>/dev/null | head -n1 || true); ` +
+			`if [ -n "$iso_part" ] && command -v kexec >/dev/null 2>&1; then ` +
+			`mkdir -p /mnt/instant_usb_iso && mount -o ro "$iso_part" /mnt/instant_usb_iso 2>/dev/null || true; ` +
+			`if [ -f /mnt/instant_usb_iso/casper/vmlinuz ]; then kexec -l /mnt/instant_usb_iso/casper/vmlinuz --initrd=/mnt/instant_usb_iso/casper/initrd --command-line="BOOT_IMAGE=/casper/vmlinuz autoinstall noprompt ---" && (sleep 2 && systemctl kexec) & exit 0; fi; ` +
+			`fi; ` +
+			`(sleep 2 && (systemctl reboot --firmware-setup 2>/dev/null || reboot)) &`
+		if out, err := exec.Command("bash", "-c", sh).CombinedOutput(); err != nil {
+			return map[string]interface{}{
+				"ok":    false,
+				"error": fmt.Sprintf("Failed configuring Linux next-boot USB target: %v (%s)", err, strings.TrimSpace(string(out))),
+			}
+		}
+		return map[string]interface{}{
+			"ok":      true,
+			"message": "Configured Linux next-boot USB target. Rebooting into Instant Server USB in 2 seconds...",
+		}
+
+	default:
+		return map[string]interface{}{
+			"ok":    false,
+			"error": "One-click next-boot USB restart is supported on Windows and Linux.",
+		}
+	}
+}
+
 func (a *App) AddCustomApp(payload map[string]interface{}) map[string]interface{} {
 	rawInput, _ := payload["raw_input"].(string)
 	title, _ := payload["title"].(string)
@@ -371,10 +453,11 @@ func (a *App) FlashUSBDevice(profile usb.ServerProfileConfig, isoPath string) ma
 		initPct = prevPct
 	}
 	a.lastStatus = map[string]interface{}{
-		"status":  "RUNNING",
-		"percent": initPct,
-		"paused":  false,
-		"events":  []map[string]interface{}{},
+		"status":      "RUNNING",
+		"percent":     initPct,
+		"stage_index": 1,
+		"paused":      false,
+		"events":      []map[string]interface{}{},
 	}
 	a.mu.Unlock()
 
@@ -386,6 +469,11 @@ func (a *App) FlashUSBDevice(profile usb.ServerProfileConfig, isoPath string) ma
 			a.cancelFunc = nil
 			a.mu.Unlock()
 		}()
+
+		// Stage 2: Stage cloud-init & app files
+		a.mu.Lock()
+		a.lastStatus["stage_index"] = 2
+		a.mu.Unlock()
 
 		baseDataDir := resolveWritableDataDir()
 		hardeningBytes, _ := a.assets.ReadFile("src/instant_server/scripts/laptop_hardening.sh")
@@ -400,6 +488,11 @@ func (a *App) FlashUSBDevice(profile usb.ServerProfileConfig, isoPath string) ma
 			return
 		}
 		a.appendEventLog(startTime, "STAGE_CIDATA", fmt.Sprintf("Staged %d cloud-init & app file(s) for FAT16 CIDATA partition", len(stagedFiles)))
+
+		// Stage 3: Check / download Ubuntu Server LTS ISO
+		a.mu.Lock()
+		a.lastStatus["stage_index"] = 3
+		a.mu.Unlock()
 
 		resolvedISO := strings.TrimSpace(isoPath)
 		if resolvedISO == "" {
@@ -428,8 +521,10 @@ func (a *App) FlashUSBDevice(profile usb.ServerProfileConfig, isoPath string) ma
 					}
 					overallPct := 10 + (ev.Percent*35)/100
 					a.lastStatus["percent"] = overallPct
+					a.lastStatus["stage_index"] = 3
 					a.lastStatus["active_progress"] = map[string]interface{}{
 						"stage_percent": ev.Percent,
+						"stage_index":   3,
 						"label":         "Downloading Ubuntu ISO",
 						"message":       ev.Message,
 						"terminal_line": fmt.Sprintf("[ISO] Downloading Ubuntu ISO: %d%% | %s", ev.Percent, ev.Message),
@@ -439,6 +534,7 @@ func (a *App) FlashUSBDevice(profile usb.ServerProfileConfig, isoPath string) ma
 						wailsRuntime.EventsEmit(a.ctx, "flash:progress", map[string]interface{}{
 							"percent":       overallPct,
 							"stage_percent": ev.Percent,
+							"stage_index":   3,
 							"stage":         "Downloading Ubuntu ISO",
 							"message":       ev.Message,
 						})
@@ -463,6 +559,10 @@ func (a *App) FlashUSBDevice(profile usb.ServerProfileConfig, isoPath string) ma
 			a.appendEventLog(startTime, "ISO_LOCAL", fmt.Sprintf("Using local ISO file: %s", resolvedISO))
 		}
 
+		// Stage 4: Unlock & write bootable ISO + Stage 5: Partition & verify
+		a.mu.Lock()
+		a.lastStatus["stage_index"] = 4
+		a.mu.Unlock()
 		a.appendEventLog(startTime, "USB_OPEN", fmt.Sprintf("Preparing and unlocking USB device %s...", profile.SelectedUSBDevice))
 		finalEv, err := usb.StreamISOAndCidataToRawDisk(
 			ctx,
@@ -485,10 +585,16 @@ func (a *App) FlashUSBDevice(profile usb.ServerProfileConfig, isoPath string) ma
 					a.lastStatus["status"] = "RUNNING"
 					a.lastStatus["paused"] = false
 				}
+				curStageIdx := 4
+				if ev.Stage == "VERIFIED" || ev.Percent >= 99 {
+					curStageIdx = 5
+				}
 				overallPct := 48 + (ev.Percent*50)/100
 				a.lastStatus["percent"] = overallPct
+				a.lastStatus["stage_index"] = curStageIdx
 				a.lastStatus["active_progress"] = map[string]interface{}{
 					"stage_percent": ev.Percent,
+					"stage_index":   curStageIdx,
 					"label":         "Writing Bootable USB",
 					"message":       ev.Message,
 					"terminal_line": fmt.Sprintf("[USB] Writing Bootable USB: %d%% | %s (CRC32 %s)", ev.Percent, ev.Message, ev.CRC32Hex),
@@ -498,6 +604,7 @@ func (a *App) FlashUSBDevice(profile usb.ServerProfileConfig, isoPath string) ma
 					wailsRuntime.EventsEmit(a.ctx, "flash:progress", map[string]interface{}{
 						"percent":       overallPct,
 						"stage_percent": ev.Percent,
+						"stage_index":   curStageIdx,
 						"stage":         "Writing Bootable USB",
 						"eta_sec":       ev.ETASeconds,
 						"message":       ev.Message,
@@ -525,6 +632,7 @@ func (a *App) FlashUSBDevice(profile usb.ServerProfileConfig, isoPath string) ma
 		a.mu.Lock()
 		a.lastStatus["status"] = "COMPLETED"
 		a.lastStatus["percent"] = 100
+		a.lastStatus["stage_index"] = 6
 		a.lastStatus["paused"] = false
 		a.lastStatus["active_progress"] = nil
 		a.lastStatus["cache_kept_by_default"] = true
@@ -732,6 +840,9 @@ func (a *App) AssetAndAPIRouter() http.Handler {
 			body.Device = r.URL.Query().Get("device")
 		}
 		writeJSON(w, a.ResetUSBDrive(body.Device))
+	})
+	mux.HandleFunc("/api/boot-usb-next", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, a.BootUSBNextRestart())
 	})
 	mux.HandleFunc("/api/load-config", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, a.LoadConfig())
