@@ -33,81 +33,39 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config build-essential shellcheck
 
-      - name: Normalize Go Package Layout & Tidy Dependencies
+      - name: Organize Go Packages & Assets
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p usb network privilege build/windows frontend/wailsjs/go/main src/instant_server/ui src/instant_server/scripts
           for f in flasher_common.go flasher_linux.go flasher_darwin.go flasher_windows.go scanner.go payload_builder.go catalog.go iso_downloader.go cidata_fat.go flasher_test.go; do
-            if [ -f "$f" ]; then
-              mv -f "$f" "usb/$f"
-            fi
+            [ -f "$f" ] && mv -f "$f" "usb/$f" || true
           done
           for f in mdns_discovery.go mdns_test.go; do
-            if [ -f "$f" ]; then
-              mv -f "$f" "network/$f"
-            fi
+            [ -f "$f" ] && mv -f "$f" "network/$f" || true
           done
           for f in escalate.go escalate_test.go; do
-            if [ -f "$f" ]; then
-              mv -f "$f" "privilege/$f"
-            fi
+            [ -f "$f" ] && mv -f "$f" "privilege/$f" || true
           done
-          [ -f "wails.exe.manifest" ] && [ ! -f "build/windows/wails.exe.manifest" ] && cp "wails.exe.manifest" "build/windows/wails.exe.manifest" || true
+          [ -f "wails.exe.manifest" ] && cp -f "wails.exe.manifest" "build/windows/wails.exe.manifest" || true
           [ -f "appicon.png" ] && cp -f "appicon.png" "build/appicon.png" || true
           [ -f "icon.ico" ] && cp -f "icon.ico" "build/windows/icon.ico" || true
-          [ -f "app_ui.html" ] && [ ! -f "src/instant_server/ui/app_ui.html" ] && cp "app_ui.html" "src/instant_server/ui/app_ui.html" || true
-          [ -f "server_dashboard.html" ] && [ ! -f "src/instant_server/ui/server_dashboard.html" ] && cp "server_dashboard.html" "src/instant_server/ui/server_dashboard.html" || true
-          for ujf in catalog_data.js app_studio.js; do
-            [ -f "$ujf" ] && [ ! -f "src/instant_server/ui/$ujf" ] && cp "$ujf" "src/instant_server/ui/$ujf" || true
+          for uif in app_ui.html server_dashboard.html catalog_data.js app_studio.js; do
+            [ -f "$uif" ] && cp -f "$uif" "src/instant_server/ui/$uif" || true
           done
-          [ -f "laptop_hardening.sh" ] && [ ! -f "src/instant_server/scripts/laptop_hardening.sh" ] && cp "laptop_hardening.sh" "src/instant_server/scripts/laptop_hardening.sh" || true
+          for scf in laptop_hardening.sh sanitize_autoinstall.py instant_dashboard_daemon.py; do
+            [ -f "$scf" ] && cp -f "$scf" "src/instant_server/scripts/$scf" || true
+          done
 
-          # Self-heal any legacy test/FAT16 bounds or string formatting in usb/
-          python3 -c '
-          import os
-          ft = "usb/flasher_test.go"
-          if os.path.exists(ft):
-              s = open(ft, "r", encoding="utf-8").read()
-              s = s.replace("\"motd=Custom Server Properties\nonline-mode=false\n\"", "\"motd=Custom Server Properties\\nonline-mode=false\\n\"")
-              s = s.replace("\"motd=Custom Server Properties\r\nonline-mode=false\r\n\"", "\"motd=Custom Server Properties\\nonline-mode=false\\n\"")
-              s = s.replace("[]byte(\"#!/usr/bin/env bash\n\")", "[]byte(\"#!/usr/bin/env bash\\n\")")
-              s = s.replace("[]byte(\"#!/usr/bin/env bash\r\n\")", "[]byte(\"#!/usr/bin/env bash\\n\")")
-              s = s.replace("isoPath := filepath.Join(stageDir, \"boot.iso\")", "diskDir := t.TempDir()\n\tisoPath := filepath.Join(diskDir, \"boot.iso\")")
-              s = s.replace("usbPath := filepath.Join(stageDir, \"usb_disk.img\")", "usbPath := filepath.Join(diskDir, \"usb_disk.img\")")
-              open(ft, "w", encoding="utf-8").write(s)
-          cf = "usb/cidata_fat.go"
-          if os.path.exists(cf):
-              c = open(cf, "r", encoding="utf-8").read()
-              c = c.replace("if ent.IsDir() {", "if ent.IsDir() || strings.HasSuffix(ent.Name(), \".img\") || strings.HasSuffix(ent.Name(), \".iso\") {")
-              c = c.replace("copy(img[dataOffset:dataOffset+(endByte-startByte)], f.Data[startByte:endByte])", "if dataOffset >= 0 && dataOffset+(endByte-startByte) <= len(img) { copy(img[dataOffset:dataOffset+(endByte-startByte)], f.Data[startByte:endByte]) }")
-              open(cf, "w", encoding="utf-8").write(c)
-          mg = "main.go"
-          if os.path.exists(mg):
-              m = open(mg, "r", encoding="utf-8").read()
-              m = m.replace("\t\tIcon:      iconBytes,\n", "")
-              open(mg, "w", encoding="utf-8").write(m)
-          '
-
-          # Ensure go.mod exists and synchronize internal subpackage import paths with go.mod module name
           if [ ! -f "go.mod" ]; then
             go mod init github.com/InstantServer/InstantServer
           fi
-          sed -i.bak 's/^go 1\.22$/go 1.26.0/' go.mod && rm -f go.mod.bak
           MOD_NAME=$(awk '/^module /{print $2}' go.mod | tr -d '\r')
-          if [ -z "$MOD_NAME" ]; then
-            MOD_NAME="github.com/InstantServer/InstantServer"
-          fi
-          if [ -f "app.go" ]; then
+          if [ -f "app.go" ] && [ -n "$MOD_NAME" ]; then
             sed -i.bak \
-              -e "s|github.com/instant-server/instant-server/network|${MOD_NAME}/network|g" \
-              -e "s|github.com/instant-server/instant-server/privilege|${MOD_NAME}/privilege|g" \
-              -e "s|github.com/instant-server/instant-server/usb|${MOD_NAME}/usb|g" \
-              -e "s|github.com/InstantServer/InstantServer/network|${MOD_NAME}/network|g" \
-              -e "s|github.com/InstantServer/InstantServer/privilege|${MOD_NAME}/privilege|g" \
-              -e "s|github.com/InstantServer/InstantServer/usb|${MOD_NAME}/usb|g" \
-              app.go
-            rm -f app.go.bak
+              -e "s|github.com/instant-server/instant-server/|${MOD_NAME}/|g" \
+              -e "s|github.com/InstantServer/InstantServer/|${MOD_NAME}/|g" \
+              app.go && rm -f app.go.bak
           fi
 
           go get github.com/wailsapp/wails/v2@latest
@@ -125,7 +83,5 @@ jobs:
         run: |
           SH_FILE="src/instant_server/scripts/laptop_hardening.sh"
           sed -i 's/\r$//' "$SH_FILE"
-          sed -i 's/disable=SC1017,SC1090,SC1091$/disable=SC1017,SC1090,SC1091,SC2016,SC2086/' "$SH_FILE"
-          sed -i 's/disable=SC1017,SC1090,SC1091,SC2016$/disable=SC1017,SC1090,SC1091,SC2016,SC2086/' "$SH_FILE"
           bash -n "$SH_FILE"
           shellcheck -s bash "$SH_FILE"

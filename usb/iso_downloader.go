@@ -1,3 +1,19 @@
+// ============================================================================
+// FILE: usb/iso_downloader.go
+// PURPOSE: Downloads the official Ubuntu 26.04 / 24.04 Live Server ISO from
+//
+//	`releases.ubuntu.com` with automatic HTTP `Range` resume and
+//	SHA-256 checksum verification (`ComputeFileSHA256`).
+//
+// WHY THIS MATTERS:
+//   - Server ISOs are ~2.6 GB. If a user's Wi-Fi drops at 80%, `DownloadISOWithResume`
+//     reads the `.iso.part` file size and sends `Range: bytes=<offset>-` so it
+//     resumes where it left off instead of restarting from 0%.
+//
+// HOW TO ADD A NEW UBUNTU RELEASE OR MIRROR:
+//   - Add the release version and fallback URL inside `UbuntuReleaseCatalog` below.
+//
+// ============================================================================
 // usb/iso_downloader.go
 package usb
 

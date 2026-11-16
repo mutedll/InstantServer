@@ -1,3 +1,11 @@
+// ============================================================================
+// FILE: network/mdns_discovery.go
+// PURPOSE: Discovers `instant-server.local` on the local Wi-Fi/Ethernet LAN
+//
+//	using multicast DNS (UDP 224.0.0.251:5353) plus a fast concurrent
+//	TCP port scan (ports 8088, 9090, 80, 22).
+//
+// ============================================================================
 // network/mdns_discovery.go
 package network
 

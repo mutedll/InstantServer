@@ -1,3 +1,31 @@
+// ============================================================================
+// FILE: app.go
+// PURPOSE: Wails Backend Controller — bridges the HTML/JS UI (`app_studio.js`)
+//
+//	with the Go systems packages (`usb`, `network`, `privilege`).
+//
+// HOW WAILS IPC WORKS (For Beginners):
+//   - Every exported method on `func (a *App) MethodName(...)` automatically
+//     becomes callable from JavaScript as `window.go.main.App.MethodName(...)`
+//     AND over HTTP POST at `/api/<kebab-case-route>` in `AssetAndAPIRouter()`.
+//
+// KEY METHODS IN THIS FILE:
+//   - `ScanUSBDevices()`     -> Lists safe USB drives and mounted VHD/VHDX disks.
+//   - `FlashUSBDevice()`     ->Runs the 5-stage pipeline:
+//     1. Validate config & Triple-Lock safety
+//     2. Stage CIDATA autoinstall payload
+//     3. Download/verify Ubuntu Live Server ISO
+//     4. Stream ISO + CIDATA + INSTANTUSB to raw USB
+//     5. Sync hardware buffers & emit 100% Ready
+//   - `ResetUSBDrive()`      -> Formats a flashed USB stick back to clean FAT32.
+//   - `BootUSBNextRestart()` -> Configures UEFI BootNext / BCD so the PC boots
+//     straight into the USB on next restart.
+//
+// HOW TO ADD A NEW BACKEND ACTION FOR THE UI:
+//  1. Write `func (a *App) MyNewAction(...) map[string]interface{}` below.
+//  2. Call `invokeBackend("MyNewAction", ...)` from `app_studio.js`.
+//
+// ============================================================================
 // app.go
 package main
 

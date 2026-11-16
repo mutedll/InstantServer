@@ -1,5 +1,22 @@
 //go:build windows
 
+// ============================================================================
+// FILE: usb/flasher_windows.go
+// PURPOSE: Windows-specific raw disk implementation (`\.\PhysicalDriveN`).
+//
+// HOW WINDOWS RAW USB WRITING WORKS (And How We Prevent Error IS-USB-302):
+//   1. `cleanAndUnlockWindowsPhysicalDisk`: Before opening the disk, clears any
+//      Read-Only flag and removes stale ISO9660/GPT partition layouts so Windows
+//      releases filesystem filter locks on previously flashed USB sticks.
+//   2. `lockAndDismountWindowsVolume`: Sends `FSCTL_LOCK_VOLUME` and
+//      `FSCTL_DISMOUNT_VOLUME` to every mounted drive letter (`D:`, `E:`, etc.).
+//   3. `clearReadOnlyAndResetRawDiskIOCTL`: Sends `IOCTL_DISK_SET_DISK_ATTRIBUTES`
+//      and `IOCTL_DISK_DELETE_DRIVE_LAYOUT` directly on the raw handle.
+//   4. `WriteAt`: Splits large 4 MB buffers into 256 KB USB controller transfers
+//      (below the 1 MB Win32 `usbstor.sys` limit) and automatically retries in
+//      64 KB blocks if a USB bridge hiccups.
+// ============================================================================
+
 // usb/flasher_windows.go
 // -----------------------------------------------------------------------------
 // Windows raw physical disk & virtual disk (VHD/VHDX) I/O implementation.

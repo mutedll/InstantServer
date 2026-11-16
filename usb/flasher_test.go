@@ -1,3 +1,12 @@
+// ============================================================================
+// FILE: usb/flasher_test.go
+// PURPOSE: Automated unit tests for the `usb` package (run via `go test -v ./usb/...`).
+//
+// HOW TO ADD YOUR OWN UNIT TEST:
+//   - Create a function `func TestMyFeature(t *testing.T)` at the bottom of this file.
+//   - Use `t.TempDir()` to create safe temporary files/virtual disk images.
+//
+// ============================================================================
 // usb/flasher_test.go
 package usb
 
@@ -494,6 +503,8 @@ func TestReinstallModesOfflineUpdaterAndCustomWorkflows(t *testing.T) {
 		t.Fatalf("StageCIDATAPayload failed for keepCfg: %v", err)
 	}
 	for _, expectedFile := range []string{
+		"sanitize_autoinstall.py",
+		"instant-dashboard-daemon.py",
 		"reinstall_preserve_data.sh",
 		"offline_updater_apply.sh",
 		"emergency_repair_reset.sh",
@@ -543,5 +554,12 @@ func TestResetUSBToCleanFAT32(t *testing.T) {
 	// Verify FAT32 boot sector at 1MB boundary (offset 1048576)
 	if string(after[1048576+82:1048576+90]) != "FAT32   " {
 		t.Fatalf("expected FAT32 boot sector at 1MB offset (LBA 2048), got %q", string(after[1048576+82:1048576+90]))
+	}
+	// Verify one-click next-boot USB launchers and log file are pre-created on INSTANTUSB
+	if !bytes.Contains(after[1048576:], []byte("Boot-USB-Next-Restart-Windows.bat")) && !bytes.Contains(after[1048576:], []byte("bcdedit /enum firmware")) {
+		t.Fatalf("expected Windows one-click next-boot launcher on INSTANTUSB FAT32 partition")
+	}
+	if !bytes.Contains(after[1048576:], []byte("efibootmgr -n")) {
+		t.Fatalf("expected Linux one-click next-boot launcher on INSTANTUSB FAT32 partition")
 	}
 }

@@ -1,3 +1,19 @@
+// ============================================================================
+// FILE: main.go
+// PURPOSE: Application entrypoint for the Instant Server desktop app (Wails v2).
+//
+// WHAT THIS FILE DOES:
+//  1. Embeds `src/instant_server/ui` and `src/instant_server/scripts` directly
+//     into the compiled binary via `//go:embed` so the `.exe` is 100% standalone.
+//  2. Renders the "IS" window icon in memory (`buildInstantServerIconPNG`).
+//  3. Selects a writable WebView2 cache folder (`resolveIsolatedWebviewDataPath`).
+//  4. Starts the Wails desktop window and binds all methods on `App` (`app.go`)
+//     so JavaScript can call them via `window.go.main.App.<MethodName>()`.
+//
+// HOW TO EDIT WINDOW SIZE OR TITLE:
+//   - Edit `Width`, `Height`, `MinWidth`, `MinHeight`, or `Title` inside `main()`.
+//
+// ============================================================================
 // main.go
 package main
 

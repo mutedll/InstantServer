@@ -1,5 +1,10 @@
 //go:build linux
 
+// ============================================================================
+// FILE: usb/flasher_linux.go
+// PURPOSE: Linux raw block device writer (`/dev/sdX`) using `O_DIRECT` DMA.
+// ============================================================================
+
 // usb/flasher_linux.go
 package usb
 

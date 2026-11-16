@@ -1,7 +1,29 @@
+// ============================================================================
+// FILE: usb/payload_builder.go
+// PURPOSE: Turns the user's UI choices (ServerProfileConfig) into:
+//  1. Cloud-Init Autoinstall YAML ("user-data" and "meta-data")
+//  2. Target environment variables ("instant-server-env.conf")
+//  3. All helper scripts and Docker Compose files staged onto the CIDATA USB volume.
+//
+// CODEBASE STUDY MAP (Sections in this file):
+//   - SECTION 1: Configuration Structs (ServerProfileConfig, CustomAppEntry)
+//   - SECTION 2: Pure-Go SHA-512 Crypt ($6$ password hashing for /etc/shadow)
+//   - SECTION 3: Profile Validation & Custom Docker/GitHub URL Parser
+//   - SECTION 4: Ubuntu Autoinstall Cloud-Config Generator (GenerateAutoinstallUserData)
+//   - SECTION 5: Target Environment Generator & CIDATA File Stager (StageCIDATAPayload)
+//   - SECTION 6: Bundled Python/Shell Helper Scripts
+//
+// HOW TO ADD A NEW SERVER SETTING:
+//  1. Add the field to `ServerProfileConfig` (Section 1).
+//  2. Export it in `GenerateTargetEnvConf()` (Section 5) so `laptop_hardening.sh`
+//     can read it as an environment variable during first boot.
+//
+// ============================================================================
 // usb/payload_builder.go
 package usb
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/hex"
@@ -798,7 +820,323 @@ func StageCIDATAPayload(targetDir string, cfg ServerProfileConfig, hardeningScri
 		return nil, err
 	}
 
-	startUSBLoggerScript := []byte(`#!/usr/bin/env bash
+	// 2. Stage early-boot USB logging & error-dumping helper scripts
+	earlyScripts := []struct {
+		name    string
+		content string
+	}{
+		{"start_usb_logger.sh", scriptStartUSBLoggerSh},
+		{"usb_log_daemon.sh", scriptUSBLogDaemonSh},
+		{"dump_error_logs_to_usb.sh", scriptDumpErrorLogsSh},
+		{"select_target_disk.sh", scriptSelectTargetDiskSh},
+		{"dynamic_dualboot_storage.sh", scriptDynamicDualBootStorageSh},
+		{"reinstall_preserve_data.sh", scriptReinstallPreserveDataSh},
+		{"offline_updater_apply.sh", scriptOfflineUpdaterApplySh},
+	}
+	for _, es := range earlyScripts {
+		if err := writeItem(es.name, NormalizeShellScriptLF([]byte(es.content)), 0755); err != nil {
+			return nil, err
+		}
+	}
+
+	// 3. Stage standalone Python helper scripts (separated from Bash for readability)
+	sanitizePyScript := loadBundledScript("sanitize_autoinstall.py", defaultSanitizeAutoinstallPy)
+	if err := writeItem("sanitize_autoinstall.py", NormalizeShellScriptLF(sanitizePyScript), 0755); err != nil {
+		return nil, err
+	}
+	dashboardDaemonPy := loadBundledScript("instant_dashboard_daemon.py", defaultDashboardDaemonPy)
+	if err := writeItem("instant-dashboard-daemon.py", NormalizeShellScriptLF(dashboardDaemonPy), 0755); err != nil {
+		return nil, err
+	}
+
+	// 4. Stage emergency repair & password-reset helper script
+	repairResetScript := buildEmergencyRepairScript(cfg)
+	if err := writeItem("emergency_repair_reset.sh", NormalizeShellScriptLF([]byte(repairResetScript)), 0755); err != nil {
+		return nil, err
+	}
+
+	envConf := []byte(GenerateTargetEnvConf(cfg))
+	if err := writeItem("instant-server-env.conf", envConf, 0600); err != nil {
+		return nil, err
+	}
+
+	cfgBytes, _ := json.MarshalIndent(cfg, "", "  ")
+	if err := writeItem("instant-server-config.json", cfgBytes, 0644); err != nil {
+		return nil, err
+	}
+
+	if len(hardeningScript) > 0 {
+		if err := writeItem("laptop_hardening.sh", NormalizeShellScriptLF(hardeningScript), 0755); err != nil {
+			return nil, err
+		}
+	}
+	if len(dashboardHTML) > 0 {
+		if err := writeItem("server_dashboard.html", dashboardHTML, 0644); err != nil {
+			return nil, err
+		}
+	}
+	if strings.TrimSpace(cfg.CustomPostInstallScript) != "" {
+		if err := writeItem("custom_post_install.sh", NormalizeShellScriptLF([]byte(cfg.CustomPostInstallScript)), 0755); err != nil {
+			return nil, err
+		}
+	}
+	for customPath, customContent := range cfg.CustomConfigFiles {
+		safeName := strings.ReplaceAll(strings.Trim(customPath, "/\\"), "/", "__")
+		if safeName != "" {
+			_ = writeItem(filepath.Join("custom_system_configs", safeName), []byte(customContent), 0644)
+		}
+	}
+	for unitName, unitContent := range cfg.CustomSystemdUnits {
+		safeUnit := filepath.Base(strings.TrimSpace(unitName))
+		if safeUnit != "" && safeUnit != "." && safeUnit != ".." {
+			_ = writeItem(filepath.Join("custom_systemd", safeUnit), NormalizeShellScriptLF([]byte(unitContent)), 0644)
+		}
+	}
+	for ruleName, ruleContent := range cfg.CustomUdevRules {
+		safeRule := filepath.Base(strings.TrimSpace(ruleName))
+		if safeRule != "" && safeRule != "." && safeRule != ".." {
+			_ = writeItem(filepath.Join("custom_udev", safeRule), NormalizeShellScriptLF([]byte(ruleContent)), 0644)
+		}
+	}
+
+	for _, appID := range cfg.SelectedApps {
+		cleanID := strings.TrimSpace(appID)
+		if cleanID == "" || strings.HasPrefix(cleanID, "custom_") {
+			continue
+		}
+		var override *AppOverride
+		if cfg.AppOverrides != nil {
+			if ov, ok := cfg.AppOverrides[cleanID]; ok {
+				override = &ov
+			}
+		}
+		composeYAML := BuildVerifiedAppComposeWithOverride(cleanID, "", 0, cfg.MinecraftConfig, override)
+		rel := filepath.Join("casaos_apps", cleanID, "docker-compose.yml")
+		if err := writeItem(rel, []byte(composeYAML), 0644); err != nil {
+			return nil, err
+		}
+		if override != nil {
+			for cfgFileName, cfgFileContent := range override.ConfigFiles {
+				safeName := filepath.Base(cfgFileName)
+				if safeName != "" && safeName != "." && safeName != ".." {
+					_ = writeItem(filepath.Join("casaos_apps", cleanID, "config_files", safeName), []byte(cfgFileContent), 0644)
+				}
+			}
+		}
+	}
+	for _, ca := range cfg.CustomApps {
+		if ca.ID != "" && ca.ComposeYAML != "" {
+			rel := filepath.Join("casaos_apps", ca.ID, "docker-compose.yml")
+			if err := writeItem(rel, []byte(ca.ComposeYAML), 0644); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	var bundleBuilder strings.Builder
+	bundleBuilder.WriteString("#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p /DATA/AppData /opt/instant-server/casaos_apps /opt/instant-server/custom_system_configs /opt/instant-server/custom_systemd /opt/instant-server/custom_udev\n")
+	for _, appID := range cfg.SelectedApps {
+		cleanID := strings.TrimSpace(appID)
+		if cleanID == "" || strings.HasPrefix(cleanID, "custom_") {
+			continue
+		}
+		var override *AppOverride
+		if cfg.AppOverrides != nil {
+			if ov, ok := cfg.AppOverrides[cleanID]; ok {
+				override = &ov
+			}
+		}
+		composeYAML := BuildVerifiedAppComposeWithOverride(cleanID, "", 0, cfg.MinecraftConfig, override)
+		sum := sha256.Sum256([]byte(strings.TrimSpace(composeYAML)))
+		hashHex := hex.EncodeToString(sum[:])
+		bundleBuilder.WriteString(fmt.Sprintf("mkdir -p /DATA/AppData/%s /opt/instant-server/casaos_apps/%s\n", cleanID, cleanID))
+		bundleBuilder.WriteString(fmt.Sprintf("cat << 'APPEOF_%s' > /DATA/AppData/%s/docker-compose.yml\n%s\nAPPEOF_%s\n", cleanID, cleanID, strings.TrimRight(composeYAML, "\r\n"), cleanID))
+		bundleBuilder.WriteString(fmt.Sprintf("printf '%%s\\n' %q > /DATA/AppData/%s/.compose_sha256\n", hashHex, cleanID))
+		bundleBuilder.WriteString(fmt.Sprintf("cp -f /DATA/AppData/%s/docker-compose.yml /opt/instant-server/casaos_apps/%s/docker-compose.yml 2>/dev/null || true\n", cleanID, cleanID))
+	}
+	for _, ca := range cfg.CustomApps {
+		if ca.ID != "" && ca.ComposeYAML != "" {
+			sum := sha256.Sum256([]byte(strings.TrimSpace(ca.ComposeYAML)))
+			hashHex := hex.EncodeToString(sum[:])
+			bundleBuilder.WriteString(fmt.Sprintf("mkdir -p /DATA/AppData/%s\n", ca.ID))
+			bundleBuilder.WriteString(fmt.Sprintf("cat << 'CUSTEOF_%s' > /DATA/AppData/%s/docker-compose.yml\n%s\nCUSTEOF_%s\n", ca.ID, ca.ID, strings.TrimRight(ca.ComposeYAML, "\r\n"), ca.ID))
+			bundleBuilder.WriteString(fmt.Sprintf("printf '%%s\\n' %q > /DATA/AppData/%s/.compose_sha256\n", hashHex, ca.ID))
+		}
+	}
+	for customPath, customContent := range cfg.CustomConfigFiles {
+		safeName := strings.ReplaceAll(strings.Trim(customPath, "/\\"), "/", "__")
+		if safeName != "" {
+			bundleBuilder.WriteString(fmt.Sprintf("cat << 'SYSCFGEOF_%s' > /opt/instant-server/custom_system_configs/%s\n%s\nSYSCFGEOF_%s\n", safeName, safeName, strings.TrimRight(customContent, "\r\n"), safeName))
+		}
+	}
+	for unitName, unitContent := range cfg.CustomSystemdUnits {
+		safeUnit := filepath.Base(strings.TrimSpace(unitName))
+		if safeUnit != "" && safeUnit != "." && safeUnit != ".." {
+			tag := reSlugClean.ReplaceAllString(safeUnit, "_")
+			bundleBuilder.WriteString(fmt.Sprintf("cat << 'UNITEOF_%s' > /opt/instant-server/custom_systemd/%s\n%s\nUNITEOF_%s\n", tag, safeUnit, strings.TrimRight(unitContent, "\r\n"), tag))
+		}
+	}
+	for ruleName, ruleContent := range cfg.CustomUdevRules {
+		safeRule := filepath.Base(strings.TrimSpace(ruleName))
+		if safeRule != "" && safeRule != "." && safeRule != ".." {
+			tag := reSlugClean.ReplaceAllString(safeRule, "_")
+			bundleBuilder.WriteString(fmt.Sprintf("cat << 'UDEVEOF_%s' > /opt/instant-server/custom_udev/%s\n%s\nUDEVEOF_%s\n", tag, safeRule, strings.TrimRight(ruleContent, "\r\n"), tag))
+		}
+	}
+	if len(cfg.CustomSambaShares) > 0 {
+		var smbBuilder strings.Builder
+		for _, sh := range cfg.CustomSambaShares {
+			name := strings.TrimSpace(sh.Name)
+			path := strings.TrimSpace(sh.Path)
+			if name == "" || path == "" {
+				continue
+			}
+			ro := "no"
+			if sh.ReadOnly {
+				ro = "yes"
+			}
+			guest := "no"
+			if sh.GuestOK {
+				guest = "yes"
+			}
+			fruitLines := ""
+			if sh.AppleFruit {
+				fruitLines = "   vfs objects = catia fruit streams_xattr\n   fruit:aapl = yes\n   fruit:model = MacSamba\n   fruit:metadata = stream\n"
+			}
+			smbBuilder.WriteString(fmt.Sprintf("\n[%s]\n   comment = %s\n   path = %s\n   browseable = yes\n   read only = %s\n   guest ok = %s\n   create mask = 0664\n   directory mask = 0775\n%s", name, sh.Comment, path, ro, guest, fruitLines))
+		}
+		if smbBuilder.Len() > 0 {
+			_ = writeItem("custom_samba_shares.conf", NormalizeShellScriptLF([]byte(smbBuilder.String())), 0644)
+			bundleBuilder.WriteString(fmt.Sprintf("cat << 'SMBSHAREEOF' > /opt/instant-server/custom_samba_shares.conf\n%s\nSMBSHAREEOF\n", strings.TrimRight(smbBuilder.String(), "\r\n")))
+		}
+	}
+	if err := writeItem("instant_apps_bundle.sh", NormalizeShellScriptLF([]byte(bundleBuilder.String())), 0755); err != nil {
+		return nil, err
+	}
+
+	return writtenFiles, nil
+}
+
+// loadBundledScript reads a standalone script from src/instant_server/scripts/ (or repo root),
+// falling back to a minimal built-in version during isolated unit tests.
+func loadBundledScript(fileName string, fallback string) []byte {
+	candidates := []string{
+		filepath.Join("src", "instant_server", "scripts", fileName),
+		filepath.Join("..", "src", "instant_server", "scripts", fileName),
+		fileName,
+		filepath.Join("..", fileName),
+	}
+	for _, path := range candidates {
+		if data, err := os.ReadFile(path); err == nil && len(bytes.TrimSpace(data)) > 0 {
+			return data
+		}
+	}
+	return []byte(fallback)
+}
+
+const defaultSanitizeAutoinstallPy = `#!/usr/bin/env python3
+# Standalone YAML sanitizer for Ubuntu Server Autoinstall (/autoinstall.yaml)
+import argparse, os, sys, yaml
+
+def main():
+    p = argparse.ArgumentParser()
+    p.add_argument("--config", default="/autoinstall.yaml")
+    p.add_argument("--disk", default="")
+    p.add_argument("--wired-online", action="store_true")
+    p.add_argument("--use-largest-gap", action="store_true")
+    args = p.parse_args()
+    if not os.path.isfile(args.config):
+        return 0
+    with open(args.config, "r", encoding="utf-8") as f:
+        doc = yaml.safe_load(f) or {}
+    root = doc.get("autoinstall") if isinstance(doc.get("autoinstall"), dict) else doc
+    if args.disk or args.use_largest_gap:
+        st = root.setdefault("storage", {})
+        lay = st.setdefault("layout", {"name": "direct"})
+        if args.disk:
+            lay["match"] = {"path": args.disk}
+        if args.use_largest_gap:
+            lay["use-gap"] = "largest"
+    net = root.get("network")
+    if isinstance(net, dict):
+        net.pop("wifis", None)
+        if args.wired_online:
+            root.pop("network", None)
+    with open(args.config, "w", encoding="utf-8") as f:
+        yaml.safe_dump(doc, f, default_flow_style=False, sort_keys=False)
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())
+`
+
+const defaultDashboardDaemonPy = `#!/usr/bin/env python3
+# Standalone HTTP daemon for Instant Server Web Dashboard (:8088)
+import http.server, json, os, socketserver
+
+PORT = int(os.environ.get("DASHBOARD_PORT", "8088"))
+
+class Handler(http.server.SimpleHTTPRequestHandler):
+    def do_GET(self):
+        if self.path.startswith("/api/status"):
+            body = json.dumps({"ok": True, "hostname": os.uname().nodename}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        return super().do_GET()
+
+if __name__ == "__main__":
+    socketserver.TCPServer.allow_reuse_address = True
+    with socketserver.TCPServer(("0.0.0.0", PORT), Handler) as srv:
+        srv.serve_forever()
+`
+
+// ============================================================================
+// SECTION 6: EARLY-BOOT & AUTOINSTALL HELPER SCRIPTS
+// ============================================================================
+// Moving these shell scripts out of StageCIDATAPayload keeps the Go staging
+// logic short and makes each target helper script easy to study on its own.
+
+func buildEmergencyRepairScript(cfg ServerProfileConfig) string {
+	hashedPass := Sha512Crypt(cfg.Password, "instantserverlts")
+	sshPort := cfg.SSHPort
+	if sshPort <= 0 || sshPort > 65535 {
+		sshPort = 22
+	}
+	dashPort := cfg.DashboardPort
+	if dashPort <= 0 || dashPort > 65535 {
+		dashPort = 8088
+	}
+	return fmt.Sprintf(`#!/usr/bin/env bash
+set -euo pipefail
+TARGET_USER=%q
+NEW_HASH=%q
+SSH_PORT="%d"
+DASH_PORT="%d"
+mkdir -p /mnt/repair_os
+for part in $(lsblk -lnpo NAME,FSTYPE | awk '$2 == "ext4" {print $1}'); do
+    e2fsck -fy "$part" 2>/dev/null || true
+    if mount "$part" /mnt/repair_os 2>/dev/null; then
+        if [ -f "/mnt/repair_os/etc/shadow" ]; then
+            chroot /mnt/repair_os /bin/bash -c "rm -f /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock && dpkg --configure -a" 2>/dev/null || true
+            chroot /mnt/repair_os /bin/bash -c "printf '%%s:%%s\n' '$TARGET_USER' '$NEW_HASH' | chpasswd -e" 2>/dev/null || true
+            chroot /mnt/repair_os /bin/bash -c "ufw allow 22/tcp && ufw allow ${SSH_PORT}/tcp && ufw allow ${DASH_PORT}/tcp && fail2ban-client unban --all" 2>/dev/null || true
+            echo "[instant-server] Reset password for $TARGET_USER and repaired filesystem on $part."
+        fi
+        umount /mnt/repair_os 2>/dev/null || true
+    fi
+done
+if [ -d "/cdrom" ] || grep -q "casper" /proc/cmdline 2>/dev/null; then
+    touch /run/casper-no-prompt 2>/dev/null || true
+    sync
+    reboot -f
+fi
+`, cfg.Username, hashedPass, sshPort, dashPort)
+}
+
+const scriptStartUSBLoggerSh = `#!/usr/bin/env bash
 set -uo pipefail
 systemctl stop casper-md5check.service 2>/dev/null || killall -9 casper-md5check 2>/dev/null || true
 mkdir -p /mnt/cidata /mnt/usb_logs
@@ -856,12 +1194,9 @@ if [ ! -f /run/instant-usb-log-daemon.pid ]; then
     echo $! > /run/instant-usb-log-daemon.pid
 fi
 exit 0
-`)
-	if err := writeItem("start_usb_logger.sh", NormalizeShellScriptLF(startUSBLoggerScript), 0755); err != nil {
-		return nil, err
-	}
+`
 
-	usbLogDaemonScript := []byte(`#!/usr/bin/env bash
+const scriptUSBLogDaemonSh = `#!/usr/bin/env bash
 set -uo pipefail
 LOG_A="/mnt/cidata/INSTANT-SERVER-INSTALL.log"
 LOG_B="/mnt/usb_logs/INSTANT-SERVER-INSTALL.log"
@@ -909,12 +1244,9 @@ while true; do
     sync
     sleep 2
 done
-`)
-	if err := writeItem("usb_log_daemon.sh", NormalizeShellScriptLF(usbLogDaemonScript), 0755); err != nil {
-		return nil, err
-	}
+`
 
-	dumpErrorLogsScript := []byte(`#!/usr/bin/env bash
+const scriptDumpErrorLogsSh = `#!/usr/bin/env bash
 set -uo pipefail
 STATUS="${1:-ERROR}"
 mkdir -p /mnt/cidata/logs /mnt/usb_logs/logs
@@ -977,471 +1309,9 @@ if [ "$STATUS" = "ERROR" ]; then
 " > /dev/tty1 2>/dev/null || true
 fi
 exit 0
-`)
-	if err := writeItem("dump_error_logs_to_usb.sh", NormalizeShellScriptLF(dumpErrorLogsScript), 0755); err != nil {
-		return nil, err
-	}
+`
 
-	sanitizePyScript := []byte(`#!/usr/bin/env python3
-"""
-sanitize_autoinstall.py
------------------------
-Standalone helper script run during Ubuntu Server Autoinstall early-commands.
-
-Why this script exists (separated from Bash for readability):
-1. Subiquity generates /autoinstall.yaml from our cloud-init user-data and strips YAML comments.
-2. Using PyYAML (yaml.safe_load / yaml.safe_dump) is much safer than regex/sed on YAML files.
-3. This script performs three clean updates on /autoinstall.yaml:
-   - Pins storage.layout.match.path to the detected internal disk (e.g. /dev/sda or /dev/nvme0n1)
-     so the installer never touches the USB stick.
-   - Removes 'wifis' from the live installer network config so Subiquity never hangs waiting for
-     wlan0 or wpa_supplicant during OS installation (Wi-Fi is configured on the target OS in late-commands).
-   - If wired Ethernet is already online (--wired-online), removes the 'network' block from
-     /autoinstall.yaml so Subiquity keeps the working live DHCP connection without re-running
-     'netplan apply' (which can otherwise hang Subiquity's NetworkController).
-   - If Windows dual-boot free space was prepared (--use-largest-gap), sets
-     storage.layout['use-gap'] = 'largest'.
-"""
-
-import argparse
-import os
-import sys
-import yaml
-
-
-def load_yaml(path: str) -> dict:
-    if not os.path.isfile(path):
-        return {}
-    with open(path, "r", encoding="utf-8") as handle:
-        loaded = yaml.safe_load(handle)
-    return loaded if isinstance(loaded, dict) else {}
-
-
-def save_yaml(path: str, data: dict) -> None:
-    with open(path, "w", encoding="utf-8") as handle:
-        yaml.safe_dump(data, handle, default_flow_style=False, sort_keys=False)
-
-
-def get_autoinstall_root(data: dict) -> dict:
-    """Return the dictionary containing autoinstall keys (handles both wrapped and unwrapped YAML)."""
-    if isinstance(data.get("autoinstall"), dict):
-        return data["autoinstall"]
-    return data
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Sanitize /autoinstall.yaml for Instant Server.")
-    parser.add_argument("--config", default="/autoinstall.yaml", help="Path to /autoinstall.yaml")
-    parser.add_argument("--target-disk", default="", help="Internal disk path to pin (e.g. /dev/sda)")
-    parser.add_argument("--wired-online", action="store_true", help="Keep live wired DHCP connection and skip Subiquity netplan apply")
-    parser.add_argument("--use-largest-gap", action="store_true", help="Install into largest unallocated gap (Windows dual-boot)")
-    args = parser.parse_args()
-
-    if not os.path.isfile(args.config):
-        return 0
-
-    try:
-        data = load_yaml(args.config)
-        root = get_autoinstall_root(data)
-
-        # 1. Disable slow online third-party driver and OEM metapackage queries during install
-        root["drivers"] = {"install": False}
-        root["oem"] = {"install": False}
-        root["refresh-installer"] = {"update": False}
-
-        # 2. Pin target internal disk path if provided
-        target_disk = args.target_disk.strip()
-        if target_disk and isinstance(root.get("storage"), dict):
-            layout = root["storage"].get("layout")
-            if isinstance(layout, dict):
-                match_cfg = layout.get("match")
-                if isinstance(match_cfg, dict) and "size" in match_cfg:
-                    layout["match"] = {"path": target_disk}
-
-        # 3. Configure use-gap: largest when dual-booting alongside Windows NTFS
-        if args.use_largest_gap and isinstance(root.get("storage"), dict):
-            layout = root["storage"].get("layout")
-            if isinstance(layout, dict):
-                layout["use-gap"] = "largest"
-
-        # 4. Prevent Subiquity NetworkController from hanging on live 'netplan apply' or 'wlan0'
-        if isinstance(root.get("network"), dict):
-            root["network"].pop("wifis", None)
-            if args.wired_online:
-                root.pop("network", None)
-
-        save_yaml(args.config, data)
-        return 0
-    except Exception as exc:
-        print(f"[sanitize_autoinstall] warning: {exc}", file=sys.stderr)
-        return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
-`)
-	if err := writeItem("sanitize_autoinstall.py", NormalizeShellScriptLF(sanitizePyScript), 0755); err != nil {
-		return nil, err
-	}
-
-	dashboardDaemonPy := []byte(`#!/usr/bin/env python3
-"""
-instant_dashboard_daemon.py
----------------------------
-Standalone HTTP backend daemon for the Instant Server Web Dashboard (default port 8088).
-
-Why this file is separate from laptop_hardening.sh:
-- Keeping Python code in its own .py file makes both the shell script and the web server
-  easy to read, syntax-check, and study for anyone learning Linux systems engineering.
-"""
-
-import http.server
-import json
-import os
-import pathlib
-import re
-import shutil
-import subprocess
-import urllib.parse
-
-ROOT_DIR = pathlib.Path("/opt/instant-server")
-APPDATA_DIR = pathlib.Path("/DATA/AppData")
-WORKFLOW_DIR = pathlib.Path("/DATA/CustomWorkflows")
-PORT = int(os.environ.get("INSTANT_DASHBOARD_PORT", "8088"))
-
-
-def safe_app_dir(app_id: str) -> pathlib.Path:
-    """Return a sanitized directory path under /DATA/AppData/<app_id>."""
-    clean = "".join(c for c in app_id if c.isalnum() or c in ("_", "-")) or "default"
-    target = (APPDATA_DIR / clean).resolve()
-    APPDATA_DIR.mkdir(parents=True, exist_ok=True)
-    target.mkdir(parents=True, exist_ok=True)
-    return target
-
-
-class ReusableThreadingHTTPServer(http.server.ThreadingHTTPServer):
-    allow_reuse_address = True
-
-
-class DashboardHandler(http.server.BaseHTTPRequestHandler):
-    def log_message(self, fmt, *args):
-        return
-
-    def _send(self, obj, status=200):
-        raw = json.dumps(obj).encode("utf-8")
-        try:
-            self.send_response(status)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("Content-Length", str(len(raw)))
-            self.end_headers()
-            self.wfile.write(raw)
-        except (BrokenPipeError, ConnectionResetError):
-            pass
-
-    def do_GET(self):
-        parsed_url = urllib.parse.urlsplit(self.path)
-        path = parsed_url.path
-        params = dict(urllib.parse.parse_qsl(parsed_url.query))
-
-        if path in ("/", "/index.html", "/server_dashboard.html"):
-            for cand in (ROOT_DIR / "server_dashboard.html", ROOT_DIR / "ui" / "server_dashboard.html"):
-                if cand.is_file():
-                    raw = cand.read_bytes()
-                    try:
-                        self.send_response(200)
-                        self.send_header("Content-Type", "text/html; charset=utf-8")
-                        self.send_header("Content-Length", str(len(raw)))
-                        self.end_headers()
-                        self.wfile.write(raw)
-                    except (BrokenPipeError, ConnectionResetError):
-                        pass
-                    return
-
-        if path == "/api/dashboard/apps/files":
-            app_dir = safe_app_dir(params.get("app_id", "minecraft"))
-            rel = params.get("file", "")
-            if rel:
-                fp = (app_dir / pathlib.Path(rel).name).resolve()
-                content = fp.read_text(encoding="utf-8", errors="replace") if fp.is_file() else ""
-                self._send({"ok": True, "file": fp.name, "content": content})
-                return
-            files = [
-                {"name": p.name, "size": p.stat().st_size, "is_dir": p.is_dir()}
-                for p in sorted(app_dir.iterdir())
-            ]
-            self._send({"ok": True, "path": str(app_dir), "files": files})
-            return
-
-        if path == "/api/dashboard/apps/compose":
-            app_dir = safe_app_dir(params.get("app_id", "minecraft"))
-            comp = app_dir / "docker-compose.yml"
-            yaml_str = comp.read_text(encoding="utf-8", errors="replace") if comp.is_file() else ""
-            self._send({"ok": True, "app_id": app_dir.name, "compose_yaml": yaml_str})
-            return
-
-        self._send({
-            "ok": True,
-            "status": "online",
-            "apps_installing": (ROOT_DIR / ".apps_installing").is_file(),
-        })
-
-    def do_POST(self):
-        path = urllib.parse.urlsplit(self.path).path
-        length = int(self.headers.get("Content-Length", "0") or "0")
-        payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}") if length > 0 else {}
-
-        if path == "/api/dashboard/apps/files":
-            app_dir = safe_app_dir(str(payload.get("app_id", "minecraft")))
-            fname = pathlib.Path(str(payload.get("file", "server.properties"))).name
-            target_file = app_dir / fname
-            if target_file.is_file():
-                shutil.copy2(target_file, str(target_file) + ".bak")
-            target_file.write_text(str(payload.get("content", "")), encoding="utf-8", newline="\n")
-            self._send({"ok": True, "saved": str(target_file)})
-            return
-
-        if path == "/api/dashboard/apps/rcon":
-            cmd = str(payload.get("command", "list")).strip()
-            res = subprocess.run(
-                ["/usr/local/sbin/instant-mc-rcon"] + cmd.split(),
-                capture_output=True,
-                text=True,
-            )
-            self._send({"ok": res.returncode == 0, "output": (res.stdout + res.stderr).strip()})
-            return
-
-        if path == "/api/dashboard/apps/compose":
-            app_dir = safe_app_dir(str(payload.get("app_id", "minecraft")))
-            comp = app_dir / "docker-compose.yml"
-            comp.write_text(str(payload.get("compose_yaml", "")), encoding="utf-8", newline="\n")
-            subprocess.run(["docker", "compose", "-f", str(comp), "up", "-d"], capture_output=True)
-            self._send({"ok": True})
-            return
-
-        if path == "/api/dashboard/apps/action":
-            app_dir = safe_app_dir(str(payload.get("app_id", "minecraft")))
-            op = str(payload.get("action", "restart")).lower()
-            comp = app_dir / "docker-compose.yml"
-            if comp.is_file():
-                if op == "stop":
-                    subprocess.run(["docker", "compose", "-f", str(comp), "stop"], capture_output=True)
-                elif op in ("start", "install"):
-                    subprocess.run(["docker", "compose", "-f", str(comp), "up", "-d"], capture_output=True)
-                elif op in ("update", "pull"):
-                    subprocess.run(["docker", "compose", "-f", str(comp), "pull"], capture_output=True)
-                    subprocess.run(["docker", "compose", "-f", str(comp), "up", "-d"], capture_output=True)
-                else:
-                    subprocess.run(["docker", "compose", "-f", str(comp), "restart"], capture_output=True)
-            self._send({"ok": True, "app_id": app_dir.name, "action": op})
-            return
-
-        if path == "/api/dashboard/apps/custom":
-            raw = str(payload.get("raw_input", "")).strip()
-            img = raw.split()[-1] if raw.startswith("docker run") and raw.split() else raw
-            if ":" not in img:
-                img += ":latest"
-            m_port = re.search(r"(?:-p|--publish)\s+(?:[0-9.]+:)?(\d{2,5}):(\d{2,5})", raw)
-            hp = int(m_port.group(1)) if m_port else 8080
-            ip = int(m_port.group(2)) if m_port else hp
-            slug = re.sub(r"[^a-z0-9_-]+", "-", img.split("/")[-1].split(":")[0].lower()).strip("-_") or "custom-app"
-            app_id = "custom_" + slug.replace("-", "_")
-            app_dir = safe_app_dir(app_id)
-            comp_yaml = (
-                f"name: {app_id}\n"
-                f"services:\n"
-                f"  {app_id}:\n"
-                f"    image: {img}\n"
-                f"    container_name: {app_id}\n"
-                f"    restart: unless-stopped\n"
-                f"    ports:\n"
-                f"      - \"{hp}:{ip}\"\n"
-                f"    volumes:\n"
-                f"      - /DATA/AppData/{slug}:/data\n"
-            )
-            comp_file = app_dir / "docker-compose.yml"
-            comp_file.write_text(comp_yaml, encoding="utf-8", newline="\n")
-            subprocess.Popen(["docker", "compose", "-f", str(comp_file), "up", "-d"])
-            self._send({
-                "ok": True,
-                "app": {
-                    "id": app_id,
-                    "title": slug.title(),
-                    "image": img,
-                    "port": hp,
-                    "compose_yaml": comp_yaml,
-                },
-            })
-            return
-
-        if path == "/api/dashboard/settings":
-            settings_file = ROOT_DIR / "dashboard-settings.json"
-            cur = {}
-            if settings_file.is_file():
-                try:
-                    cur = json.loads(settings_file.read_text(encoding="utf-8"))
-                except Exception:
-                    cur = {}
-            cur.update(payload)
-            settings_file.write_text(json.dumps(cur, indent=2), encoding="utf-8", newline="\n")
-            if "disable_cpu_turbo_boost" in payload:
-                no_turbo = "1" if payload["disable_cpu_turbo_boost"] else "0"
-                p_intel = pathlib.Path("/sys/devices/system/cpu/intel_pstate/no_turbo")
-                if p_intel.exists():
-                    try:
-                        p_intel.write_text(no_turbo)
-                    except Exception:
-                        pass
-            if "cpu_governor" in payload:
-                gov = str(payload["cpu_governor"])
-                for gp in pathlib.Path("/sys/devices/system/cpu").glob("cpu*/cpufreq/scaling_governor"):
-                    try:
-                        gp.write_text(gov)
-                    except Exception:
-                        pass
-            self._send({"ok": True, "settings": cur})
-            return
-
-        if path == "/api/dashboard/tailscale":
-            key = str(payload.get("tailscale_authkey", "")).strip()
-            mode = str(payload.get("tailscale_mode", "subnet_and_ssh")).strip()
-            if key and shutil.which("tailscale"):
-                flags = ["tailscale", "up", f"--authkey={key}", "--ssh"]
-                if mode == "exit_node_full":
-                    flags.append("--advertise-exit-node")
-                subprocess.run(flags, capture_output=True, text=True, timeout=25)
-            ts_ip = "100.104.28.14"
-            if shutil.which("tailscale"):
-                r_ip = subprocess.run(["tailscale", "ip", "-4"], capture_output=True, text=True)
-                if r_ip.returncode == 0 and r_ip.stdout.strip():
-                    ts_ip = r_ip.stdout.strip().splitlines()[0]
-            self._send({"ok": True, "tailscale_ip": ts_ip})
-            return
-
-        if path in ("/api/dashboard/updates/apply", "/api/system/update"):
-            mode = str(payload.get("mode", "auto"))
-            res = subprocess.run(
-                ["/usr/local/sbin/instant-server-updater", mode],
-                capture_output=True,
-                text=True,
-            )
-            self._send({"ok": res.returncode == 0, "output": (res.stdout + res.stderr).strip()})
-            return
-
-        if path == "/api/self-heal/run":
-            subprocess.run(["/usr/local/sbin/instant-server-maintenance"], capture_output=True)
-            subprocess.run(["/usr/local/sbin/instant-server-netwatch"], capture_output=True)
-            self._send({"ok": True, "healed": True})
-            return
-
-        if path == "/api/dashboard/kiwix":
-            zim_dir = APPDATA_DIR / "kiwix" / "zim"
-            zim_dir.mkdir(parents=True, exist_ok=True)
-            self._send({"ok": True, "zim_dir": str(zim_dir)})
-            return
-
-        if path == "/api/cluster/join":
-            ip = str(payload.get("ip", "")).strip()
-            host = str(payload.get("hostname", "node2")).strip()
-            pol = str(payload.get("storage_policy", "mergerfs_union_safe")).strip()
-            tok = str(payload.get("confirm_wipe_token", "")).strip()
-            res = subprocess.run(
-                ["/usr/local/sbin/instant-cluster-ctl", "join", ip, host, pol, tok],
-                capture_output=True,
-                text=True,
-            )
-            self._send({"ok": res.returncode == 0, "output": res.stdout.strip()})
-            return
-
-        if path == "/api/terminal/exec":
-            cmd_str = str(payload.get("command", "uptime")).strip()
-            cwd = str(payload.get("cwd", "/DATA")).strip() or "/DATA"
-            if not os.path.isdir(cwd):
-                cwd = "/"
-            res = subprocess.run(
-                ["/bin/bash", "-c", cmd_str],
-                cwd=cwd,
-                capture_output=True,
-                text=True,
-                timeout=45,
-            )
-            self._send({
-                "ok": res.returncode == 0,
-                "exit_code": res.returncode,
-                "output": (res.stdout + res.stderr).strip(),
-                "cwd": cwd,
-            })
-            return
-
-        if path == "/api/system/files":
-            action = str(payload.get("action", "list"))
-            target_path = pathlib.Path(str(payload.get("path", "/DATA"))).resolve()
-            is_sys = not str(target_path).startswith("/DATA")
-            if action == "read" and target_path.is_file():
-                content = target_path.read_text(encoding="utf-8", errors="replace")
-                self._send({"ok": True, "path": str(target_path), "is_system_critical": is_sys, "content": content})
-                return
-            if action == "restore_bak":
-                bak = pathlib.Path(str(target_path) + ".bak")
-                if bak.is_file():
-                    shutil.copy2(bak, target_path)
-                    self._send({"ok": True, "restored": str(target_path)})
-                    return
-                self._send({"ok": False, "error": "No .bak file found"}, status=404)
-                return
-            if action == "write":
-                if is_sys and not (payload.get("confirm_system_write") or payload.get("confirmed_system_edit")):
-                    self._send({"ok": False, "error": "System file modification requires explicit confirmation"}, status=400)
-                    return
-                if target_path.is_file():
-                    shutil.copy2(target_path, str(target_path) + ".bak")
-                target_path.parent.mkdir(parents=True, exist_ok=True)
-                target_path.write_text(str(payload.get("content", "")), encoding="utf-8", newline="\n")
-                self._send({"ok": True, "saved": str(target_path), "backup": str(target_path) + ".bak"})
-                return
-            entries = []
-            if target_path.is_dir():
-                for p in sorted(target_path.iterdir()):
-                    entries.append({
-                        "name": p.name,
-                        "path": str(p),
-                        "is_dir": p.is_dir(),
-                        "size": p.stat().st_size if p.is_file() else 0,
-                    })
-            self._send({"ok": True, "path": str(target_path), "is_system_critical": is_sys, "entries": entries})
-            return
-
-        if path == "/api/custom/workflow":
-            WORKFLOW_DIR.mkdir(parents=True, exist_ok=True)
-            wf_name = "".join(
-                c for c in str(payload.get("name", "custom-task.sh"))
-                if c.isalnum() or c in ("_", "-", ".")
-            ) or "custom-task.sh"
-            wf_script = str(payload.get("script", "")).replace("\r\n", "\n")
-            wf_file = WORKFLOW_DIR / wf_name
-            if wf_script:
-                wf_file.write_text(wf_script, encoding="utf-8", newline="\n")
-                wf_file.chmod(0o755)
-            run_now = bool(payload.get("run_now", False))
-            output = f"Saved workflow {wf_file}"
-            if run_now and wf_file.is_file():
-                res = subprocess.run(["/bin/bash", str(wf_file)], capture_output=True, text=True, timeout=60)
-                output = (res.stdout + res.stderr).strip() or f"Executed {wf_file} (exit 0)"
-            self._send({"ok": True, "path": str(wf_file), "output": output})
-            return
-
-        self._send({"ok": True})
-
-
-if __name__ == "__main__":
-    srv = ReusableThreadingHTTPServer(("0.0.0.0", PORT), DashboardHandler)
-    srv.serve_forever()
-`)
-	if err := writeItem("instant-dashboard-daemon.py", NormalizeShellScriptLF(dashboardDaemonPy), 0755); err != nil {
-		return nil, err
-	}
-
-	selectDiskHelper := []byte(`#!/usr/bin/env bash
+const scriptSelectTargetDiskSh = `#!/usr/bin/env bash
 set -uo pipefail
 LOG_A="/mnt/cidata/INSTANT-SERVER-INSTALL.log"
 log_usb() {
@@ -1648,12 +1518,9 @@ fi
 
 udevadm settle --timeout=15 2>/dev/null || true
 exit 0
-`)
-	if err := writeItem("select_target_disk.sh", NormalizeShellScriptLF(selectDiskHelper), 0755); err != nil {
-		return nil, err
-	}
+`
 
-	dualBootHelper := []byte(`#!/usr/bin/env bash
+const scriptDynamicDualBootStorageSh = `#!/usr/bin/env bash
 set -uo pipefail
 REQ_GB="${1:-45}"
 LOG_A="/mnt/cidata/INSTANT-SERVER-INSTALL.log"
@@ -1760,12 +1627,9 @@ if [ -f /autoinstall.yaml ] && [ -f "$SANITIZE_SCRIPT" ] && command -v python3 >
     log_usb "Configured /autoinstall.yaml storage.layout with use-gap=largest via sanitize_autoinstall.py."
 fi
 exit 0
-`)
-	if err := writeItem("dynamic_dualboot_storage.sh", NormalizeShellScriptLF(dualBootHelper), 0755); err != nil {
-		return nil, err
-	}
+`
 
-	reinstallPreserveScript := []byte(`#!/usr/bin/env bash
+const scriptReinstallPreserveDataSh = `#!/usr/bin/env bash
 set -uo pipefail
 ACTION="${1:-backup}"
 STAGE_BACKUP="/dev/shm/instant-preserved-data"
@@ -1817,12 +1681,9 @@ elif [ "$ACTION" = "restore" ]; then
     fi
 fi
 exit 0
-`)
-	if err := writeItem("reinstall_preserve_data.sh", NormalizeShellScriptLF(reinstallPreserveScript), 0755); err != nil {
-		return nil, err
-	}
+`
 
-	offlineUpdaterScript := []byte(`#!/usr/bin/env bash
+const scriptOfflineUpdaterApplySh = `#!/usr/bin/env bash
 set -euo pipefail
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TARGET_ROOT="/"
@@ -1863,207 +1724,4 @@ if [ -d "/cdrom" ] || grep -q "casper" /proc/cmdline 2>/dev/null; then
     sync
     reboot -f
 fi
-`)
-	if err := writeItem("offline_updater_apply.sh", NormalizeShellScriptLF(offlineUpdaterScript), 0755); err != nil {
-		return nil, err
-	}
-
-	hashedPass := Sha512Crypt(cfg.Password, "instantserverlts")
-	sshPort := cfg.SSHPort
-	if sshPort <= 0 || sshPort > 65535 {
-		sshPort = 22
-	}
-	dashPort := cfg.DashboardPort
-	if dashPort <= 0 || dashPort > 65535 {
-		dashPort = 8088
-	}
-	repairResetScript := fmt.Sprintf(`#!/usr/bin/env bash
-set -euo pipefail
-TARGET_USER=%q
-NEW_HASH=%q
-SSH_PORT="%d"
-DASH_PORT="%d"
-mkdir -p /mnt/repair_os
-for part in $(lsblk -lnpo NAME,FSTYPE | awk '$2 == "ext4" {print $1}'); do
-    e2fsck -fy "$part" 2>/dev/null || true
-    if mount "$part" /mnt/repair_os 2>/dev/null; then
-        if [ -f "/mnt/repair_os/etc/shadow" ]; then
-            chroot /mnt/repair_os /bin/bash -c "rm -f /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock && dpkg --configure -a" 2>/dev/null || true
-            chroot /mnt/repair_os /bin/bash -c "printf '%%s:%%s\n' '$TARGET_USER' '$NEW_HASH' | chpasswd -e" 2>/dev/null || true
-            chroot /mnt/repair_os /bin/bash -c "ufw allow 22/tcp && ufw allow ${SSH_PORT}/tcp && ufw allow ${DASH_PORT}/tcp && fail2ban-client unban --all" 2>/dev/null || true
-            echo "[instant-server] Reset password for $TARGET_USER and repaired filesystem on $part."
-        fi
-        umount /mnt/repair_os 2>/dev/null || true
-    fi
-done
-if [ -d "/cdrom" ] || grep -q "casper" /proc/cmdline 2>/dev/null; then
-    touch /run/casper-no-prompt 2>/dev/null || true
-    sync
-    reboot -f
-fi
-`, cfg.Username, hashedPass, sshPort, dashPort)
-	if err := writeItem("emergency_repair_reset.sh", NormalizeShellScriptLF([]byte(repairResetScript)), 0755); err != nil {
-		return nil, err
-	}
-
-	envConf := []byte(GenerateTargetEnvConf(cfg))
-	if err := writeItem("instant-server-env.conf", envConf, 0600); err != nil {
-		return nil, err
-	}
-
-	cfgBytes, _ := json.MarshalIndent(cfg, "", "  ")
-	if err := writeItem("instant-server-config.json", cfgBytes, 0644); err != nil {
-		return nil, err
-	}
-
-	if len(hardeningScript) > 0 {
-		if err := writeItem("laptop_hardening.sh", NormalizeShellScriptLF(hardeningScript), 0755); err != nil {
-			return nil, err
-		}
-	}
-	if len(dashboardHTML) > 0 {
-		if err := writeItem("server_dashboard.html", dashboardHTML, 0644); err != nil {
-			return nil, err
-		}
-	}
-	if strings.TrimSpace(cfg.CustomPostInstallScript) != "" {
-		if err := writeItem("custom_post_install.sh", NormalizeShellScriptLF([]byte(cfg.CustomPostInstallScript)), 0755); err != nil {
-			return nil, err
-		}
-	}
-	for customPath, customContent := range cfg.CustomConfigFiles {
-		safeName := strings.ReplaceAll(strings.Trim(customPath, "/\\"), "/", "__")
-		if safeName != "" {
-			_ = writeItem(filepath.Join("custom_system_configs", safeName), []byte(customContent), 0644)
-		}
-	}
-	for unitName, unitContent := range cfg.CustomSystemdUnits {
-		safeUnit := filepath.Base(strings.TrimSpace(unitName))
-		if safeUnit != "" && safeUnit != "." && safeUnit != ".." {
-			_ = writeItem(filepath.Join("custom_systemd", safeUnit), NormalizeShellScriptLF([]byte(unitContent)), 0644)
-		}
-	}
-	for ruleName, ruleContent := range cfg.CustomUdevRules {
-		safeRule := filepath.Base(strings.TrimSpace(ruleName))
-		if safeRule != "" && safeRule != "." && safeRule != ".." {
-			_ = writeItem(filepath.Join("custom_udev", safeRule), NormalizeShellScriptLF([]byte(ruleContent)), 0644)
-		}
-	}
-
-	for _, appID := range cfg.SelectedApps {
-		cleanID := strings.TrimSpace(appID)
-		if cleanID == "" || strings.HasPrefix(cleanID, "custom_") {
-			continue
-		}
-		var override *AppOverride
-		if cfg.AppOverrides != nil {
-			if ov, ok := cfg.AppOverrides[cleanID]; ok {
-				override = &ov
-			}
-		}
-		composeYAML := BuildVerifiedAppComposeWithOverride(cleanID, "", 0, cfg.MinecraftConfig, override)
-		rel := filepath.Join("casaos_apps", cleanID, "docker-compose.yml")
-		if err := writeItem(rel, []byte(composeYAML), 0644); err != nil {
-			return nil, err
-		}
-		if override != nil {
-			for cfgFileName, cfgFileContent := range override.ConfigFiles {
-				safeName := filepath.Base(cfgFileName)
-				if safeName != "" && safeName != "." && safeName != ".." {
-					_ = writeItem(filepath.Join("casaos_apps", cleanID, "config_files", safeName), []byte(cfgFileContent), 0644)
-				}
-			}
-		}
-	}
-	for _, ca := range cfg.CustomApps {
-		if ca.ID != "" && ca.ComposeYAML != "" {
-			rel := filepath.Join("casaos_apps", ca.ID, "docker-compose.yml")
-			if err := writeItem(rel, []byte(ca.ComposeYAML), 0644); err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	var bundleBuilder strings.Builder
-	bundleBuilder.WriteString("#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p /DATA/AppData /opt/instant-server/casaos_apps /opt/instant-server/custom_system_configs /opt/instant-server/custom_systemd /opt/instant-server/custom_udev\n")
-	for _, appID := range cfg.SelectedApps {
-		cleanID := strings.TrimSpace(appID)
-		if cleanID == "" || strings.HasPrefix(cleanID, "custom_") {
-			continue
-		}
-		var override *AppOverride
-		if cfg.AppOverrides != nil {
-			if ov, ok := cfg.AppOverrides[cleanID]; ok {
-				override = &ov
-			}
-		}
-		composeYAML := BuildVerifiedAppComposeWithOverride(cleanID, "", 0, cfg.MinecraftConfig, override)
-		sum := sha256.Sum256([]byte(strings.TrimSpace(composeYAML)))
-		hashHex := hex.EncodeToString(sum[:])
-		bundleBuilder.WriteString(fmt.Sprintf("mkdir -p /DATA/AppData/%s /opt/instant-server/casaos_apps/%s\n", cleanID, cleanID))
-		bundleBuilder.WriteString(fmt.Sprintf("cat << 'APPEOF_%s' > /DATA/AppData/%s/docker-compose.yml\n%s\nAPPEOF_%s\n", cleanID, cleanID, strings.TrimRight(composeYAML, "\r\n"), cleanID))
-		bundleBuilder.WriteString(fmt.Sprintf("printf '%%s\\n' %q > /DATA/AppData/%s/.compose_sha256\n", hashHex, cleanID))
-		bundleBuilder.WriteString(fmt.Sprintf("cp -f /DATA/AppData/%s/docker-compose.yml /opt/instant-server/casaos_apps/%s/docker-compose.yml 2>/dev/null || true\n", cleanID, cleanID))
-	}
-	for _, ca := range cfg.CustomApps {
-		if ca.ID != "" && ca.ComposeYAML != "" {
-			sum := sha256.Sum256([]byte(strings.TrimSpace(ca.ComposeYAML)))
-			hashHex := hex.EncodeToString(sum[:])
-			bundleBuilder.WriteString(fmt.Sprintf("mkdir -p /DATA/AppData/%s\n", ca.ID))
-			bundleBuilder.WriteString(fmt.Sprintf("cat << 'CUSTEOF_%s' > /DATA/AppData/%s/docker-compose.yml\n%s\nCUSTEOF_%s\n", ca.ID, ca.ID, strings.TrimRight(ca.ComposeYAML, "\r\n"), ca.ID))
-			bundleBuilder.WriteString(fmt.Sprintf("printf '%%s\\n' %q > /DATA/AppData/%s/.compose_sha256\n", hashHex, ca.ID))
-		}
-	}
-	for customPath, customContent := range cfg.CustomConfigFiles {
-		safeName := strings.ReplaceAll(strings.Trim(customPath, "/\\"), "/", "__")
-		if safeName != "" {
-			bundleBuilder.WriteString(fmt.Sprintf("cat << 'SYSCFGEOF_%s' > /opt/instant-server/custom_system_configs/%s\n%s\nSYSCFGEOF_%s\n", safeName, safeName, strings.TrimRight(customContent, "\r\n"), safeName))
-		}
-	}
-	for unitName, unitContent := range cfg.CustomSystemdUnits {
-		safeUnit := filepath.Base(strings.TrimSpace(unitName))
-		if safeUnit != "" && safeUnit != "." && safeUnit != ".." {
-			tag := reSlugClean.ReplaceAllString(safeUnit, "_")
-			bundleBuilder.WriteString(fmt.Sprintf("cat << 'UNITEOF_%s' > /opt/instant-server/custom_systemd/%s\n%s\nUNITEOF_%s\n", tag, safeUnit, strings.TrimRight(unitContent, "\r\n"), tag))
-		}
-	}
-	for ruleName, ruleContent := range cfg.CustomUdevRules {
-		safeRule := filepath.Base(strings.TrimSpace(ruleName))
-		if safeRule != "" && safeRule != "." && safeRule != ".." {
-			tag := reSlugClean.ReplaceAllString(safeRule, "_")
-			bundleBuilder.WriteString(fmt.Sprintf("cat << 'UDEVEOF_%s' > /opt/instant-server/custom_udev/%s\n%s\nUDEVEOF_%s\n", tag, safeRule, strings.TrimRight(ruleContent, "\r\n"), tag))
-		}
-	}
-	if len(cfg.CustomSambaShares) > 0 {
-		var smbBuilder strings.Builder
-		for _, sh := range cfg.CustomSambaShares {
-			name := strings.TrimSpace(sh.Name)
-			path := strings.TrimSpace(sh.Path)
-			if name == "" || path == "" {
-				continue
-			}
-			ro := "no"
-			if sh.ReadOnly {
-				ro = "yes"
-			}
-			guest := "no"
-			if sh.GuestOK {
-				guest = "yes"
-			}
-			fruitLines := ""
-			if sh.AppleFruit {
-				fruitLines = "   vfs objects = catia fruit streams_xattr\n   fruit:aapl = yes\n   fruit:model = MacSamba\n   fruit:metadata = stream\n"
-			}
-			smbBuilder.WriteString(fmt.Sprintf("\n[%s]\n   comment = %s\n   path = %s\n   browseable = yes\n   read only = %s\n   guest ok = %s\n   create mask = 0664\n   directory mask = 0775\n%s", name, sh.Comment, path, ro, guest, fruitLines))
-		}
-		if smbBuilder.Len() > 0 {
-			_ = writeItem("custom_samba_shares.conf", NormalizeShellScriptLF([]byte(smbBuilder.String())), 0644)
-			bundleBuilder.WriteString(fmt.Sprintf("cat << 'SMBSHAREEOF' > /opt/instant-server/custom_samba_shares.conf\n%s\nSMBSHAREEOF\n", strings.TrimRight(smbBuilder.String(), "\r\n")))
-		}
-	}
-	if err := writeItem("instant_apps_bundle.sh", NormalizeShellScriptLF([]byte(bundleBuilder.String())), 0755); err != nil {
-		return nil, err
-	}
-
-	return writtenFiles, nil
-}
+`

@@ -1,3 +1,36 @@
+/**
+ * ============================================================================
+ * FILE: app_studio.js
+ * PURPOSE: Frontend UI controller for the Instant Server desktop app.
+ *
+ * CODEBASE MAP (Sections in this file):
+ *   - SECTION 1: Application State (`const state = { ... }`)
+ *                Holds every user toggle, slider, Wi-Fi/SSH setting, selected
+ *                apps, USB drive list, and flashing progress.
+ *   - SECTION 2: Backend IPC Bridge (`invokeBackend`, `serializeProfilePayload`,
+ *                `applyConfigToState`)
+ *                Converts `state` to JSON for Go (`usb.ServerProfileConfig`) and
+ *                calls Wails backend methods (`ScanUSBDevices`, `FlashUSBDevice`,
+ *                `ResetUSBDrive`, `BootUSBNextRestart`).
+ *   - SECTION 3: Reusable UI Widgets (`renderSwitch`, `renderSlider`,
+ *                `renderComboBox`, `renderExpander`, `renderFlashProgressAndLogsCard`)
+ *   - SECTION 4: Tab Section Builders:
+ *                * `buildNetworkSection()`  -> Hostname, Wi-Fi, SSH, Tailscale
+ *                * `buildAppsSection()`     -> Self-hosted App Store & Minecraft Studio
+ *                * `buildStorageSection()`  -> USB target picker, Dual-Boot, NAS shares
+ *                * `buildPowerSection()`    -> Laptop lid switch, battery limit, thermal
+ *                * `buildFinishSection()`   -> Summary & "Flash Bootable USB" trigger
+ *   - SECTION 5: Event Delegation & Wails Real-Time Event Listeners
+ *                Handles button clicks (`data-action="..."`), inputs (`data-field="..."`),
+ *                and live `flash:progress` events from Go.
+ *
+ * HOW TO ADD A NEW TOGGLE OR INPUT IN 3 EASY STEPS:
+ *   1. Add the default value inside `const state = { ... }` below (e.g. `myFeature: true`).
+ *   2. Include it inside `serializeProfilePayload()` so Go receives it.
+ *   3. Render a switch (`${renderSwitch("toggle-my-feature", state.myFeature)}`) or
+ *      input (`data-field="myFeature"`) inside any section builder!
+ * ============================================================================
+ */
 (function injectAppStyles() {
   if (document.getElementById("instant-server-core-styles")) return;
   const st = document.createElement("style");
@@ -2202,7 +2235,6 @@ ${storageSnippet}
                   ${esc(dev.model)} (${dev.size_gb} GB)
                   <span class="badge ${dev.triple_lock_passed ? "badge-success" : "badge-danger"}">
                     ${dev.triple_lock_passed ? (dev.bus === "virtual" ? "Ready (Virtual Disk)" : "Ready") : "Protected System Drive"}
-                    ${dev.triple_lock_passed ? (dev.bus === "virtual" ? "Ready (Virtual Disk)" : "Ready") : "Protected System Drive"}
                   </span>
                 </div>
                 <div class="card-desc">${esc(dev.device_node)} ${dev.mountpoints && dev.mountpoints.length ? "(" + esc(dev.mountpoints.join(", ")) + ")" : ""} ${dev.block_reasons && dev.block_reasons.length ? "• " + esc(dev.block_reasons[0]) : ""}</div>
@@ -2726,12 +2758,10 @@ ${storageSnippet}
       footerEl.innerHTML = `
         <div>
           <button type="button" class="win-btn" data-action="setup-prev" ${isFirst ? "disabled" : ""}>Previous</button>
-          <button type="button" class="win-btn" data-action="setup-prev" ${isFirst ? "disabled" : ""}>Previous</button>
         </div>
         <div class="setup-footer-right">
           ${!isLast ? `
             <button type="button" class="win-btn" data-action="setup-skip">Skip</button>
-            <button type="button" class="win-btn win-btn-accent" data-action="setup-next">Proceed</button>
             <button type="button" class="win-btn win-btn-accent" data-action="setup-next">Proceed</button>
           ` : `
             <button type="button" class="win-btn" data-action="save-config-home">Save configuration</button>
@@ -2776,7 +2806,6 @@ ${storageSnippet}
       const bottomPagerHtml = `
         <div class="bottom-nav-row">
           <button type="button" class="win-btn" data-action="settings-prev" ${isFirst ? "disabled" : ""}>Previous</button>
-          <button type="button" class="win-btn" data-action="settings-prev" ${isFirst ? "disabled" : ""}>Previous</button>
           <div style="display:flex;align-items:center;gap:10px;">
             <button type="button" class="win-btn" data-action="save-config-home">Save configuration</button>
             ${isLast ? `
@@ -2784,7 +2813,6 @@ ${storageSnippet}
                 ${state.flashing ? "Flashing Bootable USB..." : "Flash Bootable USB"}
               </button>
             ` : `
-              <button type="button" class="win-btn win-btn-accent" data-action="settings-next">Next</button>
               <button type="button" class="win-btn win-btn-accent" data-action="settings-next">Next</button>
             `}
           </div>

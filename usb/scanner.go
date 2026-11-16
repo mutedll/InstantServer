@@ -1,3 +1,19 @@
+// ============================================================================
+// FILE: usb/scanner.go
+// PURPOSE: Cross-platform USB & Virtual Disk (VHD/VHDX) scanner + Triple-Lock
+//
+//	Safety Guard (`EvaluateTripleLockSafety`).
+//
+// HOW TRIPLE-LOCK SAFETY PROTECTS YOUR OS DRIVE:
+//   - Lock 1 (Bus Check): Must be a `usb` or `virtual` (VHD/VHDX) bus.
+//   - Lock 2 (Removable / Virtual Check): Must be removable media or a virtual disk.
+//   - Lock 3 (Mount & Disk-0 Guard): Blocks `PhysicalDrive0`, `/dev/sda`, `/dev/nvme0n1`,
+//     `/dev/disk0`, `/dev/disk1`, `C:\`, `/`, `/boot`, and `/System/Volumes/Data`.
+//
+// HOW TO ALLOW A NEW VIRTUAL DISK EXTENSION:
+//   - Add the file extension in `isVirtualDiskBusOrNode()` below.
+//
+// ============================================================================
 // usb/scanner.go
 package usb
 

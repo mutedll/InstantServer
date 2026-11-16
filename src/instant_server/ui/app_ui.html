@@ -1,3 +1,17 @@
+<!--
+================================================================================
+FILE: app_ui.html
+PURPOSE: Main HTML shell and CSS design system for the Instant Server desktop studio.
+
+HOW THIS FILE CONNECTS TO JAVASCRIPT:
+  1. `<head>` defines all CSS variables (`--bg-canvas`, `--accent-blue`, etc.)
+     for Dark Mode (default) and Light Mode (`html[data-theme="light"]`).
+  2. `<body>` provides the top bar (`#btnThemeToggle`, `#globalSearchInput`),
+     and the root mount point `<div id="appRoot"></div>`.
+  3. Loads `./catalog_data.js` (app store & presets) and `./app_studio.js`
+     (state management, tab rendering, and Wails backend calls).
+================================================================================
+-->
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>

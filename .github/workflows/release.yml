@@ -44,134 +44,40 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config build-essential
 
-      - name: Prepare Directory Layout, Generate IS App Icons & Run Go Unit Tests
+      - name: Prepare Go Packages, Icons & Run Unit Tests
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p usb network privilege build/windows frontend/wailsjs/go/main src/instant_server/ui src/instant_server/scripts dist
           for f in flasher_common.go flasher_linux.go flasher_darwin.go flasher_windows.go scanner.go payload_builder.go catalog.go iso_downloader.go cidata_fat.go flasher_test.go; do
-            if [ -f "$f" ]; then
-              mv -f "$f" "usb/$f"
-            fi
+            [ -f "$f" ] && mv -f "$f" "usb/$f" || true
           done
           for f in mdns_discovery.go mdns_test.go; do
-            if [ -f "$f" ]; then
-              mv -f "$f" "network/$f"
-            fi
+            [ -f "$f" ] && mv -f "$f" "network/$f" || true
           done
           for f in escalate.go escalate_test.go; do
-            if [ -f "$f" ]; then
-              mv -f "$f" "privilege/$f"
-            fi
+            [ -f "$f" ] && mv -f "$f" "privilege/$f" || true
           done
-          [ -f "wails.exe.manifest" ] && [ ! -f "build/windows/wails.exe.manifest" ] && cp "wails.exe.manifest" "build/windows/wails.exe.manifest" || true
-          [ -f "app_ui.html" ] && [ ! -f "src/instant_server/ui/app_ui.html" ] && cp "app_ui.html" "src/instant_server/ui/app_ui.html" || true
-          [ -f "server_dashboard.html" ] && [ ! -f "src/instant_server/ui/server_dashboard.html" ] && cp "server_dashboard.html" "src/instant_server/ui/server_dashboard.html" || true
-          for ujf in catalog_data.js app_studio.js; do
-            [ -f "$ujf" ] && [ ! -f "src/instant_server/ui/$ujf" ] && cp "$ujf" "src/instant_server/ui/$ujf" || true
+          [ -f "wails.exe.manifest" ] && cp -f "wails.exe.manifest" "build/windows/wails.exe.manifest" || true
+          [ -f "appicon.png" ] && cp -f "appicon.png" "build/appicon.png" || true
+          [ -f "icon.ico" ] && cp -f "icon.ico" "build/windows/icon.ico" || true
+          for uif in app_ui.html server_dashboard.html catalog_data.js app_studio.js; do
+            [ -f "$uif" ] && cp -f "$uif" "src/instant_server/ui/$uif" || true
           done
-          [ -f "laptop_hardening.sh" ] && [ ! -f "src/instant_server/scripts/laptop_hardening.sh" ] && cp "laptop_hardening.sh" "src/instant_server/scripts/laptop_hardening.sh" || true
+          for scf in laptop_hardening.sh sanitize_autoinstall.py instant_dashboard_daemon.py; do
+            [ -f "$scf" ] && cp -f "$scf" "src/instant_server/scripts/$scf" || true
+          done
           sed -i 's/\r$//' src/instant_server/scripts/laptop_hardening.sh 2>/dev/null || true
 
-          # Generate crisp "IS" (Instant Server) build/appicon.png (512x512) and build/windows/icon.ico
-          # so Wails embeds the IS logo instead of the default Wails "W" icon
-          python3 -c '
-          import struct, zlib
-          def render_is_icon_png(size):
-              rows = []
-              radius, border, margin = int(size * 0.21), max(2, int(size * 0.045)), max(1, int(size * 0.03))
-              def in_rr(x, y, x0, y0, x1, y1, r):
-                  if x < x0 or x >= x1 or y < y0 or y >= y1: return False
-                  if x0 + r <= x < x1 - r or y0 + r <= y < y1 - r: return True
-                  cx = x0 + r if x < x0 + r else x1 - r - 1
-                  cy = y0 + r if y < y0 + r else y1 - r - 1
-                  return (x - cx) ** 2 + (y - cy) ** 2 <= r ** 2
-              def is_glyph(nx, ny):
-                  if 0.26 <= ny <= 0.335 and 0.20 <= nx <= 0.44: return True
-                  if 0.665 <= ny <= 0.74 and 0.20 <= nx <= 0.44: return True
-                  if 0.26 <= ny <= 0.74 and 0.285 <= nx <= 0.355: return True
-                  if 0.26 <= ny <= 0.335 and 0.50 <= nx <= 0.80: return True
-                  if 0.26 <= ny <= 0.538 and 0.50 <= nx <= 0.575: return True
-                  if 0.462 <= ny <= 0.538 and 0.50 <= nx <= 0.80: return True
-                  if 0.462 <= ny <= 0.74 and 0.725 <= nx <= 0.80: return True
-                  if 0.665 <= ny <= 0.74 and 0.50 <= nx <= 0.80: return True
-                  return False
-              x0, y0, x1, y1 = margin, margin, size - margin, size - margin
-              ix0, iy0, ix1, iy1, ir = x0 + border, y0 + border, x1 - border, y1 - border, max(2, radius - border)
-              for y in range(size):
-                  row = bytearray([0])
-                  ny = y / float(size)
-                  b_val = min(255, int(0x36 + (1.0 - ny) * 14))
-                  for x in range(size):
-                      nx = x / float(size)
-                      if not in_rr(x, y, x0, y0, x1, y1, radius): row.extend((0, 0, 0, 0))
-                      elif not in_rr(x, y, ix0, iy0, ix1, iy1, ir): row.extend((0x31, 0xA8, 0xFF, 255))
-                      elif is_glyph(nx, ny): row.extend((0x66, 0xC4, 0xFF, 255))
-                      else: row.extend((0x00, 0x1E, b_val, 255))
-                  rows.append(bytes(row))
-              raw = b"".join(rows)
-              def chunk(ct, d):
-                  c = ct + d
-                  return struct.pack(">I", len(d)) + c + struct.pack(">I", zlib.crc32(c) & 0xFFFFFFFF)
-              return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 6, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b"")
-          sizes = (256, 64, 48, 32, 16)
-          pngs = [render_is_icon_png(s) for s in sizes]
-          hdr = struct.pack("<HHH", 0, 1, len(sizes))
-          off = 6 + 16 * len(sizes)
-          dirs = []
-          for s, p in zip(sizes, pngs):
-              w = 0 if s >= 256 else s
-              dirs.append(struct.pack("<BBBBHHII", w, w, 0, 0, 1, 32, len(p), off))
-              off += len(p)
-          open("build/appicon.png", "wb").write(render_is_icon_png(512))
-          open("build/windows/icon.ico", "wb").write(hdr + b"".join(dirs) + b"".join(pngs))
-          '
-
-          # Self-heal any legacy test/FAT16 bounds or string formatting in usb/
-          python3 -c '
-          import os
-          ft = "usb/flasher_test.go"
-          if os.path.exists(ft):
-              s = open(ft, "r", encoding="utf-8").read()
-              s = s.replace("\"motd=Custom Server Properties\nonline-mode=false\n\"", "\"motd=Custom Server Properties\\nonline-mode=false\\n\"")
-              s = s.replace("\"motd=Custom Server Properties\r\nonline-mode=false\r\n\"", "\"motd=Custom Server Properties\\nonline-mode=false\\n\"")
-              s = s.replace("[]byte(\"#!/usr/bin/env bash\n\")", "[]byte(\"#!/usr/bin/env bash\\n\")")
-              s = s.replace("[]byte(\"#!/usr/bin/env bash\r\n\")", "[]byte(\"#!/usr/bin/env bash\\n\")")
-              s = s.replace("isoPath := filepath.Join(stageDir, \"boot.iso\")", "diskDir := t.TempDir()\n\tisoPath := filepath.Join(diskDir, \"boot.iso\")")
-              s = s.replace("usbPath := filepath.Join(stageDir, \"usb_disk.img\")", "usbPath := filepath.Join(diskDir, \"usb_disk.img\")")
-              open(ft, "w", encoding="utf-8").write(s)
-          cf = "usb/cidata_fat.go"
-          if os.path.exists(cf):
-              c = open(cf, "r", encoding="utf-8").read()
-              c = c.replace("if ent.IsDir() {", "if ent.IsDir() || strings.HasSuffix(ent.Name(), \".img\") || strings.HasSuffix(ent.Name(), \".iso\") {")
-              c = c.replace("copy(img[dataOffset:dataOffset+(endByte-startByte)], f.Data[startByte:endByte])", "if dataOffset >= 0 && dataOffset+(endByte-startByte) <= len(img) { copy(img[dataOffset:dataOffset+(endByte-startByte)], f.Data[startByte:endByte]) }")
-              open(cf, "w", encoding="utf-8").write(c)
-          mg = "main.go"
-          if os.path.exists(mg):
-              m = open(mg, "r", encoding="utf-8").read()
-              m = m.replace("\t\tIcon:      iconBytes,\n", "")
-              open(mg, "w", encoding="utf-8").write(m)
-          '
-
-          # Synchronize internal subpackage import paths with go.mod module name
           if [ ! -f "go.mod" ]; then
             go mod init github.com/InstantServer/InstantServer
           fi
-          sed -i.bak 's/^go 1\.22$/go 1.26.0/' go.mod && rm -f go.mod.bak
           MOD_NAME=$(awk '/^module /{print $2}' go.mod | tr -d '\r')
-          if [ -z "$MOD_NAME" ]; then
-            MOD_NAME="github.com/InstantServer/InstantServer"
-          fi
-          if [ -f "app.go" ]; then
+          if [ -f "app.go" ] && [ -n "$MOD_NAME" ]; then
             sed -i.bak \
-              -e "s|github.com/instant-server/instant-server/network|${MOD_NAME}/network|g" \
-              -e "s|github.com/instant-server/instant-server/privilege|${MOD_NAME}/privilege|g" \
-              -e "s|github.com/instant-server/instant-server/usb|${MOD_NAME}/usb|g" \
-              -e "s|github.com/InstantServer/InstantServer/network|${MOD_NAME}/network|g" \
-              -e "s|github.com/InstantServer/InstantServer/privilege|${MOD_NAME}/privilege|g" \
-              -e "s|github.com/InstantServer/InstantServer/usb|${MOD_NAME}/usb|g" \
-              app.go
-            rm -f app.go.bak
+              -e "s|github.com/instant-server/instant-server/|${MOD_NAME}/|g" \
+              -e "s|github.com/InstantServer/InstantServer/|${MOD_NAME}/|g" \
+              app.go && rm -f app.go.bak
           fi
 
           go get github.com/wailsapp/wails/v2@latest
@@ -191,8 +97,6 @@ jobs:
             mkdir -p build/dmg_staging
             if [ -d "build/bin/InstantServer.app" ]; then
               cp -R "build/bin/InstantServer.app" build/dmg_staging/
-            elif [ -d "build/bin/Instant Server.app" ]; then
-              cp -R "build/bin/Instant Server.app" build/dmg_staging/
             else
               cp build/bin/InstantServer build/dmg_staging/
             fi

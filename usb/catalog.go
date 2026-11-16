@@ -1,3 +1,17 @@
+// ============================================================================
+// FILE: usb/catalog.go
+// PURPOSE: Generates production-ready `docker-compose.yml` files for every
+//
+//	self-hosted app in the catalog, including multi-container stacks
+//	(Immich, Paperless-ngx, BookStack) and Minecraft Studio.
+//
+// HOW TO ADD CUSTOM DOCKER COMPOSE RULES FOR AN APP:
+//   - Look at `BuildVerifiedAppComposeYAML()` below:
+//   - If an app needs a specific internal container port (e.g. `8081:80`),
+//     capabilities (`NET_ADMIN`), or extra environment variables, add a
+//     `case "your_app_id":` block inside the `switch cleanID` statement.
+//
+// ============================================================================
 // usb/catalog.go
 package usb
 

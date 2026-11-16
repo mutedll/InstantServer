@@ -1,3 +1,23 @@
+// ============================================================================
+// FILE: usb/flasher_common.go
+// PURPOSE: Core cross-platform raw USB streaming engine, in-stream GRUB kernel
+//
+//	cmdline patcher (`autoinstall`), and GPT partition table injector.
+//
+// KEY SYSTEMS ENGINEERING CONCEPTS IN THIS FILE:
+//  1. `AllocPageAlignedBuffer`: Allocates memory aligned to a 4096-byte page
+//     boundary so Windows `FILE_FLAG_NO_BUFFERING` and Linux `O_DIRECT` DMA
+//     transfers never fail with `ERROR_INVALID_PARAMETER`.
+//  2. `PatchGrubKernelCmdlineInPlace`: Scans the ISO stream on the fly and
+//     replaces `linux /casper/vmlinuz  ---` with `linux /casper/vmlinuz autoinstall ---`
+//     while keeping the exact same byte length so ISO offsets never shift.
+//  3. Deferred First-64KB Header Write: Writes the first 64 KB (MBR + GPT header)
+//     at the VERY END of the ISO stream so Windows PnP / Defender never tries to
+//     mount partitions mid-flash (preventing `IS-USB-302: Incorrect function`).
+//  4. `RelocateGPTAndWriteCidataPartition`: Appends Partition #2 (`CIDATA` FAT16)
+//     and Partition #3 (`INSTANTUSB` FAT32) after the Ubuntu ISO sectors.
+//
+// ============================================================================
 // usb/flasher_common.go
 package usb
 

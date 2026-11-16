@@ -1,3 +1,13 @@
+// ============================================================================
+// FILE: privilege/escalate.go
+// PURPOSE: Checks whether the app has Administrator/root privileges (`IsProcessElevated`)
+//
+//	and triggers native elevation (`RequestNativePrivilegeEscalation`):
+//	  - Windows: PowerShell `Start-Process -Verb RunAs` (UAC prompt)
+//	  - Linux:   Polkit `pkexec`
+//	  - macOS:   `osascript` Administrator prompt
+//
+// ============================================================================
 // privilege/escalate.go
 package privilege
 

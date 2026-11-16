@@ -1,5 +1,10 @@
 //go:build darwin
 
+// ============================================================================
+// FILE: usb/flasher_darwin.go
+// PURPOSE: macOS raw character device writer (`/dev/rdiskN`) using `F_NOCACHE`.
+// ============================================================================
+
 // usb/flasher_darwin.go
 package usb
 
