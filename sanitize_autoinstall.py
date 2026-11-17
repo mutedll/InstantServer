@@ -25,30 +25,31 @@ Why this exists:
 """
 
 import sys
-import yaml
+from typing import Any
+import yaml  # type: ignore[import-untyped,import-not-found]
 
 AUTOINSTALL_PATH = "/autoinstall.yaml"
 
 
-def load_autoinstall(path: str) -> dict:
+def load_autoinstall(path: str) -> dict[str, Any]:
     with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+        loaded = yaml.safe_load(f)
+        return loaded if isinstance(loaded, dict) else {}
 
 
-def save_autoinstall(path: str, data: dict) -> None:
+def save_autoinstall(path: str, data: dict[str, Any]) -> None:
     with open(path, "w", encoding="utf-8") as f:
         yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False)
 
 
-def enforce_nonblocking_controllers(ai: dict) -> None:
+def enforce_nonblocking_controllers(ai: dict[str, Any]) -> None:
     """
     Ensures Subiquity's Drivers and OEM controllers never pause waiting for
     interactive confirmation or online apt driver queries during autoinstall.
     Reference: https://canonical-subiquity.readthedocs-hosted.com/en/latest/reference/autoinstall-reference.html
     """
-    src = ai.get("source")
-    if not isinstance(src, dict):
-        src = {"id": "ubuntu-server-minimal"}
+    raw_src = ai.get("source")
+    src: dict[str, Any] = dict(raw_src) if isinstance(raw_src, dict) else {"id": "ubuntu-server-minimal"}
     src["search_drivers"] = False
     ai["source"] = src
 
@@ -89,7 +90,7 @@ def main() -> None:
     elif mode == "--strip-storage-config":
         layout_name = sys.argv[2] if len(sys.argv) > 2 else "lvm"
         disk_path = sys.argv[3] if len(sys.argv) > 3 else ""
-        layout = {"name": layout_name}
+        layout: dict[str, Any] = {"name": layout_name}
         if disk_path:
             layout["match"] = {"path": disk_path}
         ai["storage"] = {"layout": layout}

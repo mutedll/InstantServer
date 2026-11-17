@@ -5,6 +5,7 @@
 // HOW TO ADD YOUR OWN UNIT TEST:
 //   - Create a function `func TestMyFeature(t *testing.T)` at the bottom of this file.
 //   - Use `t.TempDir()` to create safe temporary files/virtual disk images.
+//
 // ============================================================================
 // usb/flasher_test.go
 package usb
@@ -611,7 +612,7 @@ func TestExtractISO9660ToEditableFAT32AndVerifyUSB(t *testing.T) {
 	rootDir[34+32] = 1
 	rootDir[34+33] = 1
 
-	grubContent := []byte("set timeout=30\\nmenuentry \\"Install Ubuntu Server\\" {\\n\\tset gfxpayload=keep\\n\\tlinux\\t/casper/vmlinuz  ---\\n\\tinitrd\\t/casper/initrd\\n}\\n")
+	grubContent := []byte("set timeout=30\nmenuentry \"Install Ubuntu Server\" {\n\tset gfxpayload=keep\n\tlinux\t/casper/vmlinuz  ---\n\tinitrd\t/casper/initrd\n}\n")
 	copy(isoBytes[19*2048:], grubContent)
 
 	fileRec := rootDir[68:]

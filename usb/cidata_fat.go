@@ -52,7 +52,7 @@ const (
 	// Standard DOS timestamp (2026-11-16 12:00:00) so Windows fastfat.sys
 	// never complains about zeroed directory entry dates.
 	dosDefaultDate = uint16(((2026 - 1980) << 9) | (11 << 5) | 16)
-	dosDefaultTime = uint16((12 << 11) | (0 << 5) | 0)
+	dosDefaultTime = uint16(12 << 11) // 12:00:00
 )
 
 type fatStagedFile struct {
@@ -847,7 +847,7 @@ func ExtractISO9660ToFAT32Partition(
 						RelPath:   rel,
 						IsDir:     src.IsDir,
 						TotalSize: src.TotalSize,
-						Extents:   append([]isoExtent(nil), src.Extents...),
+						Extents:   src.Extents,
 						Override:  src.Override,
 					}
 					for _, ch := range src.Children {
