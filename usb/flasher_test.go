@@ -5,7 +5,6 @@
 // HOW TO ADD YOUR OWN UNIT TEST:
 //   - Create a function `func TestMyFeature(t *testing.T)` at the bottom of this file.
 //   - Use `t.TempDir()` to create safe temporary files/virtual disk images.
-//
 // ============================================================================
 // usb/flasher_test.go
 package usb
@@ -561,5 +560,91 @@ func TestResetUSBToCleanFAT32(t *testing.T) {
 	}
 	if !bytes.Contains(after[1048576:], []byte("efibootmgr -n")) {
 		t.Fatalf("expected Linux one-click next-boot launcher on INSTANTUSB FAT32 partition")
+	}
+}
+
+func TestExtractISO9660ToEditableFAT32AndVerifyUSB(t *testing.T) {
+	tmpDir := t.TempDir()
+	stageDir := filepath.Join(tmpDir, "cidata")
+	_ = os.MkdirAll(stageDir, 0755)
+
+	cfg := ServerProfileConfig{
+		Hostname:    "instant-server",
+		Username:    "admin",
+		Password:    "SecretPass123!",
+		InstallMode: "interactive_gui_disk",
+	}
+	if err := ValidateProfileConfig(cfg); err != nil {
+		t.Fatalf("expected interactive_gui_disk mode to be valid, got: %v", err)
+	}
+	if _, err := StageCIDATAPayload(stageDir, cfg, []byte("#!/usr/bin/env bash\\necho ok\\n"), []byte("<html></html>")); err != nil {
+		t.Fatalf("StageCIDATAPayload failed: %v", err)
+	}
+
+	// Build a synthetic ISO9660 image with Primary Volume Descriptor at sector 16 (offset 32768),
+	// Root Directory at sector 18, and grub.cfg at sector 19
+	isoPath := filepath.Join(tmpDir, "ubuntu_editable.iso")
+	isoBytes := make([]byte, 128*1024)
+	pvd := isoBytes[32768 : 32768+2048]
+	pvd[0] = 1
+	copy(pvd[1:6], []byte("CD001"))
+	pvd[6] = 1
+	// Root directory record at PVD+156 pointing to LBA 18 (offset 36864), length 2048
+	pvd[156+0] = 34
+	binary.LittleEndian.PutUint32(pvd[156+2:156+6], 18)
+	binary.LittleEndian.PutUint32(pvd[156+10:156+14], 2048)
+	pvd[156+25] = 0x02
+
+	// Root directory at LBA 18 (offset 36864): "." entry, ".." entry, and "grub.cfg;1" file entry at LBA 19
+	rootDir := isoBytes[18*2048 : 19*2048]
+	rootDir[0] = 34
+	binary.LittleEndian.PutUint32(rootDir[2:6], 18)
+	binary.LittleEndian.PutUint32(rootDir[10:14], 2048)
+	rootDir[25] = 0x02
+	rootDir[32] = 1
+	rootDir[33] = 0
+
+	rootDir[34+0] = 34
+	binary.LittleEndian.PutUint32(rootDir[34+2:34+6], 18)
+	binary.LittleEndian.PutUint32(rootDir[34+10:34+14], 2048)
+	rootDir[34+25] = 0x02
+	rootDir[34+32] = 1
+	rootDir[34+33] = 1
+
+	grubContent := []byte("set timeout=30\\nmenuentry \\"Install Ubuntu Server\\" {\\n\\tset gfxpayload=keep\\n\\tlinux\\t/casper/vmlinuz  ---\\n\\tinitrd\\t/casper/initrd\\n}\\n")
+	copy(isoBytes[19*2048:], grubContent)
+
+	fileRec := rootDir[68:]
+	fileName := "GRUB.CFG;1"
+	fileRec[0] = byte(33 + len(fileName) + 1)
+	binary.LittleEndian.PutUint32(fileRec[2:6], 19)
+	binary.LittleEndian.PutUint32(fileRec[10:14], uint32(len(grubContent)))
+	fileRec[25] = 0x00
+	fileRec[32] = byte(len(fileName))
+	copy(fileRec[33:], []byte(fileName))
+
+	if err := os.WriteFile(isoPath, isoBytes, 0644); err != nil {
+		t.Fatalf("failed writing synthetic ISO9660: %v", err)
+	}
+
+	usbPath := filepath.Join(tmpDir, "editable_usb.img")
+	if err := os.WriteFile(usbPath, make([]byte, 80*1024*1024), 0644); err != nil {
+		t.Fatalf("failed creating synthetic USB image: %v", err)
+	}
+
+	res, err := StreamISOAndCidataToRawDisk(context.Background(), isoPath, usbPath, stageDir, true, true, nil, nil)
+	if err != nil {
+		t.Fatalf("StreamISOAndCidataToRawDisk (editable FAT32 mode) failed: %v", err)
+	}
+	if res.GrubPatches < 1 {
+		t.Fatalf("expected GRUB autoinstall patch in extracted FAT32 ISO partition, got %d", res.GrubPatches)
+	}
+
+	report, err := VerifyBootableUSB(usbPath)
+	if err != nil {
+		t.Fatalf("VerifyBootableUSB failed: %v", err)
+	}
+	if !report.Passed || len(report.Partitions) < 2 {
+		t.Fatalf("expected VerifyBootableUSB to pass with >=2 partitions, got: %+v", report)
 	}
 }

@@ -274,9 +274,65 @@ func (a *App) ResetUSBDrive(devicePath string) map[string]interface{} {
 	}
 }
 
+// VerifyUSBDrive inspects the GPT partition table, boot sectors, FAT clean bits,
+// and UBUNTU-ISO / CIDATA / INSTANTUSB partitions on a USB drive without modifying it.
+func (a *App) VerifyUSBDrive(devicePath string) map[string]interface{} {
+	cleanDev := strings.TrimSpace(devicePath)
+	if cleanDev == "" {
+		candidates := usb.ScanRemovableUSBDrives()
+		for _, c := range candidates {
+			if c.TripleLockPassed {
+				cleanDev = c.DeviceNode
+				break
+			}
+		}
+	}
+	if cleanDev == "" {
+		return map[string]interface{}{
+			"ok":    false,
+			"error": "Select a target USB drive first to verify its bootable partitions.",
+		}
+	}
+
+	startTime := time.Now()
+	a.appendEventLog(startTime, "VERIFY_USB", fmt.Sprintf("Inspecting GPT partition table and boot sectors on %s...", cleanDev))
+	report, err := usb.VerifyBootableUSB(cleanDev)
+	if err != nil {
+		a.appendEventLog(startTime, "VERIFY_ERR", err.Error())
+		return map[string]interface{}{
+			"ok":    false,
+			"error": err.Error(),
+		}
+	}
+
+	for _, p := range report.Partitions {
+		a.appendEventLog(startTime, "PARTITION", p)
+	}
+	for _, chk := range report.Checks {
+		a.appendEventLog(startTime, "CHECK", chk)
+	}
+	a.appendEventLog(startTime, "VERIFY_DONE", report.Summary)
+
+	return map[string]interface{}{
+		"ok":         report.Passed,
+		"passed":     report.Passed,
+		"device":     report.Device,
+		"partitions": report.Partitions,
+		"checks":     report.Checks,
+		"message":    report.Summary,
+	}
+}
+
 // BootUSBNextRestart configures the current Windows or Linux machine to boot directly
-// into the flashed Instant Server USB drive on next restart without entering BIOS/Boot Menu.
-func (a *App) BootUSBNextRestart() map[string]interface{} {
+// into the flashed Instant Server USB drive on next restart.
+// mode can be "stage_only" (configure UEFI BootNext without rebooting immediately) or "restart_now".
+func (a *App) BootUSBNextRestart(mode string) map[string]interface{} {
+	cleanMode := strings.ToLower(strings.TrimSpace(mode))
+	if cleanMode == "" {
+		cleanMode = "restart_now"
+	}
+	restartNow := cleanMode == "restart_now"
+
 	if !privilege.IsProcessElevated() {
 		esc := privilege.RequestNativePrivilegeEscalation(nil)
 		if esc.ElevatedSpawned {
@@ -306,12 +362,28 @@ func (a *App) BootUSBNextRestart() map[string]interface{} {
 
 	switch runtime.GOOS {
 	case "windows":
+		rebootCmd := ""
+		if restartNow {
+			rebootCmd = `if ($usbGuid) { shutdown /r /t 3 /c "Instant Server: Rebooting directly into USB installer" } else { shutdown /r /fw /t 2 }`
+		}
 		ps := `$out = bcdedit /enum firmware 2>$null | Out-String; ` +
 			`$blocks = $out -split '(?=identifier\s+\{)'; ` +
 			`$usbGuid = ''; ` +
-			`foreach ($b in $blocks) { if ($b -match 'identifier\s+(\{[0-9a-fA-F-]+\})' -and $b -match '(?i)(USB|Ubuntu|Removable|Flash|Instant)') { $usbGuid = $Matches[1]; break } }; ` +
-			`if ($usbGuid) { bcdedit /set '{fwbootmgr}' bootsequence $usbGuid | Out-Null; shutdown /r /t 3 /c "Instant Server: Rebooting directly into USB installer"; Write-Output "UEFI_USB:$usbGuid" } ` +
-			`else { shutdown /r /fw /t 2; Write-Output "UEFI_FW" }`
+			`foreach ($b in $blocks) { if ($b -match 'identifier\s+(\{[0-9a-fA-F-]+\})' -and $b -match '(?i)(USB|Ubuntu|Removable|Flash|Instant|Linpus|UEFI:)') { $usbGuid = $Matches[1]; break } }; ` +
+			`if (-not $usbGuid) { ` +
+			`  $efiDrv = Get-PSDrive -PSProvider FileSystem | Where-Object { Test-Path ($_.Root + 'EFI\BOOTootx64.efi') } | Select-Object -First 1; ` +
+			`  if ($efiDrv) { ` +
+			`    $part = $efiDrv.Name + ':'; ` +
+			`    $cp = bcdedit /copy '{bootmgr}' /d 'Instant Server USB' 2>$null | Out-String; ` +
+			`    if ($cp -match '(\{[0-9a-fA-F-]+\})') { ` +
+			`      $usbGuid = $Matches[1]; ` +
+			`      bcdedit /set $usbGuid device partition=$part | Out-Null; ` +
+			`      bcdedit /set $usbGuid path '\EFI\BOOTootx64.efi' | Out-Null ` +
+			`    } ` +
+			`  } ` +
+			`}; ` +
+			`if ($usbGuid) { bcdedit /set '{fwbootmgr}' bootsequence $usbGuid | Out-Null; Write-Output ("UEFI_USB:" + $usbGuid) } else { Write-Output "UEFI_FW_MENU" }; ` +
+			rebootCmd
 		out, err := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", ps).CombinedOutput()
 		if err != nil {
 			return map[string]interface{}{
@@ -319,31 +391,53 @@ func (a *App) BootUSBNextRestart() map[string]interface{} {
 				"error": fmt.Sprintf("Failed configuring Windows UEFI next-boot target: %v (%s)", err, strings.TrimSpace(string(out))),
 			}
 		}
+		outStr := strings.TrimSpace(string(out))
+		if !restartNow {
+			if strings.Contains(outStr, "UEFI_USB:") {
+				return map[string]interface{}{
+					"ok":      true,
+					"message": "Queued Instant Server USB in Windows UEFI bootsequence. Your PC will boot into the USB the next time you restart.",
+				}
+			}
+			return map[string]interface{}{
+				"ok":      true,
+				"message": "Your UEFI BIOS enumerates USB drives at POST. Click 'Confirm & Restart Now' when ready to boot into UEFI/USB.",
+			}
+		}
 		return map[string]interface{}{
 			"ok":      true,
-			"message": "Configured UEFI one-time USB boot sequence. Rebooting into Instant Server USB in 3 seconds...",
+			"message": "Configured UEFI one-time USB boot sequence. Restarting into Instant Server USB in 3 seconds...",
 		}
 
 	case "linux":
-		sh := `if [ -d /sys/firmware/efi ] && command -v efibootmgr >/dev/null 2>&1; then ` +
-			`bnum=$(efibootmgr 2>/dev/null | grep -iE 'USB|Ubuntu|Linpus|Removable|UEFI:' | head -n1 | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\).*/\1/p'); ` +
-			`if [ -n "$bnum" ]; then efibootmgr -n "$bnum" && (sleep 2 && systemctl reboot) & exit 0; fi; ` +
-			`fi; ` +
-			`iso_part=$(blkid -t TYPE=iso9660 -o device 2>/dev/null | head -n1 || true); ` +
-			`if [ -n "$iso_part" ] && command -v kexec >/dev/null 2>&1; then ` +
-			`mkdir -p /mnt/instant_usb_iso && mount -o ro "$iso_part" /mnt/instant_usb_iso 2>/dev/null || true; ` +
-			`if [ -f /mnt/instant_usb_iso/casper/vmlinuz ]; then kexec -l /mnt/instant_usb_iso/casper/vmlinuz --initrd=/mnt/instant_usb_iso/casper/initrd --command-line="BOOT_IMAGE=/casper/vmlinuz autoinstall noprompt ---" && (sleep 2 && systemctl kexec) & exit 0; fi; ` +
-			`fi; ` +
-			`(sleep 2 && (systemctl reboot --firmware-setup 2>/dev/null || reboot)) &`
+		rebootTail := ""
+		if restartNow {
+			rebootTail = " && (sleep 2 && systemctl reboot) &"
+		}
+		sh := fmt.Sprintf(`if [ -d /sys/firmware/efi ] && command -v efibootmgr >/dev/null 2>&1; then `+
+			`bnum=$(efibootmgr 2>/dev/null | grep -iE 'USB|Ubuntu|Linpus|Removable|UEFI:' | head -n1 | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\).*//p'); `+
+			`if [ -n "$bnum" ]; then efibootmgr -n "$bnum"%s; exit 0; fi; `+
+			`fi; `+
+			`iso_part=$(blkid -L UBUNTU-ISO 2>/dev/null || blkid -t TYPE=iso9660 -o device 2>/dev/null | head -n1 || true); `+
+			`if [ -n "$iso_part" ] && command -v kexec >/dev/null 2>&1; then `+
+			`mkdir -p /mnt/instant_usb_iso && mount -o ro "$iso_part" /mnt/instant_usb_iso 2>/dev/null || true; `+
+			`if [ -f /mnt/instant_usb_iso/casper/vmlinuz ]; then kexec -l /mnt/instant_usb_iso/casper/vmlinuz --initrd=/mnt/instant_usb_iso/casper/initrd --command-line="BOOT_IMAGE=/casper/vmlinuz autoinstall noprompt ---"%s; exit 0; fi; `+
+			`fi`, rebootTail, strings.ReplaceAll(rebootTail, "systemctl reboot", "systemctl kexec"))
 		if out, err := exec.Command("bash", "-c", sh).CombinedOutput(); err != nil {
 			return map[string]interface{}{
 				"ok":    false,
 				"error": fmt.Sprintf("Failed configuring Linux next-boot USB target: %v (%s)", err, strings.TrimSpace(string(out))),
 			}
 		}
+		if !restartNow {
+			return map[string]interface{}{
+				"ok":      true,
+				"message": "Staged Instant Server USB for next boot via efibootmgr/kexec. Restart whenever you are ready.",
+			}
+		}
 		return map[string]interface{}{
 			"ok":      true,
-			"message": "Configured Linux next-boot USB target. Rebooting into Instant Server USB in 2 seconds...",
+			"message": "Configured Linux next-boot USB target. Restarting into Instant Server USB in 2 seconds...",
 		}
 
 	default:
@@ -869,8 +963,22 @@ func (a *App) AssetAndAPIRouter() http.Handler {
 		}
 		writeJSON(w, a.ResetUSBDrive(body.Device))
 	})
+	mux.HandleFunc("/api/verify-usb", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Device string `json:"device"`
+		}
+		readJSONBody(r, &body)
+		if body.Device == "" {
+			body.Device = r.URL.Query().Get("device")
+		}
+		writeJSON(w, a.VerifyUSBDrive(body.Device))
+	})
 	mux.HandleFunc("/api/boot-usb-next", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, a.BootUSBNextRestart())
+		var body struct {
+			Mode string `json:"mode"`
+		}
+		readJSONBody(r, &body)
+		writeJSON(w, a.BootUSBNextRestart(body.Mode))
 	})
 	mux.HandleFunc("/api/load-config", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, a.LoadConfig())

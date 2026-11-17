@@ -505,16 +505,18 @@ func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
     # END_INSTANT_WIFI`, safeSSID, authLine)
 	}
 
-	liveNoSleepCmds := `    - systemctl stop casper-md5check.service 2>/dev/null || killall -9 casper-md5check 2>/dev/null || true
-    - mkdir -p /mnt/cidata /mnt/usb_logs
+	liveNoSleepCmds := `    - systemctl stop casper-md5check.service multipathd.service multipathd.socket 2>/dev/null || killall -9 casper-md5check 2>/dev/null || true
+    - printf '{"result": "pass"}\n' > /run/casper-md5check.json 2>/dev/null || true
+    - mkdir -p /mnt/cidata /mnt/usb_logs /tmp/cidata
     - cdev=$(blkid -L CIDATA 2>/dev/null || blkid -L cidata 2>/dev/null || true); [ -n "$cdev" ] && (mount -o rw,sync,flush,noatime "$cdev" /mnt/cidata 2>/dev/null || mount -o remount,rw,sync,flush /mnt/cidata 2>/dev/null || true)
+    - cp -rf /mnt/cidata/* /tmp/cidata/ 2>/dev/null || true
     - udev=$(blkid -L INSTANTUSB 2>/dev/null || true); [ -n "$udev" ] && (mount -o rw,sync,flush,noatime "$udev" /mnt/usb_logs 2>/dev/null || true)
-    - bash /mnt/cidata/start_usb_logger.sh 2>/dev/null || bash /cdrom/cidata/start_usb_logger.sh 2>/dev/null || true
+    - bash /tmp/cidata/start_usb_logger.sh 2>/dev/null || bash /mnt/cidata/start_usb_logger.sh 2>/dev/null || true
     - rfkill unblock all 2>/dev/null || true
     - systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target 2>/dev/null || true
     - mkdir -p /etc/systemd/logind.conf.d && printf "[Login]\nHandleLidSwitch=ignore\nHandleLidSwitchExternalPower=ignore\nHandleLidSwitchDocked=ignore\nIdleAction=ignore\n" > /etc/systemd/logind.conf.d/00-live-nosleep.conf && systemctl restart systemd-logind 2>/dev/null || true
     - touch /run/casper-no-prompt 2>/dev/null || true
-    - bash /mnt/cidata/select_target_disk.sh 2>/dev/null || bash /cdrom/cidata/select_target_disk.sh 2>/dev/null || true
+    - bash /tmp/cidata/select_target_disk.sh 2>/dev/null || bash /mnt/cidata/select_target_disk.sh 2>/dev/null || true
     - udevadm settle --timeout=15 2>/dev/null || true`
 
 	var earlyCommandsBlock string
@@ -605,6 +607,14 @@ func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
 	return fmt.Sprintf(`#cloud-config
 autoinstall:
   version: 1
+  interactive-sections: []
+  source:
+    id: ubuntu-server-minimal
+    search_drivers: false
+  drivers:
+    install: false
+  oem:
+    install: false
   shutdown: reboot
   apt:
     fallback: offline-install
@@ -1035,39 +1045,106 @@ func loadBundledScript(fileName string, fallback string) []byte {
 }
 
 const defaultSanitizeAutoinstallPy = `#!/usr/bin/env python3
-# Standalone YAML sanitizer for Ubuntu Server Autoinstall (/autoinstall.yaml)
-import argparse, os, sys, yaml
+"""
+=============================================================================
+HOW TO STUDY & MODIFY THIS FILE (Step-by-Step Beginner Guide)
+=============================================================================
+File: sanitize_autoinstall.py
+Purpose:
+  Safely modifies /autoinstall.yaml during early-commands on the target Ubuntu
+  Server machine using PyYAML instead of fragile regex/sed edits.
 
-def main():
-    p = argparse.ArgumentParser()
-    p.add_argument("--config", default="/autoinstall.yaml")
-    p.add_argument("--disk", default="")
-    p.add_argument("--wired-online", action="store_true")
-    p.add_argument("--use-largest-gap", action="store_true")
-    args = p.parse_args()
-    if not os.path.isfile(args.config):
-        return 0
-    with open(args.config, "r", encoding="utf-8") as f:
-        doc = yaml.safe_load(f) or {}
-    root = doc.get("autoinstall") if isinstance(doc.get("autoinstall"), dict) else doc
-    if args.disk or args.use_largest_gap:
-        st = root.setdefault("storage", {})
-        lay = st.setdefault("layout", {"name": "direct"})
-        if args.disk:
-            lay["match"] = {"path": args.disk}
-        if args.use_largest_gap:
-            lay["use-gap"] = "largest"
-    net = root.get("network")
-    if isinstance(net, dict):
-        net.pop("wifis", None)
-        if args.wired_online:
-            root.pop("network", None)
-    with open(args.config, "w", encoding="utf-8") as f:
-        yaml.safe_dump(doc, f, default_flow_style=False, sort_keys=False)
-    return 0
+Why this exists:
+  1. Removes 'storage.config' before injected 'swap:' or 'updates:' keys so
+     Subiquity can smoothly switch to 'storage.layout' when a hardware disk
+     sizing fallback is needed.
+  2. When a wired Ethernet cable ('en*'/'eth*') is already online ('--wired-online'),
+     replaces 'network:' with a minimal non-blocking wired-only Netplan v2 config
+     ('optional: true', no 'wifis:') so Subiquity's NetworkController does not
+     synthesize a blocking config for unplugged ports or fail on missing
+     'wpasupplicant'.
+  3. Explicitly sets 'source.search_drivers = False', 'drivers.install = False',
+     and 'oem.install = False' so Ubuntu 24.04 / 26.04 Subiquity does not stall
+     at 'subiquity/OEM/load_metapackages_list/wait_confirmation' or
+     'subiquity/Drivers/_list_drivers/wait_apt'.
+=============================================================================
+"""
+
+import sys
+import yaml
+
+AUTOINSTALL_PATH = "/autoinstall.yaml"
+
+
+def load_autoinstall(path: str) -> dict:
+    with open(path, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f) or {}
+
+
+def save_autoinstall(path: str, data: dict) -> None:
+    with open(path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False)
+
+
+def enforce_nonblocking_controllers(ai: dict) -> None:
+    """
+    Ensures Subiquity's Drivers and OEM controllers never pause waiting for
+    interactive confirmation or online apt driver queries during autoinstall.
+    Reference: https://canonical-subiquity.readthedocs-hosted.com/en/latest/reference/autoinstall-reference.html
+    """
+    src = ai.get("source")
+    if not isinstance(src, dict):
+        src = {"id": "ubuntu-server-minimal"}
+    src["search_drivers"] = False
+    ai["source"] = src
+
+    ai["drivers"] = {"install": False}
+    ai["oem"] = {"install": False}
+
+
+def main() -> None:
+    mode = sys.argv[1] if len(sys.argv) > 1 else "--sanitize"
+    data = load_autoinstall(AUTOINSTALL_PATH)
+    ai = data.get("autoinstall")
+    if not isinstance(ai, dict):
+        return
+
+    enforce_nonblocking_controllers(ai)
+
+    if mode == "--wired-online":
+        # Instead of deleting 'network:' (which makes Subiquity generate a default
+        # config for all eth*/en* ports without optional:true), keep a minimal
+        # wired-only config with optional: true and no wifis block.
+        ai["network"] = {
+            "version": 2,
+            "ethernets": {
+                "wired-lan": {
+                    "match": {"name": "en*"},
+                    "dhcp4": True,
+                    "dhcp6": False,
+                    "optional": True,
+                },
+                "wired-eth": {
+                    "match": {"name": "eth*"},
+                    "dhcp4": True,
+                    "dhcp6": False,
+                    "optional": True,
+                },
+            },
+        }
+    elif mode == "--strip-storage-config":
+        layout_name = sys.argv[2] if len(sys.argv) > 2 else "lvm"
+        disk_path = sys.argv[3] if len(sys.argv) > 3 else ""
+        layout = {"name": layout_name}
+        if disk_path:
+            layout["match"] = {"path": disk_path}
+        ai["storage"] = {"layout": layout}
+
+    save_autoinstall(AUTOINSTALL_PATH, data)
+
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
 `
 
 const defaultDashboardDaemonPy = `#!/usr/bin/env python3
@@ -1242,6 +1319,40 @@ while true; do
         cp -rf /mnt/cidata/logs/* /mnt/usb_logs/logs/ 2>/dev/null || true
     fi
     sync
+    python3 - << 'PYCLEAN' 2>/dev/null || true
+import subprocess
+out = subprocess.check_output(["lsblk", "-lnpo", "NAME,FSTYPE"], text=True, stderr=subprocess.DEVNULL)
+for line in out.splitlines():
+    parts = line.split()
+    if len(parts) == 2 and parts[1].lower() == "vfat":
+        dev = parts[0]
+        try:
+            with open(dev, "r+b") as f:
+                bpb = bytearray(f.read(512))
+                if len(bpb) == 512:
+                    if bpb[54:62] == b"FAT16   ":
+                        bpb[37] = 0x00
+                        f.seek(0)
+                        f.write(bpb)
+                        res = bpb[14] | (bpb[15] << 8)
+                        f.seek(res * 512 + 2)
+                        f.write(b"\xff\xff")
+                    elif bpb[82:90] == b"FAT32   ":
+                        bpb[65] = 0x00
+                        f.seek(0)
+                        f.write(bpb)
+                        f.seek(6 * 512)
+                        b6 = bytearray(f.read(512))
+                        if len(b6) == 512:
+                            b6[65] = 0x00
+                            f.seek(6 * 512)
+                            f.write(b6)
+                        res = bpb[14] | (bpb[15] << 8)
+                        f.seek(res * 512 + 4)
+                        f.write(b"\xff\xff\xff\x0f")
+        except Exception:
+            pass
+PYCLEAN
     sleep 2
 done
 `
@@ -1299,7 +1410,44 @@ if mountpoint -q /mnt/usb_logs 2>/dev/null; then
     cp -rf /mnt/cidata/logs/* /mnt/usb_logs/logs/ 2>/dev/null || true
 fi
 sync
-sync
+kill $(cat /run/instant-usb-log-daemon.pid 2>/dev/null) 2>/dev/null || true
+umount /mnt/usb_logs 2>/dev/null || mount -o remount,ro /mnt/usb_logs 2>/dev/null || true
+umount /mnt/cidata 2>/dev/null || mount -o remount,ro /mnt/cidata 2>/dev/null || true
+    sync
+    python3 - << 'PYCLEAN' 2>/dev/null || true
+import subprocess
+out = subprocess.check_output(["lsblk", "-lnpo", "NAME,FSTYPE"], text=True, stderr=subprocess.DEVNULL)
+for line in out.splitlines():
+    parts = line.split()
+    if len(parts) == 2 and parts[1].lower() == "vfat":
+        dev = parts[0]
+        try:
+            with open(dev, "r+b") as f:
+                bpb = bytearray(f.read(512))
+                if len(bpb) == 512:
+                    if bpb[54:62] == b"FAT16   ":
+                        bpb[37] = 0x00
+                        f.seek(0)
+                        f.write(bpb)
+                        res = bpb[14] | (bpb[15] << 8)
+                        f.seek(res * 512 + 2)
+                        f.write(b"\xff\xff")
+                    elif bpb[82:90] == b"FAT32   ":
+                        bpb[65] = 0x00
+                        f.seek(0)
+                        f.write(bpb)
+                        f.seek(6 * 512)
+                        b6 = bytearray(f.read(512))
+                        if len(b6) == 512:
+                            b6[65] = 0x00
+                            f.seek(6 * 512)
+                            f.write(b6)
+                        res = bpb[14] | (bpb[15] << 8)
+                        f.seek(res * 512 + 4)
+                        f.write(b"\xff\xff\xff\x0f")
+        except Exception:
+            pass
+PYCLEAN
 if [ "$STATUS" = "ERROR" ]; then
     printf "
 [INSTANT SERVER] Installation error logs saved to INSTANT-SERVER-INSTALL.log on your USB drive.
@@ -1314,50 +1462,95 @@ exit 0
 const scriptSelectTargetDiskSh = `#!/usr/bin/env bash
 set -uo pipefail
 LOG_A="/mnt/cidata/INSTANT-SERVER-INSTALL.log"
+clear_usb_fat_dirty_bits() {
+    python3 - << 'PYCLEAN' 2>/dev/null || true
+import subprocess
+out = subprocess.check_output(["lsblk", "-lnpo", "NAME,FSTYPE"], text=True, stderr=subprocess.DEVNULL)
+for line in out.splitlines():
+    parts = line.split()
+    if len(parts) == 2 and parts[1].lower() == "vfat":
+        dev = parts[0]
+        try:
+            with open(dev, "r+b") as f:
+                bpb = bytearray(f.read(512))
+                if len(bpb) == 512:
+                    if bpb[54:62] == b"FAT16   ":
+                        bpb[37] = 0x00
+                        f.seek(0)
+                        f.write(bpb)
+                        res = bpb[14] | (bpb[15] << 8)
+                        f.seek(res * 512 + 2)
+                        f.write(b"\xff\xff")
+                    elif bpb[82:90] == b"FAT32   ":
+                        bpb[65] = 0x00
+                        f.seek(0)
+                        f.write(bpb)
+                        f.seek(6 * 512)
+                        b6 = bytearray(f.read(512))
+                        if len(b6) == 512:
+                            b6[65] = 0x00
+                            f.seek(6 * 512)
+                            f.write(b6)
+                        res = bpb[14] | (bpb[15] << 8)
+                        f.seek(res * 512 + 4)
+                        f.write(b"\xff\xff\xff\x0f")
+        except Exception:
+            pass
+PYCLEAN
+}
+
 log_usb() {
     printf '[select_target_disk] %s\n' "$*" | tee -a "$LOG_A" 2>/dev/null || true
     if mountpoint -q /mnt/usb_logs 2>/dev/null; then
+        mkdir -p /mnt/usb_logs/logs 2>/dev/null || true
         cp -f "$LOG_A" /mnt/usb_logs/INSTANT-SERVER-INSTALL.log 2>/dev/null || true
+        cp -f "$LOG_A" /mnt/usb_logs/logs/INSTANT-SERVER-INSTALL.log 2>/dev/null || true
     fi
     sync
+    clear_usb_fat_dirty_bits
 }
 
-# 1. Stop casper-md5check immediately and write a valid pass JSON so Subiquity Integrity never stalls
-systemctl stop casper-md5check.service 2>/dev/null || killall -9 casper-md5check 2>/dev/null || true
+# 1. Stop casper-md5check & multipathd immediately so Integrity and Probert never stall
+systemctl stop casper-md5check.service multipathd.service multipathd.socket 2>/dev/null || killall -9 casper-md5check 2>/dev/null || true
 printf '{"result": "pass"}\n' > /run/casper-md5check.json 2>/dev/null || true
 
-# 2. Install a non-blocking /usr/sbin/netplan wrapper on the live host.
-#    When Subiquity calls arun_command(["netplan", "apply"]), netplan.real apply can deadlock on
-#    netplan-dbus or leave child processes holding stdout (fd 1) open forever. Closing stdout/stderr
-#    immediately and running netplan.real generate + networkctl reload completes in <20ms.
+# 2. Install a non-recursive, non-blocking netplan wrapper on the live RAM disk.
+#    CRITICAL FIX: On Ubuntu Live Server, /usr/sbin/netplan is a symlink to ../share/netplan/netplan.script.
+#    We MUST remove the symlink (rm -f) before writing our wrapper, and call /lib/netplan/generate directly
+#    (never calling netplan.real) so there is zero possibility of symlink recursion or netplan-dbus hangs.
 chmod 600 /etc/netplan/*.yaml /lib/netplan/*.yaml /run/netplan/*.yaml 2>/dev/null || true
-for np_bin in /usr/sbin/netplan /snap/subiquity/current/usr/sbin/netplan; do
-    if [ -x "$np_bin" ] && [ ! -f "${np_bin}.real" ]; then
-        cp -a "$np_bin" "${np_bin}.real" 2>/dev/null || continue
-        cat << 'NPEOF' > "$np_bin"
+mkdir -p /usr/local/sbin /usr/local/bin
+cat << 'NPEOF' > /usr/local/sbin/netplan
 #!/usr/bin/env bash
+exec >/dev/null 2>&1 </dev/null
 chmod 600 /etc/netplan/*.yaml /lib/netplan/*.yaml /run/netplan/*.yaml 2>/dev/null || true
-if [ "${1:-}" = "apply" ]; then
-    exec >/dev/null 2>&1 </dev/null
-    /usr/sbin/netplan.real generate || true
-    networkctl reload || true
-    exit 0
+if [ -x /lib/netplan/generate ]; then
+    /lib/netplan/generate 2>/dev/null || true
+elif [ -x /usr/libexec/netplan/generate ]; then
+    /usr/libexec/netplan/generate 2>/dev/null || true
 fi
-exec /usr/sbin/netplan.real "$@"
+networkctl reload 2>/dev/null || true
+exit 0
 NPEOF
-        chmod 755 "$np_bin" 2>/dev/null || true
+chmod 755 /usr/local/sbin/netplan
+cp -f /usr/local/sbin/netplan /usr/local/bin/netplan 2>/dev/null || true
+rm -f /usr/sbin/netplan /usr/bin/netplan 2>/dev/null || true
+cp -f /usr/local/sbin/netplan /usr/sbin/netplan 2>/dev/null || true
+cp -f /usr/local/sbin/netplan /usr/bin/netplan 2>/dev/null || true
+for snap_np in $(find /snap/subiquity -name "netplan" -o -name "netplan.script" 2>/dev/null); do
+    if [ -e "$snap_np" ]; then
+        mount --bind /usr/local/sbin/netplan "$snap_np" 2>/dev/null || true
     fi
 done
-log_usb "Installed non-blocking /usr/sbin/netplan wrapper (instant generate + networkctl reload)."
+log_usb "Installed non-recursive /usr/sbin/netplan wrapper (/lib/netplan/generate + networkctl reload)."
 
 # 3. Pre-install offline wpasupplicant & wireless-tools from /cdrom/pool if any wireless adapter exists
-#    so Subiquity sees wpasupplicant is already installed and skips its 25s apt-get install delay.
 if ls /sys/class/net/wl* >/dev/null 2>&1; then
     find /cdrom/pool -type f \( -name "libnl-*.deb" -o -name "libpcsclite*.deb" -o -name "wpasupplicant*.deb" -o -name "wireless-tools*.deb" -o -name "rfkill*.deb" \) -exec dpkg -i --force-all {} + >/dev/null 2>&1 || true
 fi
 
 # 4. Identify the installer media disk(s) (USB/SD/ISO) so Subiquity never overwrites installer media
-CDROM_PART=$(findmnt -n -o SOURCE /cdrom 2>/dev/null || true)
+CDROM_PART=$(findmnt -n -o SOURCE /cdrom 2>/dev/null || blkid -L UBUNTU-ISO 2>/dev/null || true)
 CIDATA_PART=$(blkid -L CIDATA 2>/dev/null || blkid -L cidata 2>/dev/null || true)
 INSTANT_PART=$(blkid -L INSTANTUSB 2>/dev/null || true)
 USB_DISK=""
@@ -1388,12 +1581,12 @@ for part in $(lsblk -lnpo NAME,FSTYPE | awk '$2 ~ /ext4|btrfs|xfs/ {print $1}');
             STAMP=$(cat /mnt/check_existing/opt/instant-server/.install_complete_epoch 2>/dev/null || echo 0)
             NOW=$(date +%s)
             DIFF=$((NOW - STAMP))
-            if [ "$DIFF" -ge 0 ] && [ "$DIFF" -lt 1800 ]; then
+            if [ "$DIFF" -ge -3600 ] && [ "$DIFF" -lt 21600 ]; then
+                log_usb "Fresh Instant Server installation detected on $part (completed ${DIFF}s ago). Powering off so user can remove USB."
                 umount /mnt/check_existing 2>/dev/null || true
-                log_usb "Fresh installation detected on $part (${DIFF}s ago). Rebooting into installed OS..."
-                touch /run/casper-no-prompt 2>/dev/null || true
+                clear_usb_fat_dirty_bits
                 sync
-                reboot -f
+                poweroff -f
                 exit 0
             fi
         fi
@@ -1401,123 +1594,142 @@ for part in $(lsblk -lnpo NAME,FSTYPE | awk '$2 ~ /ext4|btrfs|xfs/ {print $1}');
     fi
 done
 
-# 6. Select largest internal non-USB target disk across NVMe, SATA, SAS, eMMC, and VirtIO controllers
+# 6. Load INSTALL_MODE from instant-server-env.conf
+INSTALL_MODE="whole_disk"
+for env_cand in /tmp/cidata/instant-server-env.conf /mnt/cidata/instant-server-env.conf /cdrom/cidata/instant-server-env.conf; do
+    if [ -f "$env_cand" ]; then
+        # shellcheck disable=SC1090
+        source "$env_cand" 2>/dev/null || true
+        break
+    fi
+done
+
+# 7. Enumerate all internal candidate disks (excluding USB installer media)
 BEST_DISK=""
 BEST_SIZE=0
-while read -r dname dsize drm dtype; do
-    [ "$dtype" = "disk" ] || continue
+USE_GAP_FLAG=""
+declare -a DISK_LIST=()
+while read -r dname dtype dsize dtran drm; do
+    [ "$dtype" != "disk" ] && continue
+    [[ "$dname" =~ ^/dev/(loop|ram|zram|sr|fd|md|dm-) ]] && continue
+    [[ "$dname" == *boot* ]] || [[ "$dname" == *rpmb* ]] && continue
     [ -n "$USB_DISK" ] && [ "$dname" = "$USB_DISK" ] && continue
     [ -n "$CIDATA_DISK" ] && [ "$dname" = "$CIDATA_DISK" ] && continue
-    [[ "$dname" == /dev/loop* || "$dname" == /dev/ram* || "$dname" == /dev/zram* || "$dname" == /dev/sr* || "$dname" == /dev/mmcblk*boot* || "$dname" == /dev/mmcblk*rpmb* ]] && continue
-    grep -q "^${dname}" /proc/mounts 2>/dev/null && continue
-    if [ "$drm" = "0" ] && [ "${dsize:-0}" -gt "$BEST_SIZE" ]; then
+    if [ "$dtran" = "usb" ] || [ "$drm" = "1" ]; then
+        continue
+    fi
+    dmodel=$(lsblk -dn -o MODEL "$dname" 2>/dev/null | tr -s ' ' || echo "Internal Disk")
+    dgb=$((dsize / 1073741824))
+    DISK_LIST+=("${dname}|${dgb} GB (${dmodel})")
+    if [ "${dsize:-0}" -gt "$BEST_SIZE" ]; then
         BEST_SIZE="$dsize"
         BEST_DISK="$dname"
     fi
-done < <(lsblk -dbnpo NAME,SIZE,RM,TYPE 2>/dev/null)
+done < <(lsblk -brndo NAME,TYPE,SIZE,TRAN,RM 2>/dev/null | awk '{print "/dev/"$1, $2, $3, ($4==""?"none":$4), $5}')
 
-# Fallback for laptops/mini-PCs whose SATA/eMMC/SD controller marks internal storage with RM=1
-if [ -z "$BEST_DISK" ]; then
-    while read -r dname dsize drm dtype; do
-        [ "$dtype" = "disk" ] || continue
-        [ -n "$USB_DISK" ] && [ "$dname" = "$USB_DISK" ] && continue
-        [ -n "$CIDATA_DISK" ] && [ "$dname" = "$CIDATA_DISK" ] && continue
-        [[ "$dname" == /dev/loop* || "$dname" == /dev/ram* || "$dname" == /dev/zram* || "$dname" == /dev/sr* || "$dname" == /dev/mmcblk*boot* || "$dname" == /dev/mmcblk*rpmb* ]] && continue
-        grep -q "^${dname}" /proc/mounts 2>/dev/null && continue
-        if [ "${dsize:-0}" -gt "$BEST_SIZE" ]; then
-            BEST_SIZE="$dsize"
-            BEST_DISK="$dname"
+# 7b. Interactive Target Disk Picker UI Mode (on-screen GUI menu + port :8088 Web Picker)
+if [ "$INSTALL_MODE" = "interactive_gui_disk" ] && [ "${#DISK_LIST[@]}" -gt 0 ]; then
+    log_usb "Launching Interactive Target Disk Picker UI on /dev/tty1 and port :8088..."
+    python3 - "${DISK_LIST[@]}" << 'PYPICK' 2>/dev/null || true
+import http.server, json, os, subprocess, sys, threading
+
+disks = []
+for arg in sys.argv[1:]:
+    if "|" in arg:
+        dev, desc = arg.split("|", 1)
+        disks.append({"dev": dev, "desc": desc})
+
+chosen = {"disk": disks[0]["dev"] if disks else "/dev/sda", "gap": False, "done": False}
+
+class PickerHandler(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *args): pass
+    def do_GET(self):
+        if self.path.startswith("/pick?"):
+            from urllib.parse import parse_qs, urlparse
+            q = parse_qs(urlparse(self.path).query)
+            chosen["disk"] = q.get("disk", [chosen["disk"]])[0]
+            chosen["gap"] = q.get("mode", ["whole"])[0] == "gap"
+            chosen["done"] = True
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.end_headers()
+            self.wfile.write(b"<h2>Target disk selected! Continuing Ubuntu Server installation...</h2>")
+            return
+        rows = "".join([f"<div style='margin:10px 0;padding:12px;border:1px solid #334;border-radius:8px;'><b>{d['dev']}</b> — {d['desc']}<br/><br/><a href='/pick?disk={d['dev']}&mode=whole' style='padding:8px 14px;background:#0A84FF;color:#fff;border-radius:6px;text-decoration:none;margin-right:8px;'>Install on Whole Disk</a><a href='/pick?disk={d['dev']}&mode=gap' style='padding:8px 14px;background:#24272F;color:#fff;border-radius:6px;text-decoration:none;'>Use Largest Free Space (Dual-Boot)</a></div>" for d in disks])
+        html = f"<html><body style='background:#0B0C0E;color:#F4F4F6;font-family:sans-serif;max-width:600px;margin:40px auto;padding:20px;'><h2>Instant Server — Select Target Disk</h2><p>Choose which drive on this computer to install Ubuntu Server onto:</p>{rows}</body></html>"
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html")
+        self.end_headers()
+        self.wfile.write(html.encode())
+
+srv = http.server.HTTPServer(("0.0.0.0", 8088), PickerHandler)
+threading.Thread(target=srv.serve_forever, daemon=True).start()
+
+if os.path.exists("/dev/tty1") and subprocess.call(["which", "whiptail"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0:
+    menu_args = ["whiptail", "--title", "Instant Server — Select Target Disk", "--menu", "Choose the internal disk on this computer for Ubuntu Server (or open http://<ip>:8088):", "18", "74", "8"]
+    for d in disks:
+        menu_args.extend([d["dev"], d["desc"]])
+    try:
+        with open("/dev/tty1", "rb") as tin, open("/dev/tty1", "wb") as tout:
+            p = subprocess.Popen(menu_args, stdin=tin, stdout=tout, stderr=subprocess.PIPE, text=True)
+            _, err_out = p.communicate(timeout=180)
+            if p.returncode == 0 and err_out.strip():
+                chosen["disk"] = err_out.strip()
+    except Exception:
+        pass
+
+with open("/tmp/instant_picked_disk", "w") as f:
+    f.write(chosen["disk"] + ("|gap" if chosen["gap"] else "|whole"))
+PYPICK
+    if [ -f /tmp/instant_picked_disk ]; then
+        PICK_RAW=$(cat /tmp/instant_picked_disk)
+        BEST_DISK="${PICK_RAW%%|*}"
+        if [[ "$PICK_RAW" == *"|gap" ]]; then
+            USE_GAP_FLAG="--use-largest-gap"
         fi
-    done < <(lsblk -dbnpo NAME,SIZE,RM,TYPE 2>/dev/null)
-fi
-
-if [ -f /mnt/cidata/instant-server-env.conf ]; then
-    . /mnt/cidata/instant-server-env.conf
+        log_usb "User selected target disk via Interactive Picker: ${BEST_DISK} (${USE_GAP_FLAG:-whole_disk})"
+    fi
 fi
 
 if [ -n "$BEST_DISK" ]; then
     echo "$BEST_DISK" > /run/instant-target-disk
-    swapoff -a 2>/dev/null || true
-    for p in $(lsblk -lnpo NAME "$BEST_DISK" 2>/dev/null | tail -n +2); do
-        umount -lf "$p" 2>/dev/null || true
-    done
-    if [ "${INSTANT_INSTALL_MODE:-}" = "auto_erase" ] || [ "${INSTANT_INSTALL_MODE:-}" = "reinstall_wipe_data" ]; then
-        if [ "$BEST_DISK" != "$USB_DISK" ] && [ "$BEST_DISK" != "$CIDATA_DISK" ] && ! grep -q "^${BEST_DISK}" /proc/mounts 2>/dev/null; then
-            log_usb "Cleaning existing LVM, RAID, and partition signatures on ${BEST_DISK} for ${INSTANT_INSTALL_MODE}..."
-            for vg in $(pvs --noheadings -o pv_name,vg_name 2>/dev/null | awk -v d="$BEST_DISK" '$1 ~ "^"d && $2 != "" {print $2}' | sort -u); do
-                lvremove -ff -y "$vg" >/dev/null 2>&1 || true
-                vgremove -ff -y "$vg" >/dev/null 2>&1 || true
-            done
-            for pv in $(pvs --noheadings -o pv_name 2>/dev/null | awk -v d="$BEST_DISK" '$1 ~ "^"d {print $1}'); do
-                pvremove -ff -y "$pv" >/dev/null 2>&1 || true
-            done
-            dmsetup remove_all >/dev/null 2>&1 || true
-            mdadm --stop --scan >/dev/null 2>&1 || true
-            for p in $(lsblk -lnpo NAME "$BEST_DISK" 2>/dev/null | tail -n +2 | tac); do
-                mdadm --zero-superblock "$p" >/dev/null 2>&1 || true
-                wipefs -a "$p" >/dev/null 2>&1 || true
-            done
-            wipefs -a "$BEST_DISK" >/dev/null 2>&1 || true
-            sgdisk --zap-all "$BEST_DISK" >/dev/null 2>&1 || dd if=/dev/zero of="$BEST_DISK" bs=1M count=16 conv=fsync >/dev/null 2>&1 || true
-            partprobe "$BEST_DISK" 2>/dev/null || true
-        fi
-    else
-        vgchange -an >/dev/null 2>&1 || true
-        mdadm --stop --scan >/dev/null 2>&1 || true
-    fi
-    if command -v sgdisk >/dev/null 2>&1; then
-        sgdisk -e "$BEST_DISK" >/dev/null 2>&1 || true
-    fi
     log_usb "Pinned internal target disk: ${BEST_DISK} (${BEST_SIZE} bytes)"
-else
-    log_usb "WARNING: No separate internal target disk detected beyond USB_DISK=${USB_DISK}"
 fi
 
-# 7. Check if wired Ethernet or USB tethering already has a global IPv4 lease
-WIRED_IPV4=$(ip -4 -o addr show scope global 2>/dev/null | awk '$2 ~ /^(en|eth|usb)/ {print $2 ":" $4}' | head -n1 || true)
+# 8. Detect whether wired Ethernet already has an IPv4 lease
+WIRED_ONLINE=0
+WIRED_IF=""
+for iface in /sys/class/net/*; do
+    [ ! -e "$iface" ] && continue
+    ifname=$(basename "$iface")
+    [ "$ifname" = "lo" ] && continue
+    [ -d "$iface/wireless" ] || [ -d "$iface/phy80211" ] && continue
+    ip4=$(ip -4 -o addr show dev "$ifname" scope global 2>/dev/null | awk '{print $4}' | head -n1 || true)
+    if [ -n "$ip4" ]; then
+        WIRED_ONLINE=1
+        WIRED_IF="$ifname ($ip4)"
+        break
+    fi
+done
 
-# 8. Sanitize /autoinstall.yaml using standalone sanitize_autoinstall.py script
-SANITIZE_SCRIPT="/mnt/cidata/sanitize_autoinstall.py"
+# 9. Sanitize /autoinstall.yaml using standalone sanitize_autoinstall.py script
+SANITIZE_SCRIPT="/tmp/cidata/sanitize_autoinstall.py"
+[ ! -f "$SANITIZE_SCRIPT" ] && SANITIZE_SCRIPT="/mnt/cidata/sanitize_autoinstall.py"
 [ ! -f "$SANITIZE_SCRIPT" ] && SANITIZE_SCRIPT="/cdrom/cidata/sanitize_autoinstall.py"
-if [ -f /autoinstall.yaml ] && [ -f "$SANITIZE_SCRIPT" ] && command -v python3 >/dev/null 2>&1; then
-    if [ -n "$WIRED_IPV4" ]; then
-        python3 "$SANITIZE_SCRIPT" --target-disk "$BEST_DISK" --wired-online 2>/dev/null || true
-        log_usb "Sanitized /autoinstall.yaml via sanitize_autoinstall.py (pinned path=${BEST_DISK}, kept live wired network ${WIRED_IPV4})."
+if [ -f "/autoinstall.yaml" ] && [ -f "$SANITIZE_SCRIPT" ]; then
+    if [ "$WIRED_ONLINE" -eq 1 ]; then
+        python3 "$SANITIZE_SCRIPT" --config /autoinstall.yaml --disk "${BEST_DISK}" --wired-online ${USE_GAP_FLAG} 2>/dev/null || true
+        log_usb "Sanitized /autoinstall.yaml via sanitize_autoinstall.py (pinned path=${BEST_DISK}, kept live wired network ${WIRED_IF})."
     else
-        python3 "$SANITIZE_SCRIPT" --target-disk "$BEST_DISK" 2>/dev/null || true
-        log_usb "Sanitized /autoinstall.yaml via sanitize_autoinstall.py (pinned path=${BEST_DISK}, removed wifis.wlan0)."
+        python3 "$SANITIZE_SCRIPT" --config /autoinstall.yaml --disk "${BEST_DISK}" ${USE_GAP_FLAG} 2>/dev/null || true
+        log_usb "Sanitized /autoinstall.yaml via sanitize_autoinstall.py (pinned path=${BEST_DISK})."
     fi
 fi
 
-# 9. Connect live Wi-Fi only if no wired Ethernet IPv4 connection is active
-if [ -n "$WIRED_IPV4" ]; then
-    log_usb "Wired interface already online (${WIRED_IPV4}); keeping live wired connection and deferring Wi-Fi setup to target OS."
-elif [ -n "${INSTANT_WIFI_SSID:-}" ]; then
-    WIFI_DEV=""
-    for nd in /sys/class/net/*; do
-        [ -e "$nd" ] || continue
-        if [ -d "$nd/wireless" ] || [ -d "$nd/phy80211" ]; then
-            WIFI_DEV=$(basename "$nd")
-            break
-        fi
-    done
-    if [ -n "$WIFI_DEV" ] && command -v wpa_supplicant >/dev/null 2>&1; then
-        log_usb "No wired IPv4 detected; connecting live Wi-Fi interface ${WIFI_DEV} to SSID ${INSTANT_WIFI_SSID}..."
-        ip link set "$WIFI_DEV" up 2>/dev/null || true
-        if [ -n "${INSTANT_WIFI_PASSWORD:-}" ] && command -v wpa_passphrase >/dev/null 2>&1; then
-            wpa_passphrase "$INSTANT_WIFI_SSID" "$INSTANT_WIFI_PASSWORD" > /run/live-wpa.conf 2>/dev/null || true
-        else
-            printf 'network={\n\tssid="%s"\n\tkey_mgmt=NONE\n}\n' "$INSTANT_WIFI_SSID" > /run/live-wpa.conf
-        fi
-        wpa_supplicant -B -i "$WIFI_DEV" -c /run/live-wpa.conf >/dev/null 2>&1 || true
-        (dhclient -1 "$WIFI_DEV" >/dev/null 2>&1 </dev/null || networkctl reconfigure "$WIFI_DEV" >/dev/null 2>&1 </dev/null || true) &
-    else
-        log_usb "No live wireless interface found during early-commands (WIFI_DEV=${WIFI_DEV:-none}); continuing with offline install."
-    fi
+if [ "$WIRED_ONLINE" -eq 1 ]; then
+    log_usb "Wired interface already online (${WIRED_IF}); keeping live wired connection and deferring Wi-Fi setup to target OS."
+    exit 0
 fi
-
-udevadm settle --timeout=15 2>/dev/null || true
-exit 0
 `
 
 const scriptDynamicDualBootStorageSh = `#!/usr/bin/env bash

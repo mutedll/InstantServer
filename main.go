@@ -29,6 +29,7 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/InstantServer/InstantServer/usb"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -198,7 +199,10 @@ func main() {
 			Handler: app.AssetAndAPIRouter(),
 		},
 		BackgroundColour: &options.RGBA{R: 11, G: 12, B: 14, A: 255},
-		OnStartup:        app.startup,
+		OnStartup: func(ctx context.Context) {
+			app.startup(ctx)
+			go usb.ApplyNativeWindowIcon(buildInstantServerIconPNG(64), buildInstantServerIconPNG(32))
+		},
 		OnBeforeClose: func(ctx context.Context) (prevent bool) {
 			if app.IsFlashing() && !app.IsForceClosing() {
 				runtime.EventsEmit(ctx, "flash:close-warning", map[string]interface{}{

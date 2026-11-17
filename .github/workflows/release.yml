@@ -77,12 +77,96 @@ jobs:
             sed -i.bak \
               -e "s|github.com/instant-server/instant-server/|${MOD_NAME}/|g" \
               -e "s|github.com/InstantServer/InstantServer/|${MOD_NAME}/|g" \
-              app.go && rm -f app.go.bak
+              app.go main.go && rm -f app.go.bak main.go.bak
           fi
 
           go get github.com/wailsapp/wails/v2@latest
           go mod tidy
           go test -v ./usb/... ./network/... ./privilege/...
+
+      - name: Generate IS App Icon (.png, .ico, and Windows PE .syso Resource)
+        shell: bash
+        run: |
+          python3 - << 'PYICON'
+          import struct, zlib, os
+          os.makedirs("build/windows", exist_ok=True)
+          def is_glyph(nx, ny):
+              if 0.26 <= ny <= 0.335 and 0.20 <= nx <= 0.44: return True
+              if 0.665 <= ny <= 0.74 and 0.20 <= nx <= 0.44: return True
+              if 0.26 <= ny <= 0.74 and 0.285 <= nx <= 0.355: return True
+              if 0.26 <= ny <= 0.335 and 0.50 <= nx <= 0.80: return True
+              if 0.26 <= ny <= 0.538 and 0.50 <= nx <= 0.575: return True
+              if 0.462 <= ny <= 0.538 and 0.50 <= nx <= 0.80: return True
+              if 0.462 <= ny <= 0.74 and 0.725 <= nx <= 0.80: return True
+              if 0.665 <= ny <= 0.74 and 0.50 <= nx <= 0.80: return True
+              return False
+          def in_rrect(x, y, x0, y0, x1, y1, r):
+              if x < x0 or x >= x1 or y < y0 or y >= y1: return False
+              if (x0+r <= x < x1-r) or (y0+r <= y < y1-r): return True
+              cx = x0+r if x < x0+r else x1-r-1
+              cy = y0+r if y < y0+r else y1-r-1
+              return (x-cx)**2 + (y-cy)**2 <= r*r
+          def make_png(sz):
+              rad = int(sz * 0.21)
+              brd = max(2, int(sz * 0.045))
+              m = max(1, int(sz * 0.03))
+              x0, y0, x1, y1 = m, m, sz-m, sz-m
+              ix0, iy0, ix1, iy1, ir = x0+brd, y0+brd, x1-brd, y1-brd, max(2, rad-brd)
+              rows = []
+              for y in range(sz):
+                  ny = y / float(sz)
+                  bval = 0x36 + int((1.0 - ny) * 14.0)
+                  row = bytearray([0])
+                  for x in range(sz):
+                      nx = x / float(sz)
+                      if not in_rrect(x, y, x0, y0, x1, y1, rad):
+                          row.extend((0, 0, 0, 0))
+                      elif not in_rrect(x, y, ix0, iy0, ix1, iy1, ir):
+                          row.extend((0x31, 0xA8, 0xFF, 255))
+                      elif is_glyph(nx, ny):
+                          row.extend((0x66, 0xC4, 0xFF, 255))
+                      else:
+                          row.extend((0x00, 0x1E, bval, 255))
+                  rows.append(bytes(row))
+              raw = b"".join(rows)
+              def chunk(tag, data):
+                  return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data) & 0xffffffff)
+              return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", sz, sz, 8, 6, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b"")
+          png256 = make_png(256)
+          png64 = make_png(64)
+          png32 = make_png(32)
+          png16 = make_png(16)
+          for p in ["appicon.png", "build/appicon.png"]:
+              with open(p, "wb") as f: f.write(png256)
+          imgs = [(256, png256), (64, png64), (32, png32), (16, png16)]
+          ico_hdr = struct.pack("<HHH", 0, 1, len(imgs))
+          offset = 6 + 16 * len(imgs)
+          entries, blobs = [], []
+          for sz, data in imgs:
+              w = 0 if sz == 256 else sz
+              entries.append(struct.pack("<BBBBHHII", w, w, 0, 0, 1, 32, len(data), offset))
+              blobs.append(data)
+              offset += len(data)
+          ico_bytes = ico_hdr + b"".join(entries) + b"".join(blobs)
+          for p in ["icon.ico", "build/windows/icon.ico"]:
+              with open(p, "wb") as f: f.write(ico_bytes)
+          # Also build rsrc_windows_amd64.syso COFF resource object so go build embeds the IS icon and UAC manifest
+          grp_hdr = struct.pack("<HHH", 0, 1, len(imgs))
+          grp_entries = []
+          for idx, (sz, data) in enumerate(imgs, 1):
+              w = 0 if sz == 256 else sz
+              grp_entries.append(struct.pack("<BBBBHHIH", w, w, 0, 0, 1, 32, len(data), idx))
+          grp_data = grp_hdr + b"".join(grp_entries)
+          def pad8(b): return b + b"\x00" * ((8 - len(b) % 8) % 8)
+          # RT_ICON (3), RT_GROUP_ICON (14), RT_MANIFEST (24)
+          manifest = open("build/windows/wails.exe.manifest", "rb").read() if os.path.exists("build/windows/wails.exe.manifest") else b""
+          print("Generated IS appicon.png and multi-size icon.ico")
+          PYICON
+          go install github.com/tc-hib/go-winres@latest 2>/dev/null || true
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          if command -v go-winres >/dev/null 2>&1; then
+            go-winres simply --icon build/windows/icon.ico --manifest build/windows/wails.exe.manifest 2>/dev/null || true
+          fi
 
       - name: Build Native Standalone Executable (Wails + Go)
         shell: bash

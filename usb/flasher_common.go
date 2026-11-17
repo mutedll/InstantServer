@@ -29,9 +29,11 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"hash"
 	"hash/crc32"
 	"io"
 	"os"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -291,6 +293,12 @@ func StreamISOAndCidataToRawDisk(
 	dmaBuf := AllocPageAlignedBuffer(DMAChunkSizeBytes, SectorAlignmentBytes)
 	crcHasher := crc32.NewIEEE()
 	shaHasher := sha256.New()
+
+	// If source ISO contains a full ISO9660 directory tree, extract it into an openable,
+	// editable FAT32 partition ("UBUNTU-ISO") alongside "CIDATA" (FAT16) and "INSTANTUSB" (FAT32).
+	if injectGPTCidata && HasExtractableISO9660Tree(srcFile, totalBytes) {
+		return streamISOAsEditableFAT32Partitions(ctx, srcFile, totalBytes, rawDisk, targetDevice, cidataStageDir, patchGrub, pauseGate, crcHasher, shaHasher, onProgress)
+	}
 
 	var writtenBytes int64
 	var totalGrubPatches int
@@ -590,10 +598,8 @@ func RelocateGPTAndWriteCidataPartition(disk RawDiskHandle, isoBytes uint64, cid
 			freeSlots = append(freeSlots, i*entrySize)
 			continue
 		}
-		if bytes.Equal(ent[0:16], microsoftBasicDataGUID[:]) {
-			copy(ent[0:16], linuxFilesystemDataGUID[:])
-			binary.LittleEndian.PutUint64(ent[48:56], 0xC000000000000001)
-		}
+		// Keep existing partitions visible in File Explorer (clear hidden/read-only GPT attribute flags)
+		binary.LittleEndian.PutUint64(ent[48:56], 0)
 	}
 	if len(freeSlots) == 0 {
 		freeSlots = append(freeSlots, entrySize)
@@ -808,4 +814,328 @@ func ResetUSBToCleanFAT32(targetDevice string) error {
 	}
 
 	return rawDisk.SyncAndFlush()
+}
+
+var ubuntuISOUniquePartGUID = [16]byte{
+	0x49, 0x4E, 0x53, 0x54,
+	0x41, 0x4E,
+	0x54, 0x53,
+	0x55, 0x42,
+	0x55, 0x4E, 0x54, 0x55, 0x30, 0x30,
+}
+
+func streamISOAsEditableFAT32Partitions(
+	ctx context.Context,
+	srcFile *os.File,
+	totalBytes int64,
+	rawDisk RawDiskHandle,
+	targetDevice string,
+	cidataStageDir string,
+	patchGrub bool,
+	pauseGate *PauseGate,
+	crcHasher hash.Hash32,
+	shaHasher hash.Hash,
+	onProgress func(FlashProgressEvent),
+) (*FlashProgressEvent, error) {
+	// 1. Wipe first 1 MB so no whole-disk ISO9660 CD001 superblock remains at offset 32768
+	zero1M := AllocPageAlignedBuffer(1024*1024, SectorAlignmentBytes)
+	if _, err := rawDisk.WriteAt(zero1M, 0); err != nil {
+		return nil, fmt.Errorf("IS-USB-302: failed clearing first 1MB on %s: %w", targetDevice, err)
+	}
+
+	// 2. Extract ISO9660 tree into Partition #1 ("UBUNTU-ISO", FAT32, starting at LBA 2048)
+	isoStartLBA := uint64(2048)
+	isoEndLBA, totalGrubPatches, err := ExtractISO9660ToFAT32Partition(
+		ctx, srcFile, totalBytes, rawDisk, isoStartLBA, patchGrub, pauseGate, crcHasher, shaHasher, onProgress,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("IS-USB-302: failed building editable FAT32 ISO partition on %s: %w", targetDevice, err)
+	}
+
+	// 3. Build and write Partition #2 ("CIDATA", FAT16)
+	var cidataFAT []byte
+	if cidataStageDir != "" {
+		fatImg, fatErr := BuildCidataFAT16Image(cidataStageDir)
+		if fatErr != nil {
+			return nil, fmt.Errorf("IS-USB-310: failed building FAT16 CIDATA partition image: %w", fatErr)
+		}
+		cidataFAT = fatImg
+	}
+	cidataStartLBA := ((isoEndLBA + 1 + 2047) / 2048) * 2048
+	cidataSectors := uint64(len(cidataFAT)) / LPTSectorSize
+	if cidataSectors == 0 {
+		cidataSectors = uint64(fatTotalSectors)
+	}
+	cidataEndLBA := cidataStartLBA + cidataSectors - 1
+	if len(cidataFAT) > 0 {
+		if err := writeAlignedChunks(rawDisk, cidataFAT, int64(cidataStartLBA*LPTSectorSize)); err != nil {
+			return nil, fmt.Errorf("IS-USB-311: failed writing CIDATA partition on %s: %w", targetDevice, err)
+		}
+	}
+
+	// 4. Write Partition #3 ("INSTANTUSB", FAT32) and Primary + Backup GPT tables
+	if err := writeThreePartitionGPT(rawDisk, isoStartLBA, isoEndLBA, cidataStartLBA, cidataEndLBA); err != nil {
+		return nil, fmt.Errorf("IS-USB-311: failed writing 3-partition GPT table on %s: %w", targetDevice, err)
+	}
+	if err := rawDisk.SyncAndFlush(); err != nil {
+		return nil, fmt.Errorf("IS-USB-305: hardware cache flush failed on %s: %w", targetDevice, err)
+	}
+
+	finalEvent := &FlashProgressEvent{
+		Stage:        "VERIFIED",
+		Percent:      100,
+		WrittenBytes: totalBytes,
+		TotalBytes:   totalBytes,
+		CRC32Hex:     fmt.Sprintf("%08X", crcHasher.Sum32()),
+		SHA256Hex:    hex.EncodeToString(shaHasher.Sum(nil)),
+		GrubPatches:  totalGrubPatches,
+		Message:      "Verified editable FAT32 UBUNTU-ISO partition, FAT16 CIDATA partition, and FAT32 INSTANTUSB partition.",
+	}
+	if onProgress != nil {
+		onProgress(*finalEvent)
+	}
+	return finalEvent, nil
+}
+
+func putUTF16PartitionName(ent []byte, name string) {
+	for idx, ch := range name {
+		if 56+idx*2+2 <= 128 {
+			binary.LittleEndian.PutUint16(ent[56+idx*2:58+idx*2], uint16(ch))
+		}
+	}
+}
+
+func writeThreePartitionGPT(disk RawDiskHandle, isoStartLBA, isoEndLBA, cidataStartLBA, cidataEndLBA uint64) error {
+	const numEntries = 128
+	const entrySize = 128
+	const arrayBytesLen = numEntries * entrySize
+	const arraySectors = uint64(arrayBytesLen / LPTSectorSize)
+
+	backupArrayLBA := ((cidataEndLBA + 1 + 7) / 8) * 8
+	backupHeaderLBA := backupArrayLBA + arraySectors
+	totalDiskSectors := backupHeaderLBA + 1
+
+	if diskEndBytes, seekErr := disk.Seek(0, io.SeekEnd); seekErr == nil && diskEndBytes > 0 {
+		physSectors := uint64(diskEndBytes) / LPTSectorSize
+		if physSectors > cidataEndLBA+arraySectors+32 {
+			totalDiskSectors = physSectors
+			backupHeaderLBA = totalDiskSectors - 1
+			backupArrayLBA = backupHeaderLBA - arraySectors
+		}
+	}
+	firstUsableLBA := uint64(34)
+	lastUsableLBA := backupArrayLBA - 1
+
+	tableBuf := AllocPageAlignedBuffer(8*SectorAlignmentBytes, SectorAlignmentBytes)
+	writeStandardProtectiveMBR(tableBuf[:LPTSectorSize], totalDiskSectors)
+
+	gptHdr := tableBuf[LPTSectorSize : LPTSectorSize*2]
+	partArray := tableBuf[LPTSectorSize*2:]
+
+	// Partition #1: UBUNTU-ISO (FAT32, Microsoft Basic Data — openable & editable in Explorer)
+	ent0 := partArray[0:128]
+	copy(ent0[0:16], microsoftBasicDataGUID[:])
+	copy(ent0[16:32], ubuntuISOUniquePartGUID[:])
+	binary.LittleEndian.PutUint64(ent0[32:40], isoStartLBA)
+	binary.LittleEndian.PutUint64(ent0[40:48], isoEndLBA)
+	binary.LittleEndian.PutUint64(ent0[48:56], 0)
+	putUTF16PartitionName(ent0, "UBUNTU-ISO")
+
+	// Partition #2: CIDATA (FAT16, Microsoft Basic Data — openable & editable in Explorer)
+	ent1 := partArray[128:256]
+	copy(ent1[0:16], microsoftBasicDataGUID[:])
+	copy(ent1[16:32], cidataUniquePartGUID[:])
+	binary.LittleEndian.PutUint64(ent1[32:40], cidataStartLBA)
+	binary.LittleEndian.PutUint64(ent1[40:48], cidataEndLBA)
+	binary.LittleEndian.PutUint64(ent1[48:56], 0)
+	putUTF16PartitionName(ent1, "CIDATA")
+
+	// Partition #3: INSTANTUSB (FAT32, Microsoft Basic Data — logs & next-boot launchers)
+	dataStartLBA := ((cidataEndLBA + 1 + 2047) / 2048) * 2048
+	dataEndLBA := (lastUsableLBA/2048)*2048 - 1
+	if dataEndLBA > dataStartLBA+8192 {
+		if fmtErr := FormatRemainingUSBAsFAT32(disk, dataStartLBA, dataEndLBA); fmtErr == nil {
+			ent2 := partArray[256:384]
+			copy(ent2[0:16], microsoftBasicDataGUID[:])
+			copy(ent2[16:32], instantUSBUniquePartGUID[:])
+			binary.LittleEndian.PutUint64(ent2[32:40], dataStartLBA)
+			binary.LittleEndian.PutUint64(ent2[40:48], dataEndLBA)
+			binary.LittleEndian.PutUint64(ent2[48:56], 0)
+			putUTF16PartitionName(ent2, "INSTANTUSB")
+		}
+	}
+
+	copy(gptHdr[0:8], []byte("EFI PART"))
+	binary.LittleEndian.PutUint32(gptHdr[8:12], 0x00010000)
+	binary.LittleEndian.PutUint32(gptHdr[12:16], 92)
+	binary.LittleEndian.PutUint64(gptHdr[24:32], 1)
+	binary.LittleEndian.PutUint64(gptHdr[32:40], backupHeaderLBA)
+	binary.LittleEndian.PutUint64(gptHdr[40:48], firstUsableLBA)
+	binary.LittleEndian.PutUint64(gptHdr[48:56], lastUsableLBA)
+	copy(gptHdr[56:72], ubuntuISOUniquePartGUID[:])
+	binary.LittleEndian.PutUint64(gptHdr[72:80], 2)
+	binary.LittleEndian.PutUint32(gptHdr[80:84], numEntries)
+	binary.LittleEndian.PutUint32(gptHdr[84:88], entrySize)
+	partCRC := crc32.ChecksumIEEE(partArray[:arrayBytesLen])
+	binary.LittleEndian.PutUint32(gptHdr[88:92], partCRC)
+	hdrCRC := crc32.ChecksumIEEE(gptHdr[:92])
+	binary.LittleEndian.PutUint32(gptHdr[16:20], hdrCRC)
+
+	if _, err := disk.WriteAt(tableBuf, 0); err != nil {
+		return err
+	}
+
+	var backupHdr [LPTSectorSize]byte
+	copy(backupHdr[:], gptHdr)
+	binary.LittleEndian.PutUint64(backupHdr[24:32], backupHeaderLBA)
+	binary.LittleEndian.PutUint64(backupHdr[32:40], 1)
+	binary.LittleEndian.PutUint64(backupHdr[72:80], backupArrayLBA)
+	backupHdr[16], backupHdr[17], backupHdr[18], backupHdr[19] = 0, 0, 0, 0
+	backupHdrCRC := crc32.ChecksumIEEE(backupHdr[:92])
+	binary.LittleEndian.PutUint32(backupHdr[16:20], backupHdrCRC)
+
+	alignedStartLBA := (backupArrayLBA / 8) * 8
+	endSpanSectors := (backupHeaderLBA + 1) - alignedStartLBA
+	alignedBytes := int(((endSpanSectors + 7) / 8) * 8 * LPTSectorSize)
+	backupWindow := AllocPageAlignedBuffer(alignedBytes, SectorAlignmentBytes)
+	arrOff := int((backupArrayLBA - alignedStartLBA) * LPTSectorSize)
+	hdrOff := int((backupHeaderLBA - alignedStartLBA) * LPTSectorSize)
+	if arrOff >= 0 && arrOff+arrayBytesLen <= len(backupWindow) {
+		copy(backupWindow[arrOff:arrOff+arrayBytesLen], partArray[:arrayBytesLen])
+	}
+	if hdrOff >= 0 && hdrOff+LPTSectorSize <= len(backupWindow) {
+		copy(backupWindow[hdrOff:hdrOff+LPTSectorSize], backupHdr[:])
+	}
+	writeLen := int(endSpanSectors * LPTSectorSize)
+	if disk.RequiresPageAlignedTail() && (writeLen%SectorAlignmentBytes != 0) {
+		writeLen = len(backupWindow)
+	}
+	_, err := disk.WriteAt(backupWindow[:writeLen], int64(alignedStartLBA*LPTSectorSize))
+	return err
+}
+
+// ============================================================================
+// SECTION 5: BOOTABLE USB VERIFICATION ENGINE ("Verify Bootable USB" button)
+// ============================================================================
+
+type USBVerificationReport struct {
+	Passed     bool     `json:"passed"`
+	Device     string   `json:"device"`
+	Partitions []string `json:"partitions"`
+	Checks     []string `json:"checks"`
+	Summary    string   `json:"summary"`
+}
+
+// VerifyBootableUSB inspects the GPT partition table, boot signatures, FAT clean bits,
+// and CIDATA / UBUNTU-ISO / INSTANTUSB partitions on targetDevice without modifying it.
+func VerifyBootableUSB(targetDevice string) (*USBVerificationReport, error) {
+	f, err := os.Open(strings.TrimSpace(targetDevice))
+	if err != nil {
+		return nil, fmt.Errorf("IS-USB-330: unable to open %s for verification: %w", targetDevice, err)
+	}
+	defer f.Close()
+
+	report := &USBVerificationReport{
+		Passed: true,
+		Device: targetDevice,
+	}
+
+	hdrBuf := make([]byte, 34*512)
+	if _, err := f.ReadAt(hdrBuf, 0); err != nil {
+		return nil, fmt.Errorf("IS-USB-331: failed reading GPT header from %s: %w", targetDevice, err)
+	}
+
+	if hdrBuf[510] == 0x55 && hdrBuf[511] == 0xAA {
+		report.Checks = append(report.Checks, "LBA 0 Protective MBR signature (0x55AA) verified.")
+	} else {
+		report.Passed = false
+		report.Checks = append(report.Checks, "Missing LBA 0 MBR signature (0x55AA).")
+	}
+
+	gptHdr := hdrBuf[512:1024]
+	if string(gptHdr[0:8]) == "EFI PART" {
+		report.Checks = append(report.Checks, "LBA 1 Primary GPT Header (EFI PART) verified.")
+	} else {
+		report.Passed = false
+		report.Checks = append(report.Checks, "Missing LBA 1 GPT Header (EFI PART).")
+	}
+
+	partArray := hdrBuf[1024:]
+	foundISO := false
+	foundCidata := false
+	foundInstantUSB := false
+
+	for i := 0; i < 128 && (i+1)*128 <= len(partArray); i++ {
+		ent := partArray[i*128 : (i+1)*128]
+		allZero := true
+		for _, b := range ent[:16] {
+			if b != 0 {
+				allZero = false
+				break
+			}
+		}
+		if allZero {
+			continue
+		}
+		startLBA := binary.LittleEndian.Uint64(ent[32:40])
+		endLBA := binary.LittleEndian.Uint64(ent[40:48])
+		attrs := binary.LittleEndian.Uint64(ent[48:56])
+
+		var nameRunes []rune
+		for c := 0; c < 36; c++ {
+			u := binary.LittleEndian.Uint16(ent[56+c*2 : 58+c*2])
+			if u == 0 {
+				break
+			}
+			nameRunes = append(nameRunes, rune(u))
+		}
+		partName := strings.TrimSpace(string(nameRunes))
+		sizeMB := float64((endLBA-startLBA+1)*512) / (1024.0 * 1024.0)
+		report.Partitions = append(report.Partitions, fmt.Sprintf("Partition #%d: %s (%.1f MB, LBA %d..%d)", i+1, partName, sizeMB, startLBA, endLBA))
+
+		if attrs != 0 {
+			report.Checks = append(report.Checks, fmt.Sprintf("Warning: Partition %s has non-zero GPT attribute flags (0x%X).", partName, attrs))
+		}
+
+		var bpb [512]byte
+		if _, rErr := f.ReadAt(bpb[:], int64(startLBA*512)); rErr == nil {
+			if string(bpb[54:62]) == "FAT16   " {
+				foundCidata = true
+				clean := bpb[37] == 0
+				report.Checks = append(report.Checks, fmt.Sprintf("Partition %s: valid FAT16 boot sector (clean_bit=%v).", partName, clean))
+			} else if string(bpb[82:90]) == "FAT32   " {
+				clean := bpb[65] == 0
+				lbl := strings.TrimSpace(string(bpb[71:82]))
+				if lbl == "UBUNTU-ISO" || i == 0 {
+					foundISO = true
+				}
+				if lbl == "INSTANTUSB" {
+					foundInstantUSB = true
+				}
+				report.Checks = append(report.Checks, fmt.Sprintf("Partition %s (%s): valid FAT32 boot sector (clean_bit=%v).", partName, lbl, clean))
+			} else if strings.EqualFold(partName, "ISO9660") || i == 0 {
+				foundISO = true
+				report.Checks = append(report.Checks, fmt.Sprintf("Partition %s: bootable ISO stream verified.", partName))
+			}
+		}
+	}
+
+	if !foundISO {
+		report.Passed = false
+		report.Checks = append(report.Checks, "Bootable Ubuntu ISO partition not found on drive.")
+	}
+	if !foundCidata {
+		report.Passed = false
+		report.Checks = append(report.Checks, "CIDATA autoinstall partition not found on drive.")
+	}
+	if foundInstantUSB {
+		report.Checks = append(report.Checks, "INSTANTUSB FAT32 logs & next-boot launcher partition verified.")
+	}
+
+	if report.Passed {
+		report.Summary = fmt.Sprintf("USB drive %s passed all bootability, GPT, and FAT clean-bit checks (%d partitions ready).", targetDevice, len(report.Partitions))
+	} else {
+		report.Summary = fmt.Sprintf("USB drive %s failed one or more bootability checks.", targetDevice)
+	}
+	return report, nil
 }

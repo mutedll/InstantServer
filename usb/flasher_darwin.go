@@ -136,3 +136,6 @@ func (d *darwinRawDisk) DevicePath() string {
 func (d *darwinRawDisk) RequiresPageAlignedTail() bool {
 	return strings.HasPrefix(d.rawCharPath, "/dev/rdisk")
 }
+
+// ApplyNativeWindowIcon is a no-op on non-Windows platforms (handled via Wails Options).
+func ApplyNativeWindowIcon(bigPNG []byte, smallPNG []byte) {}

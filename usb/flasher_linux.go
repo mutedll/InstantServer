@@ -128,3 +128,6 @@ func (d *linuxRawDisk) DevicePath() string {
 func (d *linuxRawDisk) RequiresPageAlignedTail() bool {
 	return d.directIO
 }
+
+// ApplyNativeWindowIcon is a no-op on non-Windows platforms (handled via Wails Options).
+func ApplyNativeWindowIcon(bigPNG []byte, smallPNG []byte) {}

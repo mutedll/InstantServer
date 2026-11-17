@@ -49,6 +49,8 @@
       viewMode: "setup",
       setupTab: "network",
       settingsTab: "system",
+      tabScrollPositions: { setup: {}, settings: {} },
+      verifyingUsb: false,
       searchQuery: "",
       openDropdownField: null,
       advancedExpanded: {
@@ -233,7 +235,8 @@
           if (endpoint === "elevate" && wailsApp.ElevateAdmin) return await wailsApp.ElevateAdmin();
           if (endpoint === "usb" && wailsApp.ScanUSBDevices) return await wailsApp.ScanUSBDevices();
           if (endpoint === "reset-usb" && wailsApp.ResetUSBDrive) return await wailsApp.ResetUSBDrive((payload && payload.device) || "");
-          if (endpoint === "boot-usb-next" && wailsApp.BootUSBNextRestart) return await wailsApp.BootUSBNextRestart();
+          if (endpoint === "verify-usb" && wailsApp.VerifyUSBDrive) return await wailsApp.VerifyUSBDrive(body && body.device ? String(body.device) : "");
+          if (endpoint === "boot-usb-next" && wailsApp.BootUSBNextRestart) return await wailsApp.BootUSBNextRestart(body && body.mode ? String(body.mode) : "restart_now");
           if (endpoint === "load-config" && wailsApp.LoadConfig) return await wailsApp.LoadConfig();
           if (endpoint === "save-config" && wailsApp.SaveConfig) return await wailsApp.SaveConfig(payload);
           if (endpoint === "custom-app" && wailsApp.AddCustomApp) return await wailsApp.AddCustomApp(payload);
@@ -484,6 +487,34 @@
     }
 
     
+
+    async function verifySelectedUsbDrive() {
+      if (state.flashing || state.verifyingUsb) return;
+      const selectedDev = state.usbDevices.find(d => d.device_id === state.selectedUsbId && d.triple_lock_passed)
+        || state.usbDevices.find(d => d.triple_lock_passed);
+      const targetNode = selectedDev ? selectedDev.device_node : state.selectedUsbId;
+      if (!targetNode) {
+        showToast("Select a USB drive first to verify its bootable partitions.");
+        return;
+      }
+      state.verifyingUsb = true;
+      renderApp();
+      showToast(`Verifying bootable partitions on ${targetNode}...`);
+      const res = await callBackend("verify-usb", "POST", { device: targetNode });
+      state.verifyingUsb = false;
+      if (res && Array.isArray(res.checks)) {
+        res.checks.forEach(c => {
+          state.flashLogs.push(`[VERIFY] ${c}`);
+        });
+      }
+      if (res && res.ok) {
+        showToast(res.message || `Verified ${targetNode}: all bootable partitions and FAT clean bits passed!`);
+      } else {
+        showToast((res && (res.error || res.message)) ? (res.error || res.message) : `Verification failed on ${targetNode}`);
+      }
+      renderApp();
+    }
+
     async function resetSelectedUsbDrive() {
       if (state.flashing || state.resettingUsb) return;
       const selectedDev = state.usbDevices.find(d => d.device_id === state.selectedUsbId && d.triple_lock_passed)
@@ -2132,6 +2163,7 @@ ${storageSnippet}
     function buildStorageSection() {
       const modes = [
         { id: "dual_boot", icon: "BAL", title: "Dual-Boot alongside existing OS", desc: "Keeps your computer's original Windows or Linux system intact (15 GB – 64 TB)", badge: "Safe Default" },
+        { id: "interactive_gui_disk", icon: "", title: "Choose target disk on target laptop (Interactive Disk Picker GUI)", desc: "Displays an interactive disk selector on the target laptop screen (and on http://<laptop-ip>:8088) during boot so you can pick which internal drive to install onto", badge: "Interactive Disk Picker" },
         { id: "auto_erase", icon: "CLN", title: "Fresh Server Install (Erase main drive)", desc: "Formats the main internal drive and dedicates 100% of space to the server", badge: "Requires confirmation" },
         { id: "reinstall_keep_data", icon: "REC", title: "Reinstall OS while retaining server data (/DATA & apps preserved)", desc: "Backs up existing /DATA, photos, Nextcloud, and app configs before reinstalling Ubuntu LTS and restores them automatically", badge: "Preserves /DATA" },
         { id: "reinstall_wipe_data", icon: "", title: "Reinstall OS without retaining server data (Factory reset wipe)", desc: "Erases all existing server data, apps, and partitions for a clean factory reset", badge: "Requires WIPE confirmation" },
@@ -2210,6 +2242,11 @@ ${storageSnippet}
         <div class="notice-banner" style="border-color:var(--success);">
           <div style="font-weight:600;">Safe OS Reinstall Mode Active</div>
           <div style="font-size:12px;">Existing <code>/DATA</code> (Photos, Nextcloud, Minecraft worlds, AppData) and <code>/opt/instant-server</code> are backed up prior to OS formatting and restored automatically after Ubuntu LTS finishes installing.</div>
+        </div>
+      ` : state.install_mode === "interactive_gui_disk" ? `
+        <div class="notice-banner" style="border-color:var(--accent);">
+          <div style="font-weight:600;">Interactive Target Disk Picker GUI Mode</div>
+          <div style="font-size:12px;">When you boot the target laptop from this USB drive, an interactive disk selection menu appears on the laptop screen (and on <code>http://&lt;laptop-ip&gt;:8088</code>) so you can choose which internal disk to install onto while your USB stick stays hidden and protected.</div>
         </div>
       ` : state.install_mode === "offline_updater_usb" ? `
         <div class="notice-banner" style="border-color:var(--accent);">
@@ -2751,6 +2788,9 @@ ${storageSnippet}
           ${contentHtml}
         </div>
       `;
+      bodyEl._restoringScroll = true;
+      bodyEl.scrollTop = (state.tabScrollPositions && state.tabScrollPositions.setup && state.tabScrollPositions.setup[state.setupTab]) || 0;
+      bodyEl._restoringScroll = false;
 
       const isFirst = tabIdx <= 0;
       const isLast = tabIdx === SETUP_TABS.length - 1;
@@ -2769,6 +2809,12 @@ ${storageSnippet}
               <button type="button" class="win-btn" data-action="pause-resume-flash">${state.flashPaused ? `Resume (${state.flashProgress}%)` : "Pause"}</button>
               <button type="button" class="win-btn win-btn-danger" data-action="cancel-flash">Cancel</button>
             </span>
+            <button type="button" class="win-btn" data-action="verify-usb-drive" ${state.verifyingUsb || state.flashing ? "disabled" : ""}>
+              ${state.verifyingUsb ? "Verifying..." : "Verify Bootable USB"}
+            </button>
+            <button type="button" class="win-btn" data-action="boot-usb-next-restart" ${state.flashing ? "disabled" : ""}>
+              Boot USB on Next Restart
+            </button>
             <button type="button" class="win-btn win-btn-accent win-btn-large" data-action="start-flash" ${state.flashing ? "disabled" : ""}>
               ${state.flashing ? "Flashing Bootable USB..." : "Confirm & Flash Bootable USB"}
             </button>
@@ -2992,6 +3038,12 @@ ${storageSnippet}
           ${bottomPagerHtml}
         </div>
       `;
+      const scArea = document.getElementById("settingsScrollArea");
+      if (scArea) {
+        scArea._restoringScroll = true;
+        scArea.scrollTop = (state.tabScrollPositions && state.tabScrollPositions.settings && state.tabScrollPositions.settings[state.settingsTab]) || 0;
+        scArea._restoringScroll = false;
+      }
     }
 
     function renderSearchResults(query) {
@@ -3114,6 +3166,12 @@ ${storageSnippet}
     function attachSleekScrollListeners() {
       document.addEventListener("scroll", (e) => {
         const el = e.target;
+        if (!el || el._restoringScroll) return;
+        if (el.id === "setupBodyContent") {
+          state.tabScrollPositions.setup[state.setupTab] = el.scrollTop;
+        } else if (el.id === "settingsScrollArea") {
+          state.tabScrollPositions.settings[state.settingsTab] = el.scrollTop;
+        }
         if (el && el.id === "flashLogBox") {
           if (el._programmaticScroll) return;
           const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
@@ -3585,7 +3643,9 @@ ${storageSnippet}
       } else if (action === "setup-skip" || action === "setup-next") {
         const idx = SETUP_TABS.findIndex(t => t.id === state.setupTab);
         if (idx < SETUP_TABS.length - 1) {
-          state.setupTab = SETUP_TABS[idx + 1].id;
+          const nextId = SETUP_TABS[idx + 1].id;
+          state.setupTab = nextId;
+          state.tabScrollPositions.setup[nextId] = 0;
           state.openDropdownField = null;
           shouldAnimateTab = true;
           renderApp();
@@ -3610,7 +3670,9 @@ ${storageSnippet}
       } else if (action === "settings-next") {
         const idx = SETTINGS_TABS.findIndex(t => t.id === state.settingsTab);
         if (idx < SETTINGS_TABS.length - 1) {
-          state.settingsTab = SETTINGS_TABS[idx + 1].id;
+          const nextId = SETTINGS_TABS[idx + 1].id;
+          state.settingsTab = nextId;
+          state.tabScrollPositions.settings[nextId] = 0;
           state.openDropdownField = null;
           shouldAnimateTab = true;
           renderApp();
@@ -3634,13 +3696,33 @@ ${storageSnippet}
         renderApp();
       } else if (action === "scan-usb") {
         await scanUsbDrives(false);
+      } else if (action === "verify-usb-drive") {
+        await verifySelectedUsbDrive();
       } else if (action === "reset-usb-drive") {
         await resetSelectedUsbDrive();
       } else if (action === "boot-usb-next-restart") {
-        showToast("Configuring next-boot USB target...");
-        const res = await callBackend("boot-usb-next", "POST", {});
+        const nbModal = document.getElementById("nextBootConfirmModal");
+        if (nbModal) nbModal.classList.add("open");
+      } else if (action === "dismiss-next-boot-modal") {
+        const nbModal = document.getElementById("nextBootConfirmModal");
+        if (nbModal) nbModal.classList.remove("open");
+      } else if (action === "confirm-next-boot-stage-only") {
+        const nbModal = document.getElementById("nextBootConfirmModal");
+        if (nbModal) nbModal.classList.remove("open");
+        showToast("Staging Instant Server USB for next restart...");
+        const res = await callBackend("boot-usb-next", "POST", { mode: "stage_only" });
         if (res && res.ok) {
-          showToast(res.message || "Rebooting directly into Instant Server USB...");
+          showToast(res.message || "Staged Instant Server USB for next restart.");
+        } else if (res && res.error) {
+          showToast(res.error);
+        }
+      } else if (action === "confirm-next-boot-restart-now") {
+        const nbModal = document.getElementById("nextBootConfirmModal");
+        if (nbModal) nbModal.classList.remove("open");
+        showToast("Configuring UEFI next-boot USB target and restarting...");
+        const res = await callBackend("boot-usb-next", "POST", { mode: "restart_now" });
+        if (res && res.ok) {
+          showToast(res.message || "Restarting directly into Instant Server USB...");
         } else if (res && res.error) {
           showToast(res.error);
         }

@@ -71,8 +71,7 @@ HOW THIS FILE CONNECTS TO JAVASCRIPT:
 
     <div class="admin-top-banner" id="adminPrivilegeBanner" style="display: none;">
       <div>
-        <strong>Administrator privileges required for USB flashing:</strong>
-        <span>Relaunch as Administrator so disk formatting and raw USB writing succeed.</span>
+        <strong>Administrator privileges required for USB flashing</strong>
       </div>
       <button
         type="button"
@@ -129,6 +128,39 @@ HOW THIS FILE CONNECTS TO JAVASCRIPT:
           class="win-btn win-btn-danger"
           data-action="confirm-cancel-and-exit"
         >Cancel &amp; Exit</button>
+      </div>
+    </div>
+  </div>
+
+  <div
+    class="modal-backdrop"
+    id="nextBootConfirmModal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="nextBootConfirmTitle"
+  >
+    <div class="modal-dialog">
+      <div class="modal-title" id="nextBootConfirmTitle">Important Confirmation — Boot USB on Next Restart</div>
+      <div class="modal-body">
+        This configures your computer's UEFI firmware (<code>bootsequence</code>) to boot directly from the Instant Server USB drive on the next restart without pressing BIOS or Boot Menu keys.<br/><br/>
+        Do you want to <strong>stage next-boot only</strong> (so it boots the USB the next time you restart manually) or <strong>restart this computer immediately</strong>?
+      </div>
+      <div class="modal-actions" style="flex-wrap: wrap; gap: 8px;">
+        <button
+          type="button"
+          class="win-btn"
+          data-action="dismiss-next-boot-modal"
+        >Cancel</button>
+        <button
+          type="button"
+          class="win-btn"
+          data-action="confirm-next-boot-stage-only"
+        >Stage Next-Boot Only</button>
+        <button
+          type="button"
+          class="win-btn win-btn-accent"
+          data-action="confirm-next-boot-restart-now"
+        >Confirm &amp; Restart Now</button>
       </div>
     </div>
   </div>
