@@ -39,12 +39,12 @@ func TestStreamISOToRawDiskAndTailPadding(t *testing.T) {
 	targetPath := filepath.Join(tmpDir, "virtual_usb.img")
 
 	// Create an intentionally unaligned ISO (8192 + 1337 bytes) with a GPT header at LBA 1 and GRUB cmdline
-	isoSize := 24576 + 1337
+	isoSize := 49152 + 1337
 	isoData := make([]byte, isoSize)
 	copy(isoData[512:520], []byte("EFI PART"))
 	binary.LittleEndian.PutUint32(isoData[512+12:512+16], 92)
-	// Place synthetic grub.cfg past LBA 34 (17408 bytes) so GPT entry array (LBA 2..33) never overlaps it
-	copy(isoData[20480:], []byte("menuentry 'Install Ubuntu' {\n  linux /casper/vmlinuz quiet splash ---\n}\n"))
+	// Place synthetic grub.cfg past the 32KB ISO9660 System Area / GPT tableBuf (offset >= 32768)
+	copy(isoData[40960:], []byte("menuentry 'Install Ubuntu' {\n  linux /casper/vmlinuz quiet splash ---\n}\n"))
 
 	if err := os.WriteFile(isoPath, isoData, 0644); err != nil {
 		t.Fatalf("failed writing synthetic ISO: %v", err)
