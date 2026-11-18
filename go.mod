@@ -1,4 +1,4 @@
-module github.com/InstantServer/InstantServer
+module github.com/mutedll/InstantServer
 
 go 1.26.0
 

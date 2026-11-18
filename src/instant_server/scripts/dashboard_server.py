@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-instant_dashboard_daemon.py
+dashboard_server.py
 ---------------------------
 Standalone HTTP backend daemon for the Instant Server Web Dashboard (default port 8088).
 
@@ -38,7 +38,7 @@ class ReusableThreadingHTTPServer(http.server.ThreadingHTTPServer):
 
 
 class DashboardHandler(http.server.BaseHTTPRequestHandler):
-    def log_message(self, fmt, *args):
+    def log_message(self, format: str, *args: object) -> None:
         return
 
     def _send(self, obj, status=200):
@@ -65,6 +65,22 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
                     try:
                         self.send_response(200)
                         self.send_header("Content-Type", "text/html; charset=utf-8")
+                        self.send_header("Content-Length", str(len(raw)))
+                        self.end_headers()
+                        self.wfile.write(raw)
+                    except (BrokenPipeError, ConnectionResetError):
+                        pass
+                    return
+
+        if path.startswith("/dash_") and (path.endswith(".css") or path.endswith(".js")):
+            asset_name = pathlib.Path(path).name
+            for cand in (ROOT_DIR / asset_name, ROOT_DIR / "ui" / asset_name):
+                if cand.is_file():
+                    raw = cand.read_bytes()
+                    ctype = "text/css; charset=utf-8" if asset_name.endswith(".css") else "application/javascript; charset=utf-8"
+                    try:
+                        self.send_response(200)
+                        self.send_header("Content-Type", ctype)
                         self.send_header("Content-Length", str(len(raw)))
                         self.end_headers()
                         self.wfile.write(raw)

@@ -4,35 +4,7 @@
 // FILE: usb/flasher_windows.go
 // PURPOSE: Windows-specific raw disk implementation (`\.\PhysicalDriveN`).
 //
-// HOW WINDOWS RAW USB WRITING WORKS (And How We Prevent Error IS-USB-302):
-//   1. `cleanAndUnlockWindowsPhysicalDisk`: Before opening the disk, clears any
-//      Read-Only flag and removes stale ISO9660/GPT partition layouts so Windows
-//      releases filesystem filter locks on previously flashed USB sticks.
-//   2. `lockAndDismountWindowsVolume`: Sends `FSCTL_LOCK_VOLUME` and
-//      `FSCTL_DISMOUNT_VOLUME` to every mounted drive letter (`D:`, `E:`, etc.).
-//   3. `clearReadOnlyAndResetRawDiskIOCTL`: Sends `IOCTL_DISK_SET_DISK_ATTRIBUTES`
-//      and `IOCTL_DISK_DELETE_DRIVE_LAYOUT` directly on the raw handle.
-//   4. `WriteAt`: Splits large 4 MB buffers into 256 KB USB controller transfers
-//      (below the 1 MB Win32 `usbstor.sys` limit) and automatically retries in
-//      64 KB blocks if a USB bridge hiccups.
 // ============================================================================
-
-// usb/flasher_windows.go
-// -----------------------------------------------------------------------------
-// Windows raw physical disk & virtual disk (VHD/VHDX) I/O implementation.
-//
-// How reflashing without manual diskpart works safely on Windows:
-//  1. Before locking volumes in this process, cleanAndUnlockWindowsPhysicalDisk
-//     clears read-only flags, disables Windows auto-mounting temporarily, and
-//     removes existing hybrid ISO9660/GPT partitions on the target USB stick.
-//  2. IOCTL_DISK_CREATE_DISK (PARTITION_STYLE_RAW) and IOCTL_DISK_UPDATE_PROPERTIES
-//     instruct the Windows kernel partition manager (partmgr.sys) to drop all
-//     cached partition objects so raw sector writes never fail with
-//     "ERROR_INVALID_FUNCTION (Incorrect function)".
-//  3. Writes use 256 KB aligned blocks (with automatic 64 KB retry + raw IOCTL
-//     reset if Windows MountMgr probes the disk mid-stream).
-//
-// -----------------------------------------------------------------------------
 package usb
 
 import (
@@ -46,7 +18,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-	"unsafe"
 )
 
 const (
@@ -463,6 +434,12 @@ func (d *windowsRawDisk) SyncAndFlush() error {
 func (d *windowsRawDisk) Close() error {
 	_ = d.SyncAndFlush()
 	var bytesReturned uint32
+	var setAttr [40]byte
+	binary.LittleEndian.PutUint32(setAttr[0:4], 40)
+	setAttr[4] = 1
+	binary.LittleEndian.PutUint64(setAttr[8:16], 0)
+	binary.LittleEndian.PutUint64(setAttr[16:24], 0x03) // Clear OFFLINE (0x01) and READ_ONLY (0x02)
+	_ = syscall.DeviceIoControl(d.handle, ioctlDiskSetAttributes, &setAttr[0], uint32(len(setAttr)), nil, 0, &bytesReturned, nil)
 	_ = syscall.DeviceIoControl(d.handle, ioctlDiskUpdateProps, nil, 0, nil, 0, &bytesReturned, nil)
 	for _, hVol := range d.lockedVolumes {
 		_ = syscall.DeviceIoControl(hVol, fsctlUnlockVolume, nil, 0, nil, 0, &bytesReturned, nil)
@@ -478,60 +455,4 @@ func (d *windowsRawDisk) DevicePath() string {
 
 func (d *windowsRawDisk) RequiresPageAlignedTail() bool {
 	return d.unbuffered
-}
-
-// ApplyNativeWindowIcon sets the native Win32 window titlebar icon (ICON_SMALL)
-// and taskbar icon (ICON_BIG) for all top-level windows belonging to this process.
-func ApplyNativeWindowIcon(bigPNG []byte, smallPNG []byte) {
-	if len(bigPNG) == 0 {
-		return
-	}
-	user32 := syscall.NewLazyDLL("user32.dll")
-	procCreateIconFromResourceEx := user32.NewProc("CreateIconFromResourceEx")
-	procSendMessageW := user32.NewProc("SendMessageW")
-	procGetForegroundWindow := user32.NewProc("GetForegroundWindow")
-	procFindWindowW := user32.NewProc("FindWindowW")
-
-	hIconBig, _, _ := procCreateIconFromResourceEx.Call(
-		uintptr(unsafe.Pointer(&bigPNG[0])),
-		uintptr(len(bigPNG)),
-		1,
-		0x00030000,
-		64,
-		64,
-		0,
-	)
-	if len(smallPNG) == 0 {
-		smallPNG = bigPNG
-	}
-	hIconSmall, _, _ := procCreateIconFromResourceEx.Call(
-		uintptr(unsafe.Pointer(&smallPNG[0])),
-		uintptr(len(smallPNG)),
-		1,
-		0x00030000,
-		32,
-		32,
-		0,
-	)
-	if hIconBig == 0 && hIconSmall == 0 {
-		return
-	}
-
-	const wmSetIcon = 0x0080
-	titlePtr, _ := syscall.UTF16PtrFromString("Instant Server")
-	for attempt := 0; attempt < 12; attempt++ {
-		hwnd, _, _ := procFindWindowW.Call(0, uintptr(unsafe.Pointer(titlePtr)))
-		if hwnd == 0 {
-			hwnd, _, _ = procGetForegroundWindow.Call()
-		}
-		if hwnd != 0 {
-			if hIconSmall != 0 {
-				_, _, _ = procSendMessageW.Call(hwnd, wmSetIcon, 0, hIconSmall)
-			}
-			if hIconBig != 0 {
-				_, _, _ = procSendMessageW.Call(hwnd, wmSetIcon, 1, hIconBig)
-			}
-		}
-		time.Sleep(120 * time.Millisecond)
-	}
 }

@@ -14,11 +14,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-26.04, windows-2025, macos-26-intel]
+        os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -37,8 +37,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p usb network privilege build/windows frontend/wailsjs/go/main src/instant_server/ui src/instant_server/scripts
-          for f in flasher_common.go flasher_linux.go flasher_darwin.go flasher_windows.go scanner.go payload_builder.go catalog.go iso_downloader.go cidata_fat.go flasher_test.go; do
+          rm -f app_flash_controller.go window_icon_windows.go gpt_partitioner.go iso_fat32_extractor.go payload_scripts_boot.go payload_scripts_storage.go sanitize_autoinstall.py dualboot_storage_builder.py instant_dashboard_daemon.py laptop_apps_setup.sh usb/window_icon_windows.go usb/gpt_partitioner.go usb/iso_fat32_extractor.go usb/payload_scripts_boot.go usb/payload_scripts_storage.go src/instant_server/scripts/sanitize_autoinstall.py src/instant_server/scripts/dualboot_storage_builder.py src/instant_server/scripts/instant_dashboard_daemon.py src/instant_server/scripts/laptop_apps_setup.sh 2>/dev/null || true
+          mkdir -p usb/catalog usb/payload usb/iso network privilege build/windows frontend/wailsjs/go/main src/instant_server/ui/styles src/instant_server/ui/core src/instant_server/ui/views src/instant_server/ui/dashboard src/instant_server/scripts dist
+
+          for f in catalog.go catalog_compose.go; do
+            [ -f "$f" ] && mv -f "$f" "usb/catalog/$f" || true
+            [ -f "usb/$f" ] && mv -f "usb/$f" "usb/catalog/$f" || true
+          done
+          for f in payload_types.go payload_builder.go payload_stager.go payload_boot.go payload_storage.go; do
+            [ -f "$f" ] && mv -f "$f" "usb/payload/$f" || true
+            [ -f "usb/$f" ] && mv -f "usb/$f" "usb/payload/$f" || true
+          done
+          for f in cidata_fat.go iso_parser.go iso_extractor.go iso_downloader.go; do
+            [ -f "$f" ] && mv -f "$f" "usb/iso/$f" || true
+            [ -f "usb/$f" ] && mv -f "usb/$f" "usb/iso/$f" || true
+          done
+          for f in flasher_common.go gpt_disk.go usb_verifier.go flasher_linux.go flasher_darwin.go flasher_windows.go icon_windows.go scanner.go flasher_test.go autoinstall_test.go; do
             [ -f "$f" ] && mv -f "$f" "usb/$f" || true
           done
           for f in mdns_discovery.go mdns_test.go; do
@@ -47,25 +61,46 @@ jobs:
           for f in escalate.go escalate_test.go; do
             [ -f "$f" ] && mv -f "$f" "privilege/$f" || true
           done
+
           [ -f "wails.exe.manifest" ] && cp -f "wails.exe.manifest" "build/windows/wails.exe.manifest" || true
           [ -f "appicon.png" ] && cp -f "appicon.png" "build/appicon.png" || true
           [ -f "icon.ico" ] && cp -f "icon.ico" "build/windows/icon.ico" || true
-          for uif in app_ui.html server_dashboard.html catalog_data.js app_studio.js; do
-            [ -f "$uif" ] && cp -f "$uif" "src/instant_server/ui/$uif" || true
+
+          [ -f "app_ui.html" ] && mv -f "app_ui.html" "src/instant_server/ui/app_ui.html" || true
+          for f in app_tokens.css app_layout.css app_cards.css app_controls.css; do
+            [ -f "$f" ] && mv -f "$f" "src/instant_server/ui/styles/$f" || true
+            [ -f "src/instant_server/ui/$f" ] && mv -f "src/instant_server/ui/$f" "src/instant_server/ui/styles/$f" || true
           done
-          for scf in laptop_hardening.sh sanitize_autoinstall.py instant_dashboard_daemon.py; do
-            [ -f "$scf" ] && cp -f "$scf" "src/instant_server/scripts/$scf" || true
+          for f in catalog_data.js app_state.js app_flash_ui.js app_flash.js app_events.js app_studio.js; do
+            [ -f "$f" ] && mv -f "$f" "src/instant_server/ui/core/$f" || true
+            [ -f "src/instant_server/ui/$f" ] && mv -f "src/instant_server/ui/$f" "src/instant_server/ui/core/$f" || true
           done
+          for f in view_network.js view_studio.js view_apps.js view_storage.js view_power.js view_shell.js; do
+            [ -f "$f" ] && mv -f "$f" "src/instant_server/ui/views/$f" || true
+            [ -f "src/instant_server/ui/$f" ] && mv -f "src/instant_server/ui/$f" "src/instant_server/ui/views/$f" || true
+          done
+          for f in server_dashboard.html dash_base.css dash_components.css dash_catalog.js dash_state.js dash_views_apps.js dash_views_system.js dash_views_tools.js dash_events.js dash_main.js; do
+            [ -f "$f" ] && mv -f "$f" "src/instant_server/ui/dashboard/$f" || true
+            [ -f "src/instant_server/ui/$f" ] && mv -f "src/instant_server/ui/$f" "src/instant_server/ui/dashboard/$f" || true
+          done
+          for scf in laptop_hardening.sh apps_setup.sh autoinstall_config.py dualboot_storage.py dashboard_server.py; do
+            [ -f "$scf" ] && mv -f "$scf" "src/instant_server/scripts/$scf" || true
+          done
+          sed -i 's/\r$//' src/instant_server/scripts/*.sh src/instant_server/scripts/*.py 2>/dev/null || true
 
           if [ ! -f "go.mod" ]; then
-            go mod init github.com/InstantServer/InstantServer
+            go mod init github.com/mutedll/InstantServer
           fi
           MOD_NAME=$(awk '/^module /{print $2}' go.mod | tr -d '\r')
-          if [ -f "app.go" ] && [ -n "$MOD_NAME" ]; then
-            sed -i.bak \
-              -e "s|github.com/instant-server/instant-server/|${MOD_NAME}/|g" \
-              -e "s|github.com/InstantServer/InstantServer/|${MOD_NAME}/|g" \
-              app.go main.go && rm -f app.go.bak main.go.bak
+          if [ -n "$MOD_NAME" ]; then
+            for gof in app.go app_flash.go app_router.go main.go usb/*.go usb/payload/*.go; do
+              if [ -f "$gof" ]; then
+                sed -i.bak \
+                  -e "s|github.com/instant-server/instant-server/|${MOD_NAME}/|g" \
+                  -e "s|github.com/mutedll/InstantServer/|${MOD_NAME}/|g" \
+                  "$gof" && rm -f "${gof}.bak"
+              fi
+            done
           fi
 
           go get github.com/wailsapp/wails/v2@latest
@@ -165,7 +200,8 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          SH_FILE="src/instant_server/scripts/laptop_hardening.sh"
-          sed -i 's/\r$//' "$SH_FILE"
-          bash -n "$SH_FILE"
-          shellcheck -s bash "$SH_FILE"
+          for shf in src/instant_server/scripts/laptop_hardening.sh src/instant_server/scripts/apps_setup.sh; do
+            sed -i 's/\r$//' "$shf"
+            bash -n "$shf"
+            shellcheck -s bash "$shf"
+          done

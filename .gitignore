@@ -1,8 +1,28 @@
-__pycache__/
-*.pyc
-*.iso
-*.img
-build/
+# Compiled binaries & build artifacts
+build/bin/
 dist/
-.venv/
-build_dist/
+*.exe
+*.dmg
+*.app
+*.syso
+*.bak
+
+# Local runtime cache, ISOs, and virtual disks
+Instant_Server_Data/
+*.iso
+*.iso.part
+*.vhd
+*.vhdx
+*.qcow2
+
+# Wails auto-generated frontend stub folder
+frontend/
+
+# Local-only developer testing notes
+QEMU-VIRTUAL-USB-TESTING-GUIDE.md
+
+# OS & editor metadata
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

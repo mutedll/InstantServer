@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<!--
+  ============================================================================
+  server_dashboard.html — Instant Server Web Dashboard (Port 9090)
+  ============================================================================
+  Modular Architecture:
+    - dash_base.css       : Theme variables, shell, sidebar, cards
+    - dash_components.css : Terminals, editors, modals, responsive rules
+    - dash_catalog.js            : Default apps, ZIM catalog, compose generator
+    - dash_state.js              : Dashboard state, API helper, modal & sidebar
+    - dash_views_apps.js         : App Store, Minecraft Studio, Cluster views
+    - dash_views_system.js       : Kiwix, Hardware & UPS, Updates, Handbook views
+    - dash_views_tools.js        : Pro Control, Web Terminal, Files & dispatcher
+    - dash_events.js        : App, Compose modal, and Minecraft click handlers
+    - dash_main.js         : Hardware, Terminal, Files & status polling loop
+  ============================================================================
+-->
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Instant Server Dashboard — Live Control Center</title>
+  <link rel="stylesheet" href="dash_base.css" />
+  <link rel="stylesheet" href="dash_components.css" />
+</head>
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand-group">
+      <div class="is-emblem">IS</div>
+      <div>
+        <div class="brand-title">
+          <span id="hdrHostname">instant-server.local</span>
+          <span class="badge badge-success">Online</span>
+        </div>
+        <div class="brand-sub" id="hdrSubInfo">Eth: 192.168.1.40 • Wi-Fi: 192.168.1.41 (Failover Ready)</div>
+      </div>
+    </div>
+
+    <div class="header-controls">
+      <div class="mode-segmented" role="group" aria-label="Experience Mode">
+        <button type="button" class="mode-pill" id="btnModeStandard" data-action="set-mode" data-mode="standard">Standard</button>
+        <button type="button" class="mode-pill" id="btnModePro" data-action="set-mode" data-mode="pro">Pro</button>
+      </div>
+      <div class="search-box">
+        <input type="search" id="dashSearchInput" class="search-input" placeholder="Search apps, Wikipedia, settings..." />
+      </div>
+      <button type="button" class="win-btn win-btn-sm" id="btnThemeToggle" data-action="toggle-theme">Light</button>
+    </div>
+  </header>
+
+  <section class="telemetry-strip" id="telemetryStrip"></section>
+
+  <div class="dashboard-shell">
+    <aside class="sidebar" id="sidebarNav"></aside>
+    <main class="main-pane" id="mainPane"></main>
+  </div>
+
+  <!-- Glass-Box Docker Compose & Volume Inspector Modal -->
+  <div class="modal-backdrop" id="composeInspectorModal" role="dialog" aria-modal="true" aria-labelledby="composeModalTitle">
+    <div class="modal-card">
+      <div class="modal-hdr">
+        <div>
+          <div style="font-size:15px;font-weight:600;" id="composeModalTitle">Inspect Container &amp; Volumes</div>
+          <div style="font-size:12px;color:var(--text-secondary);" id="composeModalSub">Transparent Docker Compose &amp; host volume configuration</div>
+        </div>
+        <button type="button" class="win-btn win-btn-sm" data-action="close-compose-modal"> Close</button>
+      </div>
+      <div class="modal-body">
+        <div class="diag-box" id="composeVolumeExplainBox"></div>
+        <div class="diag-box" id="appDataFileManagerBox" style="gap:8px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+            <span style="font-weight:600;color:var(--accent);">EXT4 Persistent <code>/DATA/AppData</code> Config File Explorer &amp; Editor</span>
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;" id="appDataFilePills"></div>
+          </div>
+          <textarea id="appDataFileTextarea" class="compose-editor" style="min-height:125px;" spellcheck="false" placeholder="Select a file above to edit its contents inside /DATA/AppData..."></textarea>
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span id="lblActiveAppDataFilePath" style="font-family:var(--font-mono);font-size:11.5px;color:var(--text-secondary);">/DATA/AppData/</span>
+            <div style="display:flex;gap:6px;">
+              <input type="text" id="inputNewAppDataFileName" class="text-input" style="width:140px;height:28px;font-size:12px;" placeholder="new-config.yml" />
+              <button type="button" class="win-btn win-btn-sm" data-action="create-appdata-file">＋ Create File</button>
+              <button type="button" class="win-btn win-btn-accent win-btn-sm" data-action="save-appdata-file">FS Save Config File</button>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:600;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
+            <span>Raw <code>docker-compose.yml</code> (Editable)</span>
+            <button type="button" class="win-btn win-btn-sm" data-action="validate-compose"> Validate &amp; Check Errors</button>
+          </div>
+          <textarea id="composeYamlTextarea" class="compose-editor" spellcheck="false"></textarea>
+        </div>
+        <div class="diag-box" id="composeDiagnosticsBox"></div>
+      </div>
+      <div class="modal-ftr">
+        <button type="button" class="win-btn" data-action="reset-compose-default">Reset to Default</button>
+        <button type="button" class="win-btn win-btn-accent" data-action="save-compose-override">Save &amp; Recreate Container</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="dashToast"></div>
+
+  <script src="dash_catalog.js"></script>
+  <script src="dash_state.js"></script>
+  <script src="dash_views_apps.js"></script>
+  <script src="dash_views_system.js"></script>
+  <script src="dash_views_tools.js"></script>
+  <script src="dash_events.js"></script>
+  <script src="dash_main.js"></script>
+</body>
+</html>

@@ -1,0 +1,425 @@
+/* FILE: src/instant_server/ui/app_cards.css */
+    .filter-pill {
+      height: 28px;
+      padding: 0 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border-control);
+      background: var(--control-bg);
+      color: var(--text-secondary);
+      font-family: var(--font-sans);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+    }
+    .filter-pill:hover {
+      background: var(--control-bg-hover);
+      color: var(--text-primary);
+    }
+    .filter-pill.active {
+      background: var(--accent);
+      color: var(--accent-text);
+      border-color: var(--accent);
+      font-weight: 600;
+    }
+
+    .appstore-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+      gap: 8px;
+    }
+    .app-card {
+      contain: layout paint;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 13px 15px;
+      border-radius: var(--radius);
+      background: var(--card-bg);
+      border: 1px solid var(--border-card);
+      box-shadow: var(--shadow-card);
+      cursor: pointer;
+      transition: background 0.14s ease, border-color 0.14s ease, transform 0.1s ease;
+    }
+    .app-card:hover {
+      background: var(--card-bg-hover);
+      border-color: var(--border-strong);
+    }
+    .app-card:active {
+      transform: scale(0.994);
+    }
+    .app-card.checked {
+      border-color: var(--accent);
+      background: var(--accent-subtle);
+    }
+    .app-checkbox {
+      width: 17px;
+      height: 17px;
+      accent-color: var(--accent);
+      margin-top: 2px;
+      flex-shrink: 0;
+      pointer-events: none;
+    }
+
+    /* Controls */
+    .win-btn {
+      height: 33px;
+      padding: 0 14px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-control);
+      background: var(--control-bg);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 12.5px;
+      font-weight: 500;
+      box-shadow: var(--shadow-control);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      transition: background 0.14s ease, transform 0.1s ease, border-color 0.14s ease;
+    }
+    .win-btn:hover:not(:disabled) {
+      background: var(--control-bg-hover);
+      border-color: var(--border-strong);
+    }
+    .win-btn:active:not(:disabled) {
+      transform: scale(0.97);
+      background: var(--control-bg-active);
+    }
+    .win-btn:disabled {
+      opacity: 0.42;
+      cursor: not-allowed;
+    }
+
+    .win-btn-sm {
+      height: 28px;
+      padding: 0 11px;
+      font-size: 12px;
+    }
+
+    .win-btn-accent {
+      background: var(--accent);
+      color: var(--accent-text);
+      border-color: rgba(255, 255, 255, 0.16);
+      font-weight: 600;
+    }
+    .win-btn-accent:hover:not(:disabled) {
+      background: var(--accent-hover);
+    }
+    .win-btn-accent:active:not(:disabled) {
+      background: var(--accent-active);
+      transform: scale(0.97);
+    }
+
+    .win-btn-large {
+      height: 38px;
+      padding: 0 24px;
+      font-size: 13.5px;
+    }
+
+    .win-input {
+      height: 33px;
+      min-width: 200px;
+      padding: 0 11px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-control);
+      background: var(--input-bg);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.14s ease, box-shadow 0.14s ease;
+    }
+    .win-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-subtle);
+      background: var(--control-bg);
+    }
+
+    /* Custom ComboBox Dropdown */
+    .win-combobox {
+      position: relative;
+      min-width: 240px;
+      user-select: none;
+    }
+    .win-combobox-trigger {
+      width: 100%;
+      height: 33px;
+      padding: 0 12px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-control);
+      background: var(--control-bg);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 12.5px;
+      font-weight: 500;
+      box-shadow: var(--shadow-control);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      transition: background 0.14s ease, border-color 0.14s ease;
+    }
+    .win-combobox-trigger:hover {
+      background: var(--control-bg-hover);
+    }
+    .win-combobox.open .win-combobox-trigger {
+      border-color: var(--accent);
+    }
+    .win-combobox-chevron {
+      font-size: 12px;
+      color: var(--text-secondary);
+      transition: transform 0.18s ease;
+    }
+    .win-combobox.open .win-combobox-chevron {
+      transform: rotate(180deg);
+    }
+    .win-combobox {
+      max-width: 100%;
+    }
+    #minecraftCustomizationStudioCard .win-combobox {
+      min-width: 0;
+      width: 100%;
+      flex: 1 1 0%;
+    }
+    #minecraftCustomizationStudioCard > div > div {
+      min-width: 0;
+    }
+
+    /* Smooth Floating Value Box for Range Sliders */
+    .win-slider-wrap {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 0;
+    }
+    .win-slider-wrap input[type="range"] {
+      margin: 0;
+      cursor: pointer;
+    }
+    .win-slider-bubble {
+      position: absolute;
+      bottom: calc(100% + 4px);
+      left: 50%;
+      transform: translateX(-50%) translateY(6px) scale(0.88);
+      background: var(--dropdown-bg);
+      color: var(--text-primary);
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      padding: 3px 8px;
+      font-family: var(--font-sans);
+      font-size: 11.5px;
+      font-weight: 600;
+      line-height: 1.2;
+      white-space: nowrap;
+      pointer-events: none;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.28);
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+                  transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+                  left 0.05s linear,
+                  visibility 0.18s;
+      z-index: 60;
+    }
+    .win-slider-wrap.active .win-slider-bubble {
+      opacity: 1;
+      visibility: visible;
+      transform: translateX(-50%) translateY(0) scale(1);
+    }
+    .win-combobox-label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .win-combobox-menu {
+      position: absolute;
+      top: calc(100% + 5px);
+      left: 0;
+      right: auto;
+      min-width: 100%;
+      max-width: min(88vw, 390px);
+      max-height: 260px;
+      overflow-y: auto;
+      padding: 5px;
+      border-radius: var(--radius);
+      background: var(--flyout-bg);
+      backdrop-filter: blur(24px);
+      border: 1px solid var(--flyout-border);
+      box-shadow: var(--flyout-shadow);
+      z-index: 120;
+      display: none;
+      flex-direction: column;
+      gap: 2px;
+      animation: fadeSlideUp 0.14s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+    .card-right .win-combobox-menu,
+    .win-combobox.align-right .win-combobox-menu {
+      left: auto;
+      right: 0;
+    }
+    .win-combobox.drop-up .win-combobox-menu {
+      top: auto;
+      bottom: calc(100% + 5px);
+    }
+    .win-combobox.open .win-combobox-menu {
+      display: flex;
+    }
+    .win-card.has-open-dropdown {
+      z-index: 95 !important;
+      overflow: visible !important;
+      position: relative;
+    }
+    .win-combobox-option {
+      position: relative;
+      width: 100%;
+      padding: 8px 12px 8px 14px;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 12.5px;
+      line-height: 1.35;
+      text-align: left;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      transition: background 0.12s ease;
+      white-space: normal;
+      word-break: break-word;
+    }
+    input[type="number"].win-input,
+    .storage-num-input {
+      padding-right: 8px !important;
+      min-width: 96px;
+      font-variant-numeric: tabular-nums;
+    }
+    .win-combobox-option:hover {
+      background: var(--flyout-item-hover);
+    }
+    .win-combobox-option.selected {
+      background: var(--flyout-item-selected);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* Sleek macOS Toggle Switch */
+    .win-switch {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+    }
+    .win-switch-label {
+      font-size: 12.5px;
+      color: var(--text-secondary);
+      min-width: 24px;
+      text-align: right;
+    }
+    .win-switch-track {
+      width: 40px;
+      height: 22px;
+      border-radius: 999px;
+      border: 1px solid var(--border-strong);
+      background: var(--bg-input);
+      position: relative;
+      transition: background 0.18s ease, border-color 0.18s ease;
+    }
+    .win-switch-thumb {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #FFFFFF;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .win-switch.on .win-switch-track {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+    .win-switch.on .win-switch-thumb {
+      transform: translateX(18px);
+    }
+
+    /* Badges */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-accent {
+      background: var(--accent-subtle);
+      color: var(--accent);
+    }
+    .badge-success {
+      background: var(--success-bg);
+      color: var(--success);
+    }
+    .badge-warning {
+      background: var(--warning-bg);
+      color: var(--warning);
+    }
+    .badge-danger {
+      background: var(--danger-bg);
+      color: var(--danger);
+    }
+
+    .notice-banner {
+      padding: 13px 16px;
+      border-radius: var(--radius);
+      border: 1px solid var(--danger);
+      background: var(--danger-bg);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+    .notice-banner-warning {
+      border-color: var(--warning);
+      background: var(--warning-bg);
+    }
+
+    /* Flashing Progress & Live Logs Card */
+    .flash-panel {
+      padding: 18px 20px;
+      border-radius: var(--radius-lg);
+      background: var(--card-bg);
+      border: 1px solid var(--border-card);
+      box-shadow: var(--shadow-card);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+    .progress-track {
+      width: 100%;
+      height: 7px;
+      border-radius: 999px;
+      background: var(--card-bg-secondary);
+      border: 1px solid var(--border-card);
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      background: var(--accent);
+      transition: width 0.25s ease;
+    }
+    .flash-terminal-wrap {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }

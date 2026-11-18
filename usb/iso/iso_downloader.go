@@ -1,5 +1,5 @@
 // ============================================================================
-// FILE: usb/iso_downloader.go
+// FILE: usb/iso/iso_downloader.go
 // PURPOSE: Downloads the official Ubuntu 26.04 / 24.04 Live Server ISO from
 //
 //	`releases.ubuntu.com` with automatic HTTP `Range` resume and
@@ -14,8 +14,7 @@
 //   - Add the release version and fallback URL inside `UbuntuReleaseCatalog` below.
 //
 // ============================================================================
-// usb/iso_downloader.go
-package usb
+package iso
 
 import (
 	"context"
@@ -33,6 +32,8 @@ import (
 	"sync/atomic"
 	"time"
 )
+
+var HostWakeLockHook func() func()
 
 type UbuntuReleaseMirror struct {
 	Release    string
@@ -150,8 +151,10 @@ func DownloadISOWithResume(
 	pauseGate *PauseGate,
 	onProgress func(FlashProgressEvent),
 ) (string, error) {
-	releaseWakeLock := AcquireHostWakeLock()
-	defer releaseWakeLock()
+	if HostWakeLockHook != nil {
+		releaseWakeLock := HostWakeLockHook()
+		defer releaseWakeLock()
+	}
 
 	cleanRel := strings.TrimSpace(release)
 	mirror, ok := OfficialUbuntuMirrors[cleanRel]
@@ -362,18 +365,25 @@ func DownloadISOWithResume(
 					elapsed = 0.001
 				}
 				speedMB := (float64(downloaded-streamStartBytes) / 1048576.0) / elapsed
-				pct := int((downloaded * 100) / totalSize)
-				if pct > 100 {
-					pct = 100
+				stagePct := (float64(downloaded) * 100.0) / float64(totalSize)
+				if stagePct > 100.0 {
+					stagePct = 100.0
+				}
+				pct := int(stagePct)
+				etaSec := 0.0
+				if speedMB > 0.1 && totalSize > downloaded {
+					etaSec = (float64(totalSize-downloaded) / 1048576.0) / speedMB
 				}
 				if onProgress != nil && (time.Since(lastProgressEmit) >= 160*time.Millisecond || pct >= 100 || errors.Is(rErr, io.EOF)) {
 					lastProgressEmit = time.Now()
 					onProgress(FlashProgressEvent{
 						Stage:        "DOWNLOADING_ISO",
 						Percent:      pct,
+						StagePercent: stagePct,
 						WrittenBytes: downloaded,
 						TotalBytes:   totalSize,
 						SpeedMBps:    speedMB,
+						ETASeconds:   etaSec,
 						Message:      fmt.Sprintf("Downloading %s: %.1f / %.1f MB @ %.1f MB/s", mirror.Filename, float64(downloaded)/1048576.0, float64(totalSize)/1048576.0, speedMB),
 					})
 				}
