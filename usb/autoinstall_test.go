@@ -308,3 +308,55 @@ func TestNonDestructiveDualBootNeverWipesDisk(t *testing.T) {
 		t.Fatalf("expected dualboot_storage.py to set preserve: True on disk and existing partitions")
 	}
 }
+
+func TestAutoinstallUserDataValidYAMLForAllModes(t *testing.T) {
+	modes := []string{
+		"whole_disk",
+		"dual_boot",
+		"interactive_select",
+		"reinstall_keep_data",
+		"reinstall_wipe_data",
+		"secondary_drive",
+		"offline_updater_usb",
+		"repair_rescue_usb",
+	}
+	for _, mode := range modes {
+		cfg := ServerProfileConfig{
+			Hostname:             "instant-server",
+			Username:             "admin",
+			Password:             "StrongPass123!",
+			WifiSSID:             "MyHomeWiFi",
+			WifiPassword:         "WifiPass123!",
+			EnableUSBTethering:   true,
+			InstallMode:          mode,
+			DualBootAllocationGB: 60,
+			StorageLayout:        "direct",
+		}
+		rawYAML := GenerateAutoinstallUserData(cfg)
+		if !strings.HasPrefix(rawYAML, "#cloud-config\nautoinstall:\n  version: 1\n") {
+			t.Fatalf("mode %q missing valid #cloud-config / autoinstall header", mode)
+		}
+		interactiveCount := 0
+		for lineNo, line := range strings.Split(rawYAML, "\n") {
+			if strings.Contains(line, "\t") {
+				t.Fatalf("mode %q line %d contains illegal YAML tab indentation: %q", mode, lineNo+1, line)
+			}
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "interactive-sections:") {
+				interactiveCount++
+			}
+			// Guard against unquoted YAML list scalars containing ": " (which PyYAML parses as a broken block mapping)
+			if strings.HasPrefix(trimmed, "- ") {
+				item := strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))
+				isQuoted := (strings.HasPrefix(item, "'") && strings.HasSuffix(item, "'")) ||
+					(strings.HasPrefix(item, `"`) && strings.HasSuffix(item, `"`))
+				if !isQuoted && strings.Contains(item, ": ") {
+					t.Fatalf("mode %q line %d has unquoted list item containing ': ' (breaks PyYAML): %s", mode, lineNo+1, line)
+				}
+			}
+		}
+		if interactiveCount != 1 {
+			t.Fatalf("mode %q expected exactly 1 interactive-sections key, got %d", mode, interactiveCount)
+		}
+	}
+}

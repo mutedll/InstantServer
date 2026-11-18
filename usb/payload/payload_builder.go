@@ -124,7 +124,7 @@ func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
 	}
 
 	liveNoSleepCmds := `    - systemctl stop casper-md5check.service multipathd.service multipathd.socket 2>/dev/null || killall -9 casper-md5check 2>/dev/null || true
-    - printf '{"result": "pass"}\n' > /run/casper-md5check.json 2>/dev/null || true
+    - 'printf "{\"result\":\"pass\"}\n" > /run/casper-md5check.json 2>/dev/null || true'
     - mkdir -p /mnt/cidata /mnt/usb_logs /tmp/cidata
     - cdev=$(blkid -L CIDATA 2>/dev/null || blkid -L cidata 2>/dev/null || true); [ -n "$cdev" ] && (mount -o rw,sync,flush,noatime "$cdev" /mnt/cidata 2>/dev/null || mount -o remount,rw,sync,flush /mnt/cidata 2>/dev/null || true)
     - cp -rf /cdrom/cidata/* /tmp/cidata/ 2>/dev/null || true
@@ -133,7 +133,7 @@ func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
     - bash /tmp/cidata/start_usb_logger.sh 2>/dev/null || bash /mnt/cidata/start_usb_logger.sh 2>/dev/null || true
     - rfkill unblock all 2>/dev/null || true
     - systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target 2>/dev/null || true
-    - mkdir -p /etc/systemd/logind.conf.d && printf "[Login]\nHandleLidSwitch=ignore\nHandleLidSwitchExternalPower=ignore\nHandleLidSwitchDocked=ignore\nIdleAction=ignore\n" > /etc/systemd/logind.conf.d/00-live-nosleep.conf && systemctl restart systemd-logind 2>/dev/null || true
+    - 'mkdir -p /etc/systemd/logind.conf.d && printf "[Login]\nHandleLidSwitch=ignore\nHandleLidSwitchExternalPower=ignore\nHandleLidSwitchDocked=ignore\nIdleAction=ignore\n" > /etc/systemd/logind.conf.d/00-live-nosleep.conf && systemctl restart systemd-logind 2>/dev/null || true'
     - touch /run/casper-no-prompt 2>/dev/null || true
     - bash /tmp/cidata/select_target_disk.sh 2>/dev/null || bash /mnt/cidata/select_target_disk.sh 2>/dev/null || true
     - udevadm settle --timeout=15 2>/dev/null || true`
@@ -199,8 +199,7 @@ func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
 		earlyCommandsBlock = fmt.Sprintf(`  early-commands:
 %s
 `, liveNoSleepCmds)
-		storageBlock = `  interactive-sections:
-    - storage`
+		storageBlock = `  # Interactive guided storage selection enabled via interactive-sections`
 
 	case "secondary_drive":
 		earlyCommandsBlock = fmt.Sprintf(`  early-commands:
@@ -223,10 +222,15 @@ func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
         size: largest`, layout, sizingLine)
 	}
 
+	interactiveBlock := "  interactive-sections: []"
+	if cfg.InstallMode == "interactive_select" {
+		interactiveBlock = "  interactive-sections:\n    - storage"
+	}
+
 	return fmt.Sprintf(`#cloud-config
 autoinstall:
   version: 1
-  interactive-sections: []
+%s
   source:
     id: ubuntu-server-minimal
     search_drivers: false
@@ -267,7 +271,7 @@ autoinstall:
   error-commands:
     - bash /mnt/cidata/dump_error_logs_to_usb.sh ERROR 2>/dev/null || bash /cdrom/cidata/dump_error_logs_to_usb.sh ERROR 2>/dev/null || true
     - sync
-`, host, user, hashedPass, sshKeysBlock, ethSection, usbTetherSection, wifiSection, earlyCommandsBlock, storageBlock, extraLateCommands)
+`, interactiveBlock, host, user, hashedPass, sshKeysBlock, ethSection, usbTetherSection, wifiSection, earlyCommandsBlock, storageBlock, extraLateCommands)
 }
 
 func GenerateTargetEnvConf(cfg ServerProfileConfig) string {
