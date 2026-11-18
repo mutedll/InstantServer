@@ -71,9 +71,6 @@ func FormatRemainingUSBAsFAT32(disk RawDiskHandle, startLBA uint64, endLBA uint6
 	if totalSectors < 524288 {
 		secPerClus = 8
 	}
-	if totalSectors < 65536 {
-		secPerClus = 1
-	}
 	dataSectorsEst := totalSectors - reservedSectors
 	totalClustersEst := dataSectorsEst / secPerClus
 	fatSectors := (((totalClustersEst+2)*4+511)/512 + 7) / 8 * 8

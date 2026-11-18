@@ -20,11 +20,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: windows-latest
+          - os: windows-2025
             binary_name: InstantServer-Windows.exe
-          - os: macos-latest
+          - os: macos-15-intel
             binary_name: InstantServer-macOS.dmg
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             binary_name: InstantServer-Linux
 
     steps:
