@@ -9,14 +9,12 @@
           : `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
       }
     });
-
     document.getElementById("btnToggleModeView").addEventListener("click", () => {
       state.viewMode = state.viewMode === "setup" ? "settings" : "setup";
       state.openDropdownField = null;
       shouldAnimateTab = true;
       renderApp();
     });
-
     document.getElementById("btnTitleBack").addEventListener("click", () => {
       state.openDropdownField = null;
       if (state.viewMode === "setup") {
@@ -39,21 +37,17 @@
         }
       }
     });
-
     document.getElementById("globalSearchInput").addEventListener("input", (e) => {
       state.searchQuery = e.target.value;
       renderSettingsView();
     });
-
     document.body.addEventListener("click", async (e) => {
       const target = e.target.closest("[data-action]");
-
       if (!e.target.closest(".win-combobox") && state.openDropdownField !== null) {
         state.openDropdownField = null;
         document.querySelectorAll(".win-combobox.open").forEach(cb => cb.classList.remove("open"));
         document.querySelectorAll(".expander-wrap.dropdown-open-inside").forEach(ex => ex.classList.remove("dropdown-open-inside"));
       }
-
       if (!target) return;
       const action = target.getAttribute("data-action");
       const allowedWhileFlashing = new Set([
@@ -70,7 +64,6 @@
         showToast("Configuration is locked while USB flashing/downloading is active");
         return;
       }
-
       if (action === "toggle-dropdown") {
         const field = target.getAttribute("data-field");
         const box = target.closest(".win-combobox");
@@ -136,7 +129,80 @@
         }
         return;
       }
-
+      if (action === "set-domain-preset") {
+        state.server_address_domain = target.getAttribute("data-domain") || ".local";
+        renderApp();
+        return;
+      }
+      if (action === "toggle-sidebar-pass") {
+        state.sidebarRevealPass = !state.sidebarRevealPass;
+        if (typeof renderSidebarSummaryCard === "function") renderSidebarSummaryCard();
+        return;
+      }
+      if (action === "copy-text") {
+        const txt = target.getAttribute("data-copy") || "";
+        if (txt && navigator.clipboard) {
+          navigator.clipboard.writeText(txt).catch(() => {});
+          showToast("Copied: " + txt);
+        }
+        return;
+      }
+      if (action === "open-quick-edit-modal") {
+        const modal = document.getElementById("quickEditServerModal");
+        const body = document.getElementById("quickEditModalBody");
+        if (modal && body) {
+          const warn = getDomainSecurityWarning(state.server_address_domain);
+          body.innerHTML = `
+            <label style="font-size:12px;color:var(--text-secondary);">Server Display Name
+              <input id="qeServerName" class="win-input" style="width:100%;margin-top:4px;" value="${esc(state.server_name || state.hostname)}" />
+            </label>
+            <div style="display:flex;gap:8px;">
+              <label style="flex:1;font-size:12px;color:var(--text-secondary);">Address Host
+                <input id="qeAddrHost" class="win-input" style="width:100%;margin-top:4px;" value="${esc(state.server_address_host || state.hostname)}" />
+              </label>
+              <label style="width:130px;font-size:12px;color:var(--text-secondary);">Domain
+                <input id="qeAddrDomain" class="win-input" style="width:100%;margin-top:4px;" value="${esc(state.server_address_domain || ".local")}" />
+              </label>
+            </div>
+            ${warn ? `<div class="notice-banner" style="margin:0;font-size:11.5px;">${esc(warn)}</div>` : ""}
+            <div style="display:flex;gap:8px;">
+              <label style="flex:1;font-size:12px;color:var(--text-secondary);">Admin Username
+                <input id="qeUsername" class="win-input" style="width:100%;margin-top:4px;" value="${esc(state.username || "admin")}" />
+              </label>
+              <label style="flex:1;font-size:12px;color:var(--text-secondary);">Admin Password
+                <input id="qePassword" type="password" class="win-input" style="width:100%;margin-top:4px;" value="${esc(state.password || "")}" />
+              </label>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <label style="flex:1;font-size:12px;color:var(--text-secondary);">Wi-Fi SSID (Optional)
+                <input id="qeWifiSsid" class="win-input" style="width:100%;margin-top:4px;" value="${esc(state.wifi_ssid || "")}" />
+              </label>
+              <label style="width:130px;font-size:12px;color:var(--text-secondary);">Log Retention (Days)
+                <input id="qeLogDays" type="number" min="1" max="365" class="win-input" style="width:100%;margin-top:4px;" value="${Number(state.log_retention_days) || 14}" />
+              </label>
+            </div>
+          `;
+          modal.classList.add("open");
+        }
+        return;
+      }
+      if (action === "close-quick-edit-modal") {
+        const modal = document.getElementById("quickEditServerModal");
+        if (modal) modal.classList.remove("open");
+        return;
+      }
+      if (action === "save-quick-edit-modal") {
+        const g = id => document.getElementById(id);
+        if (g("qeServerName")) state.server_name = g("qeServerName").value.trim() || "Instant Server";
+        if (g("qeAddrHost")) { state.server_address_host = g("qeAddrHost").value.trim() || "instant-server"; state.hostname = state.server_address_host; }
+        if (g("qeAddrDomain")) state.server_address_domain = normalizeServerDomain(g("qeAddrDomain").value);
+        if (g("qeUsername")) state.username = g("qeUsername").value.trim() || "admin";
+        if (g("qePassword")) state.password = g("qePassword").value;
+        if (g("qeWifiSsid")) state.wifi_ssid = g("qeWifiSsid").value.trim();
+        if (g("qeLogDays")) state.log_retention_days = Math.max(1, Math.min(365, Number(g("qeLogDays").value) || 14));
+        const m = g("quickEditServerModal"); if (m) m.classList.remove("open");
+        showToast("Server details updated"); renderApp(); return;
+      }
       if (action === "toggle-app-card") {
         const appId = target.getAttribute("data-app");
         if (!appId) return;
@@ -191,7 +257,6 @@
         refreshAppGridInPlace();
         return;
       }
-
       if (action === "toggle-expander") {
         const key = target.getAttribute("data-expander");
         if (key) {
@@ -204,7 +269,6 @@
         }
         return;
       }
-
       if (action === "set-ui-mode") {
         const nextMode = target.getAttribute("data-mode") || "standard";
         state.ui_mode = nextMode;
@@ -249,7 +313,6 @@
         }
         return;
       }
-
       if (action === "set-storage-unit") {
         const nextUnit = target.getAttribute("data-unit") || "GB";
         if (nextUnit !== state.storageUnit) {
@@ -433,5 +496,4 @@
         state.mc_enable_backups = !!target.checked;
         return;
       }
-
     });

@@ -106,7 +106,18 @@
 
       return `
         ${missingHtml}
-        <div class="flash-panel" id="flashPanelCard">
+        ${(!state.flashing && state.flashProgress === 100 && !state.flashCancelled) ? `
+        <div class="flash-complete-highlight" id="flashCompleteBanner">
+          <div class="flash-complete-icon">✓</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:700;font-size:14px;color:var(--success);">Bootable USB Flash Complete!</div>
+            <div style="font-size:12.5px;color:var(--text-secondary);margin-top:2px;">
+              Your Instant Server USB is verified and ready. Unplug it, boot your target computer from USB, and after installation completes unplug the USB and allow 2–5 minutes on first boot for Docker &amp; apps to finish starting.
+            </div>
+          </div>
+          <button type="button" class="win-btn win-btn-sm win-btn-accent" data-action="boot-usb-next-restart">Boot USB on Next Restart</button>
+        </div>` : ""}
+        <div class="flash-panel ${(!state.flashing && state.flashProgress === 100 && !state.flashCancelled) ? "flash-panel-complete" : ""}" id="flashPanelCard">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
             <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1;">
               <span id="flashStatusTitle" style="font-weight:600;font-size:13.5px;">${esc(state.flashStatusText || "Preparing bootable USB...")}</span>
@@ -213,12 +224,34 @@ ${storageSnippet}
           <div class="win-card">
             <div class="card-left">
               <div class="card-text">
-                <div class="card-title">Server name</div>
-                <div class="card-desc" id="descServerHostname">Name used to reach your server on your home network (${esc(state.hostname || "instant-server")}.local)</div>
+                <div class="card-title">Server display name</div>
+                <div class="card-desc">Friendly name shown in the dashboard and boot screen (can differ from the server address)</div>
               </div>
             </div>
             <div class="card-right">
-              <input class="win-input" data-field="hostname" value="${esc(state.hostname)}" placeholder="instant-server" />
+              <input class="win-input" data-field="server_name" value="${esc(state.server_name || state.hostname)}" placeholder="My Home Server" />
+            </div>
+          </div>
+
+          <div class="win-card" style="flex-direction:column;align-items:stretch;gap:10px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
+              <div class="card-left">
+                <div class="card-text">
+                  <div class="card-title">Full server address (Host &amp; Domain)</div>
+                  <div class="card-desc" id="descServerHostname">Reach your dashboard at <strong>http://${esc(getFullServerAddress())}</strong></div>
+                </div>
+              </div>
+              <div class="card-right" style="flex-wrap:wrap;gap:6px;">
+                <input class="win-input" style="min-width:130px;width:140px;" data-field="server_address_host" value="${esc(state.server_address_host || state.hostname)}" placeholder="myhome" />
+                <input class="win-input" style="min-width:105px;width:115px;" data-field="server_address_domain" value="${esc(state.server_address_domain || ".local")}" placeholder=".local" />
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <span style="font-size:11.5px;color:var(--text-secondary);">Safe local domains:</span>
+              ${[".local", ".home.arpa", ".lan", ".internal"].map(d => `<button type="button" class="win-btn win-btn-sm ${normalizeServerDomain(state.server_address_domain) === d ? "win-btn-accent" : ""}" data-action="set-domain-preset" data-domain="${d}">${d}</button>`).join("")}
+            </div>
+            <div id="domainSecurityWarnBox" class="notice-banner" style="display:${getDomainSecurityWarning(state.server_address_domain) ? "block" : "none"};margin:0;font-size:12px;">
+              ${esc(getDomainSecurityWarning(state.server_address_domain))}
             </div>
           </div>
 

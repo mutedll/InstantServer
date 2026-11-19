@@ -1,7 +1,12 @@
 // dash_state.js — Reactive State Store, API Client, Compose Inspector & Sidebar
 const state = {
   theme: "dark",
-  activeTab: "apps",
+  activeTab: "home",
+  settingsSubTab: "general",
+  fileLabelFilter: "all",
+  homeShortcuts: ["jellyfin", "nextcloud", "pihole", "immich"],
+  shortcutNames: {},
+  disks: [{ device: "/dev/sda2", mount: "/", size: 480000000000, used: 14000000000, avail: 466000000000, pct: "3%" }, { device: "/dev/sda2", mount: "/DATA", size: 480000000000, used: 14000000000, avail: 466000000000, pct: "3%" }],
   searchQuery: "",
   appCategory: "All",
   customAppInput: "",
@@ -29,6 +34,9 @@ const state = {
   confirmSystemFileEdit: false,
   newCustomFilePath: "",
   systemFileCatalog: [
+    { path: "/var/log/instant-server/apps-setup.log", category: "Logs", label: "logs", is_system: false, risk_level: "Safe — First-Boot & Background App Setup Log", warning: "Auto-rotated daily per your Settings retention policy.", content: "[instant-server] First-boot background Docker & Avahi setup log...\n" },
+    { path: "/var/log/instant-server/install/INSTANT-SERVER-INSTALL.log", category: "Logs", label: "logs", is_system: false, risk_level: "Safe — USB Installer Log Archive", warning: "Archived from INSTANTUSB/logs/ after installation.", content: "[instant-server] USB installation completed cleanly.\n" },
+    { path: "/var/log/instant-server/commands.log", category: "Logs", label: "logs", is_system: false, risk_level: "Safe — Server Commands & Settings Audit Log", warning: "Records dashboard settings updates and terminal commands.", content: "[instant-server] Command audit log initialized.\n" },
     {
       path: "/etc/samba/smb.conf",
       category: "System Config (/etc)",
@@ -125,7 +133,16 @@ const state = {
   clusterConnectIp: "192.168.1.54",
   clusterConnectHost: "instant-server-b8f2",
   clusterActiveNodes: [
-    { hostname: "instant-server", ip: "192.168.1.40", device: "Primary Server", used_gb: 42.4, total_gb: 256.0, ram_gb: 8 }
+    { server_name: "Instant Server",
+    address_host: "instant-server",
+    address_domain: ".local",
+    log_retention_days: 14,
+    auto_updates: true,
+    auto_update_system_apps: true,
+    auto_update_docker_apps: true,
+    wifi_ssid: "",
+    wifi_password: "",
+    hostname: "instant-server", ip: "192.168.1.40", device: "Primary Server", used_gb: 42.4, total_gb: 256.0, ram_gb: 8 }
   ],
   clusterDiscoveredNodes: [
     { hostname: "instant-server-b8f2", ip: "192.168.1.54", device: "Second Laptop (Found on Home Wi-Fi)", used_gb: 118.0, total_gb: 512.0, ram_gb: 8 },
@@ -399,6 +416,7 @@ function renderSidebar() {
     { id: "kiwix", label: "Offline Wikipedia (Kiwix)", badge: `${installedZims} ZIM` },
     { id: "hardware", label: "Network, Tailscale & Battery", badge: state.settings.enable_tailscale ? "VPN On" : `${state.settings.battery_charge_stop_pct}%` },
     { id: "terminal", label: "Web SSH Terminal", badge: "PTY / Mobile" },
+    { id: "settings", label: "Settings" },
     { id: "files", label: "File & Config Manager", badge: "System + /DATA" },
     { id: "updates", label: "Updates & Offline USB", badge: pendingUpdates > 0 ? `${pendingUpdates} new` : "Auto" },
     { id: "handbook", label: "Handbook & Password Reset", badge: "Guide" },

@@ -22,6 +22,11 @@
       savedConfigPath: "Instant_Server_Data/instant-server-config.json",
 
       // Q1: Identity, Network & Multi-Computer Cluster
+      server_name: "Instant Server",
+      server_address_host: "instant-server",
+      server_address_domain: ".local",
+      log_retention_days: 14,
+      sidebarRevealPass: false,
       hostname: "instant-server",
       username: "admin",
       password: "",
@@ -102,7 +107,7 @@
 
       // Q4: Laptop Power & Survival
       ignore_lid_switch: true,
-      screen_blank_seconds: "60",
+      screen_blank_seconds: "300",
       battery_charge_start_pct: 40,
       battery_charge_stop_pct: 60,
       ups_shutdown_battery_pct: 15,
@@ -443,4 +448,28 @@
       await scanUsbDrives(true);
       shouldAnimateTab = true;
       renderApp();
+    }
+
+    
+
+
+    function normalizeServerDomain(raw) {
+      const cleaned = String(raw || ".local").trim().toLowerCase().replace(/^\.+/, "");
+      return cleaned ? ("." + cleaned) : ".local";
+    }
+
+    function getFullServerAddress() {
+      const host = (state.server_address_host || state.hostname || "instant-server").trim().toLowerCase() || "instant-server";
+      return host + normalizeServerDomain(state.server_address_domain);
+    }
+
+    function getDomainSecurityWarning(domainRaw) {
+      const dom = normalizeServerDomain(domainRaw);
+      const safePrivate = new Set([".local", ".home.arpa", ".lan", ".internal", ".home", ".arpa"]);
+      if (safePrivate.has(dom)) return "";
+      const hstsCritical = new Set([".dev", ".app", ".page", ".new", ".foo", ".google", ".bank", ".gov"]);
+      if (hstsCritical.has(dom)) {
+        return `Critical Browser Block: "${dom}" is HSTS-preloaded in Chrome/Edge/Safari, forcing HTTPS and blocking local HTTP access. Use .local, .home.arpa, .lan, or .internal instead.`;
+      }
+      return `Warning: Public domain "${dom}" can cause browser TLS/HSTS security errors or public DNS conflicts on local networks. Recommended for home servers: .local, .home.arpa, .lan, or .internal.`;
     }

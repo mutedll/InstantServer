@@ -55,7 +55,9 @@ configure_firstboot_apps_and_tailscale() {
     cat << EOF > /usr/local/sbin/instant-server-launch-apps
 #!/usr/bin/env bash
 set -uo pipefail
-exec >> /var/log/instant-server-apps.log 2>&1
+mkdir -p /var/log/instant-server
+exec >> /var/log/instant-server/apps-setup.log 2>&1
+ln -sf /var/log/instant-server/apps-setup.log /var/log/instant-server-apps.log 2>/dev/null || true
 touch /opt/instant-server/.apps_installing 2>/dev/null || true
 /usr/local/sbin/instant-server-banner-refresh 2>/dev/null || true
 echo "[instant-server] Starting power-cut resilient package & Docker app installer at \$(date -Is)..."
@@ -74,13 +76,15 @@ if ! command -v docker >/dev/null 2>&1; then
     for attempt in 1 2 3; do
         apt-get update -qq && break || sleep 5
     done
-    apt-get install -y -qq docker.io docker-compose-v2 wpasupplicant wireless-tools rfkill avahi-daemon cockpit samba ufw fail2ban tlp mosh curl rsync || apt-get install -y -qq docker.io docker-compose wpasupplicant avahi-daemon cockpit samba ufw || true
+    apt-get install -y -qq docker.io docker-compose-v2 wpasupplicant wireless-tools rfkill avahi-daemon libnss-mdns logrotate cockpit samba ufw fail2ban tlp mosh curl rsync || apt-get install -y -qq docker.io docker-compose wpasupplicant avahi-daemon cockpit samba ufw || true
 fi
 if [ -n "${INSTANT_CUSTOM_APT_PACKAGES}" ]; then
     export DEBIAN_FRONTEND=noninteractive
     apt-get install -y -qq ${INSTANT_CUSTOM_APT_PACKAGES} || true
 fi
+if [ -f /etc/avahi/avahi-daemon.conf ]; then sed -i "s/^#\?host-name=.*/host-name=${INSTANT_ADDRESS_HOST:-${INSTANT_HOSTNAME}}/" /etc/avahi/avahi-daemon.conf 2>/dev/null || true; fi
 systemctl enable --now avahi-daemon 2>/dev/null || true
+/usr/local/sbin/instant-server-banner-refresh 2>/dev/null || true
 systemctl enable --now docker 2>/dev/null || true
 systemctl enable --now cockpit.socket 2>/dev/null || true
 
@@ -159,6 +163,7 @@ fs.inotify.max_user_watches=${INSTANT_INOTIFY_MAX_WATCHES}
 net.ipv4.ip_forward=1
 net.core.default_qdisc=fq
 net.ipv4.tcp_congestion_control=bbr
+kernel.printk=3 4 1 3
 EOF
     sysctl --system >/dev/null 2>&1 || true
 
@@ -186,8 +191,6 @@ EOF
         done
     fi
 
-    configure_prelogin_console_banner
-    configure_target_dashboard_daemon
     configure_firstboot_apps_and_tailscale
 }
 

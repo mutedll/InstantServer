@@ -4,6 +4,86 @@ document.body.addEventListener("click", async (e) => {
   if (!btn) return;
   const action = btn.getAttribute("data-action");
 
+
+  if (action === "switch-settings-subtab") {
+    state.settingsSubTab = btn.getAttribute("data-subtab") || "general";
+    renderDashboard();
+    return;
+  }
+  if (action === "browse-disk") {
+    const mnt = btn.getAttribute("data-mount") || "/";
+    const res = await callDashboardApi("/api/system/files", "POST", { action: "list", path: mnt });
+    if (res && Array.isArray(res.entries)) {
+      res.entries.slice(0, 20).forEach(ent => {
+        if (!ent.is_dir && !state.systemFileCatalog.some(f => f.path === ent.path)) {
+          state.systemFileCatalog.push({ path: ent.path, category: mnt, is_system: mnt === "/", risk_level: mnt === "/" ? "System File" : "Disk File", warning: "Live disk file.", content: "" });
+        }
+      });
+    }
+    showToast("Loaded disk mount: " + mnt);
+    renderDashboard();
+    return;
+  }
+  if (action === "set-file-label") {
+    state.fileLabelFilter = btn.getAttribute("data-label") || "all";
+    renderDashboard();
+    return;
+  }
+  if (action === "open-logs-in-files") {
+    state.fileLabelFilter = "logs";
+    state.selectedSystemFile = "/var/log/instant-server/apps-setup.log";
+    state.activeTab = "files";
+    renderDashboard();
+    return;
+  }
+  if (action === "add-home-shortcut") {
+    const sel = document.getElementById("selectAddHomeShortcut");
+    if (sel && sel.value && !state.homeShortcuts.includes(sel.value)) {
+      state.homeShortcuts.push(sel.value);
+      await callDashboardApi("/api/dashboard/shortcuts", "POST", { shortcuts: state.homeShortcuts, names: state.shortcutNames });
+      showToast("Added app shortcut to Home Launcher");
+      renderDashboard();
+    }
+    return;
+  }
+  if (action === "remove-home-shortcut") {
+    const id = btn.getAttribute("data-id");
+    state.homeShortcuts = (state.homeShortcuts || []).filter(x => x !== id);
+    await callDashboardApi("/api/dashboard/shortcuts", "POST", { shortcuts: state.homeShortcuts, names: state.shortcutNames });
+    showToast("Removed shortcut from Home (app remains in App Store)");
+    renderDashboard();
+    return;
+  }
+  if (action === "rename-home-shortcut") {
+    const id = btn.getAttribute("data-id");
+    const cur = (state.shortcutNames && state.shortcutNames[id]) || id;
+    const nextName = window.prompt("Rename Home Launcher shortcut:", cur);
+    if (nextName && nextName.trim()) {
+      state.shortcutNames = state.shortcutNames || {};
+      state.shortcutNames[id] = nextName.trim();
+      await callDashboardApi("/api/dashboard/shortcuts", "POST", { shortcuts: state.homeShortcuts, names: state.shortcutNames });
+      renderDashboard();
+    }
+    return;
+  }
+  if (action === "save-dash-settings-form") {
+    const patch = {};
+    const g = id => document.getElementById(id);
+    if (g("setServerName")) patch.server_name = g("setServerName").value.trim();
+    if (g("setAddrHost")) { patch.address_host = g("setAddrHost").value.trim(); patch.hostname = patch.address_host; }
+    if (g("setAddrDomain")) patch.address_domain = g("setAddrDomain").value.trim();
+    if (g("setWifiSsid")) patch.wifi_ssid = g("setWifiSsid").value.trim();
+    if (g("setWifiPass")) patch.wifi_password = g("setWifiPass").value;
+    if (g("setScreenBlank")) patch.screen_blank_sec = Number(g("setScreenBlank").value) || 0;
+    if (g("setLogRetentionDays")) patch.log_retention_days = Math.max(1, Math.min(365, Number(g("setLogRetentionDays").value) || 14));
+    if (g("setSshPort")) patch.ssh_port = Number(g("setSshPort").value) || 22;
+    Object.assign(state.settings, patch);
+    await callDashboardApi("/api/dashboard/settings", "POST", patch);
+    showToast("Server settings saved and applied");
+    renderDashboard();
+    return;
+  }
+
   if (action === "add-custom-zim") {
     const urlIn = document.getElementById("inputCustomZimUrl");
     const urlVal = urlIn ? urlIn.value.trim() : "";
@@ -340,3 +420,14 @@ document.body.addEventListener("input", async (e) => {
 });
 
 renderDashboard();
+
+document.body.addEventListener("input", (e) => {
+  if (e.target && e.target.id === "setAddrDomain") {
+    const box = document.getElementById("dashDomainWarnBox");
+    if (box && typeof getDashDomainWarning === "function") {
+      const msg = getDashDomainWarning(e.target.value);
+      box.textContent = msg;
+      box.style.display = msg ? "flex" : "none";
+    }
+  }
+});

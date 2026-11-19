@@ -8,50 +8,33 @@ if [ -f "$ENV_CONF" ]; then
 fi
 
 INSTANT_HOSTNAME="${INSTANT_HOSTNAME:-instant-server}"
+INSTANT_SERVER_NAME="${INSTANT_SERVER_NAME:-$INSTANT_HOSTNAME}"
+INSTANT_ADDRESS_HOST="${INSTANT_ADDRESS_HOST:-$INSTANT_HOSTNAME}"
+INSTANT_ADDRESS_DOMAIN="${INSTANT_ADDRESS_DOMAIN:-.local}"
+INSTANT_LOG_RETENTION_DAYS="${INSTANT_LOG_RETENTION_DAYS:-14}"
 INSTANT_USERNAME="${INSTANT_USERNAME:-admin}"
 INSTANT_WIFI_SSID="${INSTANT_WIFI_SSID:-}"
 INSTANT_WIFI_PASSWORD="${INSTANT_WIFI_PASSWORD:-}"
 INSTANT_IGNORE_LID_SWITCH="${INSTANT_IGNORE_LID_SWITCH:-1}"
-INSTANT_SCREEN_BLANK_SEC="${INSTANT_SCREEN_BLANK_SEC:-60}"
+INSTANT_SCREEN_BLANK_SEC="${INSTANT_SCREEN_BLANK_SEC:-300}"
 INSTANT_BAT_START_THRESH="${INSTANT_BAT_START_THRESH:-40}"
 INSTANT_BAT_STOP_THRESH="${INSTANT_BAT_STOP_THRESH:-60}"
 INSTANT_UPS_SHUTDOWN_PCT="${INSTANT_UPS_SHUTDOWN_PCT:-15}"
 INSTANT_DISABLE_WIFI_POWERSAVE="${INSTANT_DISABLE_WIFI_POWERSAVE:-1}"
-INSTANT_ENABLE_COCKPIT="${INSTANT_ENABLE_COCKPIT:-1}"
-INSTANT_ENABLE_CASAOS="${INSTANT_ENABLE_CASAOS:-1}"
-INSTANT_ENABLE_DOCKER="${INSTANT_ENABLE_DOCKER:-1}"
-INSTANT_ENABLE_CUSTOM_DASHBOARD="${INSTANT_ENABLE_CUSTOM_DASHBOARD:-1}"
-INSTANT_DASHBOARD_PORT="${INSTANT_DASHBOARD_PORT:-8088}"
-INSTANT_ENABLE_SAMBA_NAS="${INSTANT_ENABLE_SAMBA_NAS:-1}"
-INSTANT_ENABLE_PIHOLE_DNS_PREP="${INSTANT_ENABLE_PIHOLE_DNS_PREP:-1}"
-INSTANT_ENABLE_INTEL_VAAPI="${INSTANT_ENABLE_INTEL_VAAPI:-1}"
-INSTANT_ENABLE_WOL="${INSTANT_ENABLE_WOL:-1}"
-INSTANT_ENABLE_TCP_BBR="${INSTANT_ENABLE_TCP_BBR:-1}"
-INSTANT_VM_SWAPPINESS="${INSTANT_VM_SWAPPINESS:-10}"
-INSTANT_INOTIFY_MAX_WATCHES="${INSTANT_INOTIFY_MAX_WATCHES:-524288}"
-INSTANT_SSH_PORT="${INSTANT_SSH_PORT:-22}"
-INSTANT_ENABLE_UFW="${INSTANT_ENABLE_UFW:-1}"
-INSTANT_ENABLE_FAIL2BAN="${INSTANT_ENABLE_FAIL2BAN:-1}"
-INSTANT_ENABLE_TAILSCALE="${INSTANT_ENABLE_TAILSCALE:-0}"
-INSTANT_TAILSCALE_AUTHKEY="${INSTANT_TAILSCALE_AUTHKEY:-}"
-INSTANT_TAILSCALE_MODE="${INSTANT_TAILSCALE_MODE:-subnet_and_ssh}"
-INSTANT_CLUSTER_MODE="${INSTANT_CLUSTER_MODE:-standalone}"
-INSTANT_CLUSTER_POLICY="${INSTANT_CLUSTER_POLICY:-mergerfs_union_safe}"
-INSTANT_CPU_GOVERNOR="${INSTANT_CPU_GOVERNOR:-schedutil}"
-INSTANT_DISABLE_TURBO="${INSTANT_DISABLE_TURBO:-0}"
-INSTANT_ENABLE_AUTO_UPDATES="${INSTANT_ENABLE_AUTO_UPDATES:-1}"
-INSTANT_CUSTOM_APT_PACKAGES="${INSTANT_CUSTOM_APT_PACKAGES:-}"
+INSTANT_ENABLE_COCKPIT="${INSTANT_ENABLE_COCKPIT:-1}"; INSTANT_ENABLE_CASAOS="${INSTANT_ENABLE_CASAOS:-1}"; INSTANT_ENABLE_DOCKER="${INSTANT_ENABLE_DOCKER:-1}"
+INSTANT_ENABLE_CUSTOM_DASHBOARD="${INSTANT_ENABLE_CUSTOM_DASHBOARD:-1}"; INSTANT_DASHBOARD_PORT="${INSTANT_DASHBOARD_PORT:-8088}"; INSTANT_SSH_PORT="${INSTANT_SSH_PORT:-22}"
+INSTANT_ENABLE_UFW="${INSTANT_ENABLE_UFW:-1}"; INSTANT_ENABLE_FAIL2BAN="${INSTANT_ENABLE_FAIL2BAN:-1}"; INSTANT_ENABLE_TCP_BBR="${INSTANT_ENABLE_TCP_BBR:-1}"
+INSTANT_VM_SWAPPINESS="${INSTANT_VM_SWAPPINESS:-10}"; INSTANT_INOTIFY_MAX_WATCHES="${INSTANT_INOTIFY_MAX_WATCHES:-524288}"; INSTANT_CPU_GOVERNOR="${INSTANT_CPU_GOVERNOR:-schedutil}"
+INSTANT_DISABLE_TURBO="${INSTANT_DISABLE_TURBO:-0}"; INSTANT_ENABLE_AUTO_UPDATES="${INSTANT_ENABLE_AUTO_UPDATES:-1}"; INSTANT_CLUSTER_MODE="${INSTANT_CLUSTER_MODE:-standalone}"
 
 log_info() {
     printf '[instant-server] %s\n' "$*"
-    if [ -w /var/log ] || [ -w /var/log/instant-server-install.log ]; then
-        printf '[instant-server] %s\n' "$*" >> /var/log/instant-server-install.log 2>/dev/null || true
+    mkdir -p /var/log/instant-server/install 2>/dev/null || true
+    if [ -w /var/log/instant-server/install ]; then
+        printf '[instant-server] %s\n' "$*" >> /var/log/instant-server/install/hardening.log 2>/dev/null || true
     fi
-    if [ -d /mnt/cidata ] && [ -w /mnt/cidata ]; then
-        printf '[instant-server] %s\n' "$*" >> /mnt/cidata/INSTANT-SERVER-INSTALL.log 2>/dev/null || true
-    fi
-    if [ -d /mnt/usb_logs ] && [ -w /mnt/usb_logs ]; then
-        printf '[instant-server] %s\n' "$*" >> /mnt/usb_logs/INSTANT-SERVER-INSTALL.log 2>/dev/null || true
+    if [ -d /mnt/usb_logs/logs ] && [ -w /mnt/usb_logs/logs ]; then
+        printf '[instant-server] %s\n' "$*" >> /mnt/usb_logs/logs/INSTANT-SERVER-INSTALL.log 2>/dev/null || true
     fi
     sync 2>/dev/null || true
 }
@@ -101,18 +84,10 @@ EOF
     done
 
     if [ "$INSTANT_DISABLE_TURBO" = "1" ]; then
-        if [ -w /sys/devices/system/cpu/intel_pstate/no_turbo ]; then
-            echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo 2>/dev/null || true
-        elif [ -w /sys/devices/system/cpu/cpufreq/boost ]; then
-            echo 0 > /sys/devices/system/cpu/cpufreq/boost 2>/dev/null || true
-        fi
+        [ -w /sys/devices/system/cpu/intel_pstate/no_turbo ] && echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo 2>/dev/null || [ -w /sys/devices/system/cpu/cpufreq/boost ] && echo 0 > /sys/devices/system/cpu/cpufreq/boost 2>/dev/null || true
     fi
 
-    for gov_path in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
-        if [ -w "$gov_path" ]; then
-            echo "$INSTANT_CPU_GOVERNOR" > "$gov_path" 2>/dev/null || true
-        fi
-    done
+    for gov_path in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do [ -w "$gov_path" ] && echo "$INSTANT_CPU_GOVERNOR" > "$gov_path" 2>/dev/null || true; done
 
     if [ "$has_bat" -eq 0 ]; then
         log_info "Desktop PC / Mini-PC chassis detected (no battery). Enabling PCIe ASPM and SATA power saving..."
@@ -128,15 +103,7 @@ EOF
     fi
 
     log_info "Laptop chassis detected. Applying lid-close immunity and ${INSTANT_BAT_STOP_THRESH}% battery charge cap..."
-    if [ "$INSTANT_IGNORE_LID_SWITCH" = "1" ]; then
-        cat << 'EOF' > /etc/systemd/logind.conf.d/99-instant-server-headless.conf
-[Login]
-HandleLidSwitch=ignore
-HandleLidSwitchExternalPower=ignore
-HandleLidSwitchDocked=ignore
-IdleAction=ignore
-EOF
-    fi
+    [ "$INSTANT_IGNORE_LID_SWITCH" = "1" ] && cp -f /etc/systemd/logind.conf.d/99-instant-server-clamshell.conf /etc/systemd/logind.conf.d/99-instant-server-headless.conf 2>/dev/null || true
 
     if [ -f /etc/default/grub ] && ! grep -q "consoleblank=" /etc/default/grub; then
         sed -i "s/GRUB_CMDLINE_LINUX_DEFAULT=\"/GRUB_CMDLINE_LINUX_DEFAULT=\"consoleblank=${INSTANT_SCREEN_BLANK_SEC} /" /etc/default/grub 2>/dev/null || true
@@ -153,11 +120,7 @@ WIFI_PWR_ON_AC=off
 WIFI_PWR_ON_BAT=off
 EOF
 
-    for thresh in /sys/class/power_supply/BAT*/charge_control_end_threshold; do
-        if [ -w "$thresh" ]; then
-            echo "$INSTANT_BAT_STOP_THRESH" > "$thresh" 2>/dev/null || true
-        fi
-    done
+    for thresh in /sys/class/power_supply/BAT*/charge_control_end_threshold; do [ -w "$thresh" ] && echo "$INSTANT_BAT_STOP_THRESH" > "$thresh" 2>/dev/null || true; done
 
     cat << EOF > /usr/local/sbin/instant-server-battery-guardian
 #!/usr/bin/env bash
@@ -240,8 +203,10 @@ EOF
         done
         if [ -n "$wifi_iface" ]; then
             log_info "Detected wireless interface ${wifi_iface}; writing /etc/netplan/60-instant-wifi.yaml..."
-            if [ -n "${INSTANT_WIFI_PASSWORD:-}" ]; then
-                cat << EOF > /etc/netplan/60-instant-wifi.yaml
+            local ap_auth=" {}"
+            [ -n "${INSTANT_WIFI_PASSWORD:-}" ] && ap_auth=$'
+          password: "'"${INSTANT_WIFI_PASSWORD}"'"'
+            cat << EOF > /etc/netplan/60-instant-wifi.yaml
 network:
   version: 2
   wifis:
@@ -251,23 +216,8 @@ network:
         route-metric: 600
       optional: true
       access-points:
-        "${INSTANT_WIFI_SSID}":
-          password: "${INSTANT_WIFI_PASSWORD}"
+        "${INSTANT_WIFI_SSID}":${ap_auth}
 EOF
-            else
-                cat << EOF > /etc/netplan/60-instant-wifi.yaml
-network:
-  version: 2
-  wifis:
-    ${wifi_iface}:
-      dhcp4: true
-      dhcp4-overrides:
-        route-metric: 600
-      optional: true
-      access-points:
-        "${INSTANT_WIFI_SSID}": {}
-EOF
-            fi
             chmod 600 /etc/netplan/60-instant-wifi.yaml 2>/dev/null || true
         else
             log_info "No wireless interface currently visible in /sys/class/net; netwatch will auto-configure if Wi-Fi loads on boot."
@@ -300,8 +250,10 @@ configure_docker_ufw_and_rcon_tools() {
     if [ "${INSTANT_ENABLE_UFW:-1}" = "1" ] && command -v ufw >/dev/null 2>&1; then
         ufw allow 22/tcp 2>/dev/null || true
         ufw allow "${INSTANT_SSH_PORT}/tcp" 2>/dev/null || true
+        ufw allow 80/tcp 2>/dev/null || true
         ufw allow "${INSTANT_DASHBOARD_PORT}/tcp" 2>/dev/null || true
         ufw allow 9090/tcp 2>/dev/null || true
+        ufw allow 5353/udp 2>/dev/null || true
     fi
     if command -v iptables >/dev/null 2>&1; then
         iptables -N DOCKER-USER 2>/dev/null || true
@@ -336,50 +288,112 @@ EOF
     chmod 755 /usr/local/sbin/instant-mc-rcon
 }
 
-# 6. Pre-Login Console Banner (/etc/issue & /etc/motd)
+# 6. Pre-Login Console Banner (/etc/issue), Clean TTY1, Post-Login Card & Centralized Logs
 configure_prelogin_console_banner() {
-    log_info "Configuring Ubuntu physical terminal (/etc/issue) and SSH (/etc/motd) pre-login Dashboard URL banner..."
-    mkdir -p /etc/issue.d /etc/update-motd.d
+    log_info "Configuring clean TTY1 Server Details Card, post-login card, and /var/log/instant-server log rotation..."
+    mkdir -p /etc/issue.d /etc/profile.d /etc/systemd/system/getty@tty1.service.d /var/log/instant-server/install /etc/logrotate.d
 
-    cat << EOF > /usr/local/sbin/instant-server-banner-refresh
+    cat << EOF > /etc/logrotate.d/instant-server
+/var/log/instant-server/*.log {
+    daily
+    rotate ${INSTANT_LOG_RETENTION_DAYS}
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    dateext
+}
+EOF
+
+    cat << 'EOF' > /etc/systemd/system/getty@tty1.service.d/override.conf
+[Unit]
+After=network-online.target avahi-daemon.service instant-server-dashboard.service instant-server-banner.service
+Wants=network-online.target instant-server-banner.service
+
+[Service]
+TTYVTDisallocate=yes
+EOF
+
+    cat << 'EOF' > /usr/local/sbin/instant-server-banner-refresh
 #!/usr/bin/env bash
 set -uo pipefail
-HOST_NAME="${INSTANT_HOSTNAME}"
-DASH_PORT="${INSTANT_DASHBOARD_PORT}"
-ADMIN_USER="${INSTANT_USERNAME}"
-LAN_IP=\$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if(\$i=="src") {print \$(i+1); exit}}' || true)
-[ -z "\$LAN_IP" ] && LAN_IP=\$(hostname -I 2>/dev/null | awk '{print \$1}' || true)
-[ -z "\$LAN_IP" ] && LAN_IP="\\4"
-APP_STATE="READY (All background apps online)"
-if [ -f /opt/instant-server/.apps_installing ]; then
-    APP_STATE="INSTALLING APPS IN BACKGROUND (Dashboard is already live!)"
-fi
+[ -f /opt/instant-server/instant-server-env.conf ] && . /opt/instant-server/instant-server-env.conf
+SRV_NAME="${INSTANT_SERVER_NAME:-${INSTANT_HOSTNAME:-instant-server}}"
+ADDR_HOST="${INSTANT_ADDRESS_HOST:-${INSTANT_HOSTNAME:-instant-server}}"
+ADDR_DOM="${INSTANT_ADDRESS_DOMAIN:-.local}"
+DASH_PORT="${INSTANT_DASHBOARD_PORT:-8088}"
+SSH_PORT="${INSTANT_SSH_PORT:-22}"
+ADMIN_USER="${INSTANT_USERNAME:-admin}"
+LAN_IP=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") {print $(i+1); exit}}' || true)
+[ -z "$LAN_IP" ] && LAN_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
+[ -z "$LAN_IP" ] && LAN_IP="Detecting..."
+APP_STATE="ONLINE & READY"
+[ -f /opt/instant-server/.apps_installing ] && APP_STATE="INSTALLING APPS IN BACKGROUND (Dashboard is live!)"
 cat << BANNER_EOF > /etc/issue
-
+[2J[H
 ======================================================================
-  INSTANT SERVER — PLUG-AND-PLAY HOME SERVER IS ONLINE!
+  INSTANT SERVER  |  ${SRV_NAME}
 ======================================================================
-  1. Open a browser on any phone or computer on your Wi-Fi/LAN:
-     -> http://\${HOST_NAME}.local:\${DASH_PORT}
-     -> http://\${LAN_IP}:\${DASH_PORT}   (Direct IP: http://\\4:\${DASH_PORT})
-
-  2. Admin Username : \${ADMIN_USER}
-  3. App Setup      : \${APP_STATE}
-  (You do NOT need to log in on this screen — use the Web URL above!)
+  Server Address  : http://${ADDR_HOST}${ADDR_DOM}  (or :${DASH_PORT})
+  Direct LAN IP   : http://${LAN_IP}  (or http://${LAN_IP}:${DASH_PORT})
+  SSH Access      : ssh ${ADMIN_USER}@${LAN_IP} -p ${SSH_PORT}
+  System Status   : ${APP_STATE}
+  Logs Folder     : /var/log/instant-server/
+----------------------------------------------------------------------
+  Log in below to view full credentials & manage from terminal.
+  (Press any key if screen blanks after idle timeout.)
 ======================================================================
 
 BANNER_EOF
 cp -f /etc/issue /etc/issue.d/instant-server.issue 2>/dev/null || true
-cp -f /etc/issue /etc/motd 2>/dev/null || true
 agetty --reload 2>/dev/null || true
 EOF
     chmod 755 /usr/local/sbin/instant-server-banner-refresh
     /usr/local/sbin/instant-server-banner-refresh 2>/dev/null || true
 
+    cat << 'EOF' > /etc/profile.d/99-instant-server-card.sh
+#!/usr/bin/env bash
+case "$-" in *i*) ;; *) return 0 ;; esac
+[ -f /opt/instant-server/instant-server-env.conf ] && . /opt/instant-server/instant-server-env.conf
+SRV_NAME="${INSTANT_SERVER_NAME:-${INSTANT_HOSTNAME:-instant-server}}"
+ADDR_HOST="${INSTANT_ADDRESS_HOST:-${INSTANT_HOSTNAME:-instant-server}}"
+ADDR_DOM="${INSTANT_ADDRESS_DOMAIN:-.local}"
+DASH_PORT="${INSTANT_DASHBOARD_PORT:-8088}"
+SSH_PORT="${INSTANT_SSH_PORT:-22}"
+ADMIN_USER="${INSTANT_USERNAME:-admin}"
+ETH_IP=$(ip -4 -o addr show 2>/dev/null | awk '$2 ~ /^(en|eth)/ {split($4,a,"/"); print a[1]; exit}' || true)
+WIFI_IP=$(ip -4 -o addr show 2>/dev/null | awk '$2 ~ /^wl/ {split($4,a,"/"); print a[1]; exit}' || true)
+LAN_IP="${ETH_IP:-${WIFI_IP:-$(hostname -I 2>/dev/null | awk '{print $1}')}}"
+printf '
+======================================================================
+'
+printf '  INSTANT SERVER — AUTHENTICATED SERVER DETAILS (%s)
+' "$SRV_NAME"
+printf '======================================================================
+'
+printf '  Server Address  : http://%s%s  (Port 80 & :%s)
+' "$ADDR_HOST" "$ADDR_DOM" "$DASH_PORT"
+printf '  Ethernet IP     : %s
+' "${ETH_IP:-Not connected}"
+printf '  Wi-Fi IP        : %s
+' "${WIFI_IP:-Not connected}"
+printf '  Admin Username  : %s  (Password: set during USB setup)
+' "$ADMIN_USER"
+printf '  SSH Command     : ssh %s@%s -p %s
+' "$ADMIN_USER" "${LAN_IP:-127.0.0.1}" "$SSH_PORT"
+printf '  Logs Directory  : /var/log/instant-server/
+'
+printf '======================================================================
+
+'
+EOF
+    chmod 644 /etc/profile.d/99-instant-server-card.sh
+
     cat << 'EOF' > /etc/systemd/system/instant-server-banner.service
 [Unit]
 Description=Refresh Instant Server Console Login URL Banner
-After=network-online.target instant-server-dashboard.service
+After=network-online.target avahi-daemon.service instant-server-dashboard.service
 Wants=network-online.target
 
 [Service]
@@ -396,12 +410,13 @@ configure_target_dashboard_daemon() {
     log_info "Configuring Target Server Web Dashboard Daemon on port ${INSTANT_DASHBOARD_PORT}..."
     mkdir -p /opt/instant-server /DATA/AppData /DATA/Media /DATA/Backups /DATA/CustomWorkflows
 
-    if [ -f /opt/instant-server/dashboard_server.py ] && [ ! -f /opt/instant-server/dashboard_server.py ]; then
-        cp -f /opt/instant-server/dashboard_server.py /opt/instant-server/dashboard_server.py
-    fi
     if [ -f /opt/instant-server/dashboard_server.py ]; then
         chmod 755 /opt/instant-server/dashboard_server.py
     fi
+    mkdir -p /var/log/instant-server
+    printf '{"server_name":"%s","address_host":"%s","address_domain":"%s","username":"%s","dashboard_port":%s,"ssh_port":%s,"log_retention_days":%s,"auto_updates":true,"auto_update_system_apps":true,"auto_update_docker_apps":true,"wifi_ssid":"%s","ignore_lid_switch":true,"screen_blank_sec":%s,"bat_start":%s,"bat_stop":%s,"ups_pct":%s,"cpu_governor":"%s","pro_mode":false}
+' \
+      "${INSTANT_SERVER_NAME}" "${INSTANT_ADDRESS_HOST}" "${INSTANT_ADDRESS_DOMAIN}" "${INSTANT_USERNAME}" "${INSTANT_DASHBOARD_PORT}" "${INSTANT_SSH_PORT}" "${INSTANT_LOG_RETENTION_DAYS}" "${INSTANT_WIFI_SSID}" "${INSTANT_SCREEN_BLANK_SEC}" "${INSTANT_BAT_START_THRESH}" "${INSTANT_BAT_STOP_THRESH}" "${INSTANT_UPS_SHUTDOWN_PCT}" "${INSTANT_CPU_GOVERNOR}" > /opt/instant-server/server_settings.json
 
     cat << EOF > /etc/systemd/system/instant-server-dashboard.service
 [Unit]
@@ -414,6 +429,8 @@ Type=simple
 WorkingDirectory=/opt/instant-server
 Environment=INSTANT_DASHBOARD_PORT=${INSTANT_DASHBOARD_PORT}
 ExecStart=/usr/bin/python3 /opt/instant-server/dashboard_server.py
+StandardOutput=append:/var/log/instant-server/dashboard.log
+StandardError=append:/var/log/instant-server/dashboard.log
 Restart=always
 RestartSec=3
 
@@ -421,7 +438,6 @@ RestartSec=3
 WantedBy=multi-user.target
 EOF
 }
-
 
 # 7b. Dual-Boot GRUB OS-Prober & Bootloader Preservation
 configure_grub_dualboot_os_prober() {
@@ -446,6 +462,7 @@ main() {
     configure_laptop_lid_and_battery
     configure_wifi_failover_and_powersave_off
     configure_docker_ufw_and_rcon_tools
+    configure_prelogin_console_banner
     configure_target_dashboard_daemon
     configure_grub_dualboot_os_prober
 
@@ -457,22 +474,13 @@ main() {
         fi
     done
 
+    local units=(instant-server-battery-guardian.timer instant-server-dashboard.service instant-server-banner.service instant-server-maintenance.timer instant-server-netwatch.timer instant-server-launch-apps.service)
     if [ "$(stat -c %d:%i / 2>/dev/null || echo chroot)" != "$(stat -c %d:%i /proc/1/root/. 2>/dev/null || echo root)" ]; then
-        log_info "Chroot (curtin in-target) detected: enabling systemd units for first boot without holding /target open..."
-        systemctl enable instant-server-battery-guardian.timer 2>/dev/null || true
-        systemctl enable instant-server-dashboard.service 2>/dev/null || true
-        systemctl enable instant-server-banner.service 2>/dev/null || true
-        systemctl enable instant-server-maintenance.timer 2>/dev/null || true
-        systemctl enable instant-server-netwatch.timer 2>/dev/null || true
-        systemctl enable instant-server-launch-apps.service 2>/dev/null || true
+        log_info "Chroot (curtin in-target) detected: enabling systemd units for first boot..."
+        systemctl enable "${units[@]}" 2>/dev/null || true
     else
         systemctl daemon-reload 2>/dev/null || true
-        systemctl enable --now instant-server-battery-guardian.timer 2>/dev/null || true
-        systemctl enable --now instant-server-dashboard.service 2>/dev/null || true
-        systemctl enable --now instant-server-banner.service 2>/dev/null || true
-        systemctl enable --now instant-server-maintenance.timer 2>/dev/null || true
-        systemctl enable --now instant-server-netwatch.timer 2>/dev/null || true
-        systemctl enable --now instant-server-launch-apps.service 2>/dev/null || true
+        systemctl enable --now "${units[@]}" 2>/dev/null || true
     fi
     log_info "Server hardware, self-healing timers, pre-login URL banner, custom workflow engine, dashboard, and background app installer configured."
 }

@@ -195,7 +195,6 @@ for part in $(lsblk -lnpo NAME,FSTYPE | awk '$2 == "ext4" {print $1}'); do
     fi
 done
 if [ -d "/cdrom" ] || grep -q "casper" /proc/cmdline 2>/dev/null; then
-    touch /run/casper-no-prompt 2>/dev/null || true
     sync
     reboot -f
 fi
@@ -204,7 +203,7 @@ fi
 
 const scriptStartUSBLoggerSh = `#!/usr/bin/env bash
 set -uo pipefail
-systemctl stop casper-md5check.service 2>/dev/null || killall -9 casper-md5check 2>/dev/null || true
+systemctl stop casper-md5check.service 2>/dev/null || true
 mkdir -p /mnt/cidata /mnt/usb_logs
 CDEV=$(blkid -L CIDATA 2>/dev/null || blkid -L cidata 2>/dev/null || true)
 UDEV=$(blkid -L INSTANTUSB 2>/dev/null || true)
@@ -214,16 +213,15 @@ fi
 if [ -n "$UDEV" ]; then
     mount -o rw,sync,flush,noatime "$UDEV" /mnt/usb_logs 2>/dev/null || mount -o remount,rw,sync,flush /mnt/usb_logs 2>/dev/null || true
 fi
-mkdir -p /mnt/cidata/logs /mnt/usb_logs/logs 2>/dev/null || true
+mkdir -p /mnt/usb_logs/logs 2>/dev/null || true
 
-LOG_A="/mnt/cidata/INSTANT-SERVER-INSTALL.log"
-LOG_B="/mnt/usb_logs/INSTANT-SERVER-INSTALL.log"
+LOG_PRIMARY="/mnt/usb_logs/logs/INSTANT-SERVER-INSTALL.log"
+if ! mountpoint -q /mnt/usb_logs 2>/dev/null; then
+    LOG_PRIMARY="/tmp/INSTANT-SERVER-INSTALL.log"
+fi
 
 write_both() {
-    cat >> "$LOG_A" 2>/dev/null || true
-    if mountpoint -q /mnt/usb_logs 2>/dev/null; then
-        cp -f "$LOG_A" "$LOG_B" 2>/dev/null || true
-    fi
+    cat >> "$LOG_PRIMARY" 2>/dev/null || true
     sync
 }
 
@@ -264,8 +262,10 @@ exit 0
 
 const scriptUSBLogDaemonSh = `#!/usr/bin/env bash
 set -uo pipefail
-LOG_A="/mnt/cidata/INSTANT-SERVER-INSTALL.log"
-LOG_B="/mnt/usb_logs/INSTANT-SERVER-INSTALL.log"
+LOG_PRIMARY="/mnt/usb_logs/logs/INSTANT-SERVER-INSTALL.log"
+if ! mountpoint -q /mnt/usb_logs 2>/dev/null; then
+    LOG_PRIMARY="/tmp/INSTANT-SERVER-INSTALL.log"
+fi
 LAST_J_LINES=0
 LAST_SUB_LINES=0
 LAST_CUR_LINES=0
@@ -289,7 +289,7 @@ while true; do
                 tail -n "$NEW_S" /var/log/installer/subiquity-server-debug.log 2>/dev/null | tail -n 80 || true
                 LAST_SUB_LINES="$TOTAL_S"
             fi
-            cp -f /var/log/installer/subiquity-server-debug.log /mnt/cidata/logs/subiquity-server-debug.log 2>/dev/null || true
+            cp -f /var/log/installer/subiquity-server-debug.log /mnt/usb_logs/logs/subiquity-server-debug.log 2>/dev/null || true
         fi
         if [ -f /var/log/installer/curtin-install.log ]; then
             TOTAL_C=$(wc -l < /var/log/installer/curtin-install.log 2>/dev/null || echo 0)
@@ -299,13 +299,12 @@ while true; do
                 tail -n "$NEW_C" /var/log/installer/curtin-install.log 2>/dev/null | tail -n 80 || true
                 LAST_CUR_LINES="$TOTAL_C"
             fi
-            cp -f /var/log/installer/curtin-install.log /mnt/cidata/logs/curtin-install.log 2>/dev/null || true
+            cp -f /var/log/installer/curtin-install.log /mnt/usb_logs/logs/curtin-install.log 2>/dev/null || true
         fi
-    } >> "$LOG_A" 2>/dev/null || true
+    } >> "$LOG_PRIMARY" 2>/dev/null || true
 
-    if mountpoint -q /mnt/usb_logs 2>/dev/null; then
-        cp -f "$LOG_A" "$LOG_B" 2>/dev/null || true
-        cp -rf /mnt/cidata/logs/* /mnt/usb_logs/logs/ 2>/dev/null || true
+    if [ -d /target/var/log/instant-server/install ]; then
+        cp -f "$LOG_PRIMARY" /target/var/log/instant-server/install/INSTANT-SERVER-INSTALL.log 2>/dev/null || true
     fi
     sync
     python3 - << 'PYCLEAN' 2>/dev/null || true
@@ -349,14 +348,16 @@ done
 const scriptDumpErrorLogsSh = `#!/usr/bin/env bash
 set -uo pipefail
 STATUS="${1:-ERROR}"
-mkdir -p /mnt/cidata/logs /mnt/usb_logs/logs
+mkdir -p /mnt/usb_logs/logs
 CDEV=$(blkid -L CIDATA 2>/dev/null || blkid -L cidata 2>/dev/null || true)
 UDEV=$(blkid -L INSTANTUSB 2>/dev/null || true)
 [ -n "$CDEV" ] && (mount -o rw,sync,flush,noatime "$CDEV" /mnt/cidata 2>/dev/null || mount -o remount,rw,sync,flush /mnt/cidata 2>/dev/null || true)
 [ -n "$UDEV" ] && (mount -o rw,sync,flush,noatime "$UDEV" /mnt/usb_logs 2>/dev/null || mount -o remount,rw,sync,flush /mnt/usb_logs 2>/dev/null || true)
 
-LOG_A="/mnt/cidata/INSTANT-SERVER-INSTALL.log"
-LOG_B="/mnt/usb_logs/INSTANT-SERVER-INSTALL.log"
+LOG_PRIMARY="/mnt/usb_logs/logs/INSTANT-SERVER-INSTALL.log"
+if ! mountpoint -q /mnt/usb_logs 2>/dev/null; then
+    LOG_PRIMARY="/tmp/INSTANT-SERVER-INSTALL.log"
+fi
 
 {
     echo ""
@@ -388,15 +389,17 @@ LOG_B="/mnt/usb_logs/INSTANT-SERVER-INSTALL.log"
     echo "--- LAST 100 LINES OF DMESG ---"
     dmesg 2>/dev/null | tail -n 100 || true
     echo "================================================================================"
-} >> "$LOG_A" 2>/dev/null || true
+} >> "$LOG_PRIMARY" 2>/dev/null || true
 
-cp -f /var/log/installer/subiquity-server-debug.log /mnt/cidata/logs/ 2>/dev/null || true
-cp -f /var/log/installer/curtin-install.log /mnt/cidata/logs/ 2>/dev/null || true
-cp -f /autoinstall.yaml /mnt/cidata/logs/autoinstall-used.yaml 2>/dev/null || true
-
-if mountpoint -q /mnt/usb_logs 2>/dev/null; then
-    cp -f "$LOG_A" "$LOG_B" 2>/dev/null || true
-    cp -rf /mnt/cidata/logs/* /mnt/usb_logs/logs/ 2>/dev/null || true
+mkdir -p /mnt/usb_logs/logs /target/var/log/instant-server/install 2>/dev/null || true
+cp -f /var/log/installer/subiquity-server-debug.log /mnt/usb_logs/logs/ 2>/dev/null || true
+cp -f /var/log/installer/curtin-install.log /mnt/usb_logs/logs/ 2>/dev/null || true
+cp -f /autoinstall.yaml /mnt/usb_logs/logs/autoinstall-used.yaml 2>/dev/null || true
+if [ -d /target/var/log/instant-server/install ]; then
+    cp -f "$LOG_PRIMARY" /target/var/log/instant-server/install/INSTANT-SERVER-INSTALL.log 2>/dev/null || true
+    cp -f /var/log/installer/subiquity-server-debug.log /target/var/log/instant-server/install/ 2>/dev/null || true
+    cp -f /var/log/installer/curtin-install.log /target/var/log/instant-server/install/ 2>/dev/null || true
+    cp -f /autoinstall.yaml /target/var/log/instant-server/install/autoinstall-used.yaml 2>/dev/null || true
 fi
 sync
 kill $(cat /run/instant-usb-log-daemon.pid 2>/dev/null) 2>/dev/null || true

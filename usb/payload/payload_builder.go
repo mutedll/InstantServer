@@ -15,7 +15,10 @@ import (
 )
 
 func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
-	host := strings.TrimSpace(cfg.Hostname)
+	host := strings.TrimSpace(cfg.ServerAddressHost)
+	if host == "" {
+		host = strings.TrimSpace(cfg.Hostname)
+	}
 	if host == "" {
 		host = "instant-server"
 	}
@@ -123,7 +126,7 @@ func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
     # END_INSTANT_WIFI`, safeSSID, authLine)
 	}
 
-	liveNoSleepCmds := `    - systemctl stop casper-md5check.service multipathd.service multipathd.socket 2>/dev/null || killall -9 casper-md5check 2>/dev/null || true
+	liveNoSleepCmds := `    - systemctl stop casper-md5check.service multipathd.service multipathd.socket 2>/dev/null || true
     - 'printf "{\"result\":\"pass\"}\n" > /run/casper-md5check.json 2>/dev/null || true'
     - mkdir -p /mnt/cidata /mnt/usb_logs /tmp/cidata
     - cdev=$(blkid -L CIDATA 2>/dev/null || blkid -L cidata 2>/dev/null || true); [ -n "$cdev" ] && (mount -o rw,sync,flush,noatime "$cdev" /mnt/cidata 2>/dev/null || mount -o remount,rw,sync,flush /mnt/cidata 2>/dev/null || true)
@@ -134,7 +137,7 @@ func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
     - rfkill unblock all 2>/dev/null || true
     - systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target 2>/dev/null || true
     - 'mkdir -p /etc/systemd/logind.conf.d && printf "[Login]\nHandleLidSwitch=ignore\nHandleLidSwitchExternalPower=ignore\nHandleLidSwitchDocked=ignore\nIdleAction=ignore\n" > /etc/systemd/logind.conf.d/00-live-nosleep.conf && systemctl restart systemd-logind 2>/dev/null || true'
-    - touch /run/casper-no-prompt 2>/dev/null || true
+    - chmod 600 /etc/netplan/*.yaml 2>/dev/null || true
     - bash /tmp/cidata/select_target_disk.sh 2>/dev/null || bash /mnt/cidata/select_target_disk.sh 2>/dev/null || true
     - udevadm settle --timeout=15 2>/dev/null || true`
 
@@ -195,7 +198,7 @@ func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
 `, liveNoSleepCmds)
 		storageBlock = `  # Live Repair & Password Reset Mode: repairs bootloader/filesystem and resets credentials without formatting`
 
-	case "interactive_select":
+	case "interactive_select", "interactive_gui_disk":
 		earlyCommandsBlock = fmt.Sprintf(`  early-commands:
 %s
 `, liveNoSleepCmds)
@@ -223,7 +226,7 @@ func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
 	}
 
 	interactiveBlock := "  interactive-sections: []"
-	if cfg.InstallMode == "interactive_select" {
+	if cfg.InstallMode == "interactive_select" || cfg.InstallMode == "interactive_gui_disk" {
 		interactiveBlock = "  interactive-sections:\n    - storage"
 	}
 
@@ -261,13 +264,15 @@ autoinstall:
     - if [ -f /mnt/cidata/laptop_hardening.sh ]; then cp -rf /mnt/cidata/* /target/opt/instant-server/ 2>/dev/null || true; elif [ -d /cdrom/cidata ]; then cp -rf /cdrom/cidata/* /target/opt/instant-server/ 2>/dev/null || true; fi
     - find /cdrom/pool -type f \( -name "wpasupplicant*.deb" -o -name "wireless-tools*.deb" -o -name "libnl-*.deb" -o -name "libpcsclite*.deb" -o -name "rfkill*.deb" -o -name "ethtool*.deb" \) -exec cp -f {} /target/opt/instant-server/debs/ \; 2>/dev/null || true%s
     - date +%%s > /target/opt/instant-server/.install_complete_epoch 2>/dev/null || true
-    - touch /run/casper-no-prompt 2>/dev/null || true
+    - chmod 600 /etc/netplan/*.yaml 2>/dev/null || true
+    - mkdir -p /target/var/log/instant-server/install /mnt/usb_logs/logs 2>/dev/null || true
+    - chmod 600 /target/etc/netplan/*.yaml /etc/netplan/*.yaml 2>/dev/null || true
     - curtin in-target -- chmod +x /opt/instant-server/laptop_hardening.sh 2>/dev/null || true
-    - curtin in-target -- bash /opt/instant-server/laptop_hardening.sh >> /mnt/cidata/INSTANT-SERVER-INSTALL.log 2>&1 || true
-    - cp -f /mnt/cidata/INSTANT-SERVER-INSTALL.log /mnt/usb_logs/INSTANT-SERVER-INSTALL.log 2>/dev/null || true
-    - cp -f /mnt/cidata/INSTANT-SERVER-INSTALL.log /target/var/log/instant-server-install.log 2>/dev/null || true
-    - bash /mnt/cidata/dump_error_logs_to_usb.sh SUCCESS 2>/dev/null || true
+    - curtin in-target -- bash /opt/instant-server/laptop_hardening.sh >> /mnt/usb_logs/logs/INSTANT-SERVER-INSTALL.log 2>&1 || true
+    - cp -f /mnt/usb_logs/logs/INSTANT-SERVER-INSTALL.log /target/var/log/instant-server/install/INSTANT-SERVER-INSTALL.log 2>/dev/null || true
+    - bash /tmp/cidata/dump_error_logs_to_usb.sh SUCCESS 2>/dev/null || bash /mnt/cidata/dump_error_logs_to_usb.sh SUCCESS 2>/dev/null || true
     - sync
+    - 'printf "\033[2J\033[H\n======================================================================\n  INSTANT SERVER INSTALLATION COMPLETE!\n======================================================================\n  1. REMOVE YOUR USB DRIVE NOW so the server boots from its internal disk.\n  2. The computer will restart automatically in 12 seconds.\n  3. If it does not restart, press ENTER or tap the Power button once.\n======================================================================\n" > /dev/tty1 2>/dev/null || true; sleep 12'
   error-commands:
     - bash /mnt/cidata/dump_error_logs_to_usb.sh ERROR 2>/dev/null || bash /cdrom/cidata/dump_error_logs_to_usb.sh ERROR 2>/dev/null || true
     - sync
@@ -281,7 +286,10 @@ func GenerateTargetEnvConf(cfg ServerProfileConfig) string {
 		}
 		return "0"
 	}
-	host := strings.TrimSpace(cfg.Hostname)
+	host := strings.TrimSpace(cfg.ServerAddressHost)
+	if host == "" {
+		host = strings.TrimSpace(cfg.Hostname)
+	}
 	if host == "" {
 		host = "instant-server"
 	}
@@ -318,8 +326,27 @@ func GenerateTargetEnvConf(cfg ServerProfileConfig) string {
 		upsPct = 15
 	}
 	blankSec := cfg.ScreenBlankSeconds
-	if blankSec <= 0 {
-		blankSec = 60
+	if blankSec < 0 {
+		blankSec = 300
+	}
+	serverName := strings.TrimSpace(cfg.ServerName)
+	if serverName == "" {
+		serverName = host
+	}
+	addrHost := strings.TrimSpace(cfg.ServerAddressHost)
+	if addrHost == "" {
+		addrHost = host
+	}
+	addrDomain := strings.TrimSpace(cfg.ServerAddressDomain)
+	if addrDomain == "" {
+		addrDomain = ".local"
+	}
+	if !strings.HasPrefix(addrDomain, ".") {
+		addrDomain = "." + addrDomain
+	}
+	logDays := cfg.LogRetentionDays
+	if logDays <= 0 {
+		logDays = 14
 	}
 	gov := strings.TrimSpace(cfg.CPUgovernor)
 	if gov == "" {
@@ -341,6 +368,10 @@ func GenerateTargetEnvConf(cfg ServerProfileConfig) string {
 	enableCasaOS := cfg.DashboardChoice == "both" || cfg.DashboardChoice == "casaos" || cfg.DashboardChoice == ""
 
 	return fmt.Sprintf(`INSTANT_HOSTNAME=%q
+INSTANT_SERVER_NAME=%q
+INSTANT_ADDRESS_HOST=%q
+INSTANT_ADDRESS_DOMAIN=%q
+INSTANT_LOG_RETENTION_DAYS=%q
 INSTANT_USERNAME=%q
 INSTANT_WIFI_SSID=%q
 INSTANT_WIFI_PASSWORD=%q
@@ -378,6 +409,10 @@ INSTANT_INSTALL_MODE=%q
 INSTANT_SELECTED_APPS=%q
 `,
 		host,
+		serverName,
+		addrHost,
+		addrDomain,
+		strconv.Itoa(logDays),
 		user,
 		strings.TrimSpace(cfg.WifiSSID),
 		cfg.WifiPassword,

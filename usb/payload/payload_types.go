@@ -29,6 +29,10 @@ type CustomSambaShare struct {
 
 type ServerProfileConfig struct {
 	Hostname                    string                 `json:"hostname"`
+	ServerName                  string                 `json:"server_name,omitempty"`
+	ServerAddressHost           string                 `json:"server_address_host,omitempty"`
+	ServerAddressDomain         string                 `json:"server_address_domain,omitempty"`
+	LogRetentionDays            int                    `json:"log_retention_days,omitempty"`
 	Username                    string                 `json:"username"`
 	Password                    string                 `json:"password"`
 	WifiSSID                    string                 `json:"wifi_ssid"`

@@ -9,7 +9,8 @@ package payload
 
 const scriptSelectTargetDiskSh = `#!/usr/bin/env bash
 set -uo pipefail
-LOG_A="/mnt/cidata/INSTANT-SERVER-INSTALL.log"
+LOG_A="/mnt/usb_logs/logs/INSTANT-SERVER-INSTALL.log"
+[ ! -d /mnt/usb_logs/logs ] && LOG_A="/tmp/INSTANT-SERVER-INSTALL.log"
 clear_usb_fat_dirty_bits() {
     python3 - << 'PYCLEAN' 2>/dev/null || true
 import subprocess
@@ -49,17 +50,13 @@ PYCLEAN
 
 log_usb() {
     printf '[select_target_disk] %s\n' "$*" | tee -a "$LOG_A" 2>/dev/null || true
-    if mountpoint -q /mnt/usb_logs 2>/dev/null; then
-        mkdir -p /mnt/usb_logs/logs 2>/dev/null || true
-        cp -f "$LOG_A" /mnt/usb_logs/INSTANT-SERVER-INSTALL.log 2>/dev/null || true
-        cp -f "$LOG_A" /mnt/usb_logs/logs/INSTANT-SERVER-INSTALL.log 2>/dev/null || true
-    fi
+    mkdir -p /mnt/usb_logs/logs 2>/dev/null || true
     sync
     clear_usb_fat_dirty_bits
 }
 
 # 1. Stop casper-md5check & multipathd immediately so Integrity and Probert never stall
-systemctl stop casper-md5check.service multipathd.service multipathd.socket 2>/dev/null || killall -9 casper-md5check 2>/dev/null || true
+systemctl stop casper-md5check.service multipathd.service multipathd.socket 2>/dev/null || true
 printf '{"result": "pass"}\n' > /run/casper-md5check.json 2>/dev/null || true
 
 # 2. Install a non-recursive, non-blocking netplan wrapper on the live RAM disk.
@@ -119,28 +116,44 @@ if [ -z "$CIDATA_DISK" ] && [ -n "$INSTANT_PART" ]; then
 fi
 log_usb "Detected installer media: USB_DISK=${USB_DISK} CIDATA_DISK=${CIDATA_DISK}"
 
-# 5. Guard against infinite reinstall loop if the USB drive remains plugged in during reboot
+# 5. Safeguard against accidental USB re-boot loop if an Instant Server OS is already installed
 mkdir -p /mnt/check_existing
+EXISTING_OS_PART=""
 for part in $(lsblk -lnpo NAME,FSTYPE | awk '$2 ~ /ext4|btrfs|xfs/ {print $1}'); do
     [ -n "$USB_DISK" ] && [[ "$part" == "${USB_DISK}"* ]] && continue
     [ -n "$CIDATA_DISK" ] && [[ "$part" == "${CIDATA_DISK}"* ]] && continue
     if mount -o ro "$part" /mnt/check_existing 2>/dev/null; then
-        if [ -f "/mnt/check_existing/opt/instant-server/.install_complete_epoch" ]; then
-            STAMP=$(cat /mnt/check_existing/opt/instant-server/.install_complete_epoch 2>/dev/null || echo 0)
-            NOW=$(date +%s)
-            DIFF=$((NOW - STAMP))
-            if [ "$DIFF" -ge -3600 ] && [ "$DIFF" -lt 21600 ]; then
-                log_usb "Fresh Instant Server installation detected on $part (completed ${DIFF}s ago). Powering off so user can remove USB."
-                umount /mnt/check_existing 2>/dev/null || true
-                clear_usb_fat_dirty_bits
-                sync
-                poweroff -f
-                exit 0
-            fi
+        if [ -f "/mnt/check_existing/opt/instant-server/.install_complete_epoch" ] || [ -f "/mnt/check_existing/opt/instant-server/laptop_hardening.sh" ]; then
+            EXISTING_OS_PART="$part"
         fi
         umount /mnt/check_existing 2>/dev/null || true
     fi
+    [ -n "$EXISTING_OS_PART" ] && break
 done
+if [ -n "$EXISTING_OS_PART" ] && [ "${INSTALL_MODE:-whole_disk}" = "whole_disk" ]; then
+    log_usb "SAFEGUARD: Existing Instant Server OS detected on ${EXISTING_OS_PART}. Prompting user on /dev/tty1."
+    if [ -e /dev/tty1 ]; then
+        printf '\033[2J\033[H\n======================================================================\n' > /dev/tty1
+        printf '  SAFEGUARD: INSTANT SERVER IS ALREADY INSTALLED ON THIS COMPUTER!\n' > /dev/tty1
+        printf '======================================================================\n' > /dev/tty1
+        printf '  Detected existing server partition: %s\n\n' "$EXISTING_OS_PART" > /dev/tty1
+        printf '  -> To boot your installed server: UNPLUG THE USB DRIVE now and\n' > /dev/tty1
+        printf '     press ENTER (or wait 20 seconds to auto-reboot).\n\n' > /dev/tty1
+        printf '  -> To WIPE and reinstall anyway: type REINSTALL and press ENTER.\n' > /dev/tty1
+        printf '======================================================================\n' > /dev/tty1
+        printf '  Your choice [Enter=Reboot / REINSTALL]: ' > /dev/tty1
+        USER_ANS=""
+        read -r -t 20 USER_ANS < /dev/tty1 || true
+        if [ "$USER_ANS" != "REINSTALL" ]; then
+            log_usb "Safeguard triggered reboot so user can boot existing OS (response=${USER_ANS:-timeout})."
+            clear_usb_fat_dirty_bits
+            sync
+            reboot -f
+            exit 0
+        fi
+        log_usb "User explicitly typed REINSTALL; continuing fresh installation."
+    fi
+fi
 
 # 6. Load INSTALL_MODE from instant-server-env.conf
 INSTALL_MODE="whole_disk"
@@ -239,7 +252,26 @@ PYPICK
     fi
 fi
 
-if [ -n "$BEST_DISK" ]; then
+if [ "$INSTALL_MODE" = "interactive_gui_disk" ] || [ "$INSTALL_MODE" = "interactive_select" ] || [ "${#DISK_LIST[@]}" -gt 1 ] || [ -z "$BEST_DISK" ]; then
+    log_usb "Interactive Disk Selection GUI enabled (${INSTALL_MODE}): ensuring Subiquity opens storage GUI even on empty disks."
+    python3 - << 'PYINTER' 2>/dev/null || true
+import yaml, pathlib
+for p in (pathlib.Path("/autoinstall.yaml"), pathlib.Path("/cdrom/autoinstall.yaml")):
+    if not p.is_file():
+        continue
+    try:
+        data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        ai = data.get("autoinstall") if isinstance(data.get("autoinstall"), dict) else data
+        inter = list(ai.get("interactive-sections") or [])
+        if "storage" not in inter:
+            inter.append("storage")
+        ai["interactive-sections"] = inter
+        ai.pop("storage", None)
+        p.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    except Exception:
+        pass
+PYINTER
+elif [ -n "$BEST_DISK" ]; then
     echo "$BEST_DISK" > /run/instant-target-disk
     log_usb "Pinned internal target disk: ${BEST_DISK} (${BEST_SIZE} bytes)"
 fi
@@ -289,7 +321,8 @@ const ScriptDynamicDualBootStorageSh = `#!/usr/bin/env bash
 # ==============================================================================
 set -uo pipefail
 REQ_GB="${1:-45}"
-LOG_A="/mnt/cidata/INSTANT-SERVER-INSTALL.log"
+LOG_A="/mnt/usb_logs/logs/INSTANT-SERVER-INSTALL.log"
+[ ! -d /mnt/usb_logs/logs ] && LOG_A="/tmp/INSTANT-SERVER-INSTALL.log"
 log_usb() {
     printf '[dynamic_dualboot] %s\n' "$*" | tee -a "$LOG_A" 2>/dev/null || true
     if mountpoint -q /mnt/usb_logs 2>/dev/null; then
@@ -444,7 +477,6 @@ if [ "$TARGET_ROOT" = "/mnt/target_os" ]; then
     umount /mnt/target_os 2>/dev/null || true
 fi
 if [ -d "/cdrom" ] || grep -q "casper" /proc/cmdline 2>/dev/null; then
-    touch /run/casper-no-prompt 2>/dev/null || true
     sync
     reboot -f
 fi

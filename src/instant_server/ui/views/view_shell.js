@@ -78,10 +78,61 @@
       `;
     }
 
+
+    function renderSidebarSummaryCard() {
+      const slot = document.getElementById("sidebarSummaryCardSlot");
+      if (!slot) return;
+      const addr = getFullServerAddress();
+      const dashPort = Number(state.dashboard_port) || 8088;
+      const sshPort = Number(state.ssh_port) || 22;
+      const sum = buildSummaryLabels();
+      const passDisplay = !state.password ? "(not set)" : (state.sidebarRevealPass ? state.password : "•".repeat(Math.min(10, state.password.length)));
+      const firstLan = (state.lanScanResults && state.lanScanResults[0]) || null;
+      const ethIp = firstLan ? (firstLan.ip || "Auto DHCP") : (state.static_ip_cidr ? state.static_ip_cidr.split("/")[0] : "Auto DHCP (LAN)");
+      const wifiIp = state.wifi_ssid ? `Failover (${state.wifi_ssid})` : "Not configured";
+      const isPro = state.ui_mode === "pro";
+
+      slot.innerHTML = `
+        <div class="sidebar-summary-card ${isPro ? "pro-expanded" : ""}">
+          <div class="ssc-header">
+            <div class="ssc-title-wrap">
+              <span class="ssc-dot"></span>
+              <span class="ssc-name" title="${esc(state.server_name || state.hostname)}">${esc(state.server_name || state.hostname || "Instant Server")}</span>
+            </div>
+            <button type="button" class="ssc-pen-btn" data-action="open-quick-edit-modal" title="Quick edit server details" aria-label="Quick edit server details">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+            </button>
+          </div>
+          <div class="ssc-addr-row">
+            <a class="ssc-addr-link" href="http://${esc(addr)}" target="_blank" rel="noopener" title="Open http://${esc(addr)}">http://${esc(addr)}</a>
+            <button type="button" class="ssc-copy-btn" data-action="copy-text" data-copy="http://${esc(addr)}" title="Copy address">Copy</button>
+          </div>
+          <div class="ssc-kv"><span>User:</span><strong>${esc(state.username || "admin")}</strong></div>
+          <div class="ssc-kv">
+            <span>Pass:</span>
+            <span style="display:inline-flex;align-items:center;gap:4px;">
+              <strong>${esc(passDisplay)}</strong>
+              ${state.password ? `<button type="button" class="ssc-mini-btn" data-action="toggle-sidebar-pass">${state.sidebarRevealPass ? "Hide" : "Show"}</button>` : ""}
+            </span>
+          </div>
+          <div class="ssc-brief">${esc(sum.modeLabel)} • ${state.selected_apps.length} apps</div>
+          ${isPro ? `
+            <div class="ssc-pro-block">
+              <div class="ssc-kv"><span>Eth IP:</span><code>${esc(ethIp)}</code></div>
+              <div class="ssc-kv"><span>Wi-Fi:</span><code>${esc(wifiIp)}</code></div>
+              <div class="ssc-kv"><span>Dash:</span><a class="ssc-mini-link" href="http://${esc(addr)}:${dashPort}" target="_blank" rel="noopener">:${dashPort}</a></div>
+              <div class="ssc-kv"><span>SSH:</span><button type="button" class="ssc-mini-btn" data-action="copy-text" data-copy="ssh ${esc(state.username || "admin")}@${esc(addr)} -p ${sshPort}">ssh ${esc(state.username || "admin")}@…</button></div>
+            </div>
+          ` : ""}
+        </div>
+      `;
+    }
+
     function renderSettingsView() {
       const navEl = document.getElementById("settingsNavList");
       const mainEl = document.getElementById("settingsMainContent");
 
+      renderSidebarSummaryCard();
       navEl.innerHTML = SETTINGS_TABS.map(item => {
         const active = state.settingsTab === item.id && !state.searchQuery.trim();
         return `

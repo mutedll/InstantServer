@@ -95,6 +95,7 @@ HOW THIS FILE CONNECTS TO JAVASCRIPT:
     <div class="settings-shell" id="settingsShellView" style="display: none;">
       <aside class="nav-sidebar" id="settingsSidebar" tabindex="0">
         <nav class="nav-list" id="settingsNavList"></nav>
+        <div class="sidebar-summary-slot" id="sidebarSummaryCardSlot"></div>
       </aside>
       <main class="content-area" id="settingsScrollArea" tabindex="0">
         <div class="content-inner" id="settingsMainContent"></div>
@@ -165,6 +166,18 @@ HOW THIS FILE CONNECTS TO JAVASCRIPT:
           class="win-btn win-btn-accent"
           data-action="confirm-next-boot-restart-now"
         >Confirm &amp; Restart Now</button>
+      </div>
+    </div>
+  </div>
+
+  
+  <div class="modal-backdrop" id="quickEditServerModal" role="dialog" aria-modal="true" aria-labelledby="quickEditTitle">
+    <div class="modal-dialog" style="max-width:480px;">
+      <div class="modal-title" id="quickEditTitle">Quick Edit Server Details</div>
+      <div class="modal-body" id="quickEditModalBody" style="display:flex;flex-direction:column;gap:10px;"></div>
+      <div class="modal-actions" style="gap:8px;">
+        <button type="button" class="win-btn" data-action="close-quick-edit-modal">Close</button>
+        <button type="button" class="win-btn win-btn-accent" data-action="save-quick-edit-modal">Apply Changes</button>
       </div>
     </div>
   </div>

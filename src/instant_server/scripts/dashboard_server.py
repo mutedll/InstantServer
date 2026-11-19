@@ -16,12 +16,25 @@ import pathlib
 import re
 import shutil
 import subprocess
+import threading
+import time
 import urllib.parse
 
 ROOT_DIR = pathlib.Path("/opt/instant-server")
 APPDATA_DIR = pathlib.Path("/DATA/AppData")
 WORKFLOW_DIR = pathlib.Path("/DATA/CustomWorkflows")
+LOG_DIR = pathlib.Path("/var/log/instant-server")
+SETTINGS_FILE = ROOT_DIR / "server_settings.json"
+SHORTCUTS_FILE = ROOT_DIR / "home_shortcuts.json"
 PORT = int(os.environ.get("INSTANT_DASHBOARD_PORT", "8088"))
+
+def append_cmd_log(entry: str) -> None:
+    try:
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        with (LOG_DIR / "commands.log").open("a", encoding="utf-8") as fh:
+            fh.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {entry}\n")
+    except Exception:
+        pass
 
 
 def safe_app_dir(app_id: str) -> pathlib.Path:
@@ -108,6 +121,39 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
             comp = app_dir / "docker-compose.yml"
             yaml_str = comp.read_text(encoding="utf-8", errors="replace") if comp.is_file() else ""
             self._send({"ok": True, "app_id": app_dir.name, "compose_yaml": yaml_str})
+            return
+
+        if path == "/api/dashboard/settings":
+            cur = {}
+            if SETTINGS_FILE.is_file():
+                try:
+                    cur = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+                except Exception:
+                    cur = {}
+            self._send({"ok": True, "settings": cur})
+            return
+
+        if path == "/api/dashboard/shortcuts":
+            cur = {"shortcuts": ["jellyfin", "nextcloud", "pihole", "immich"], "names": {}}
+            if SHORTCUTS_FILE.is_file():
+                try:
+                    cur = json.loads(SHORTCUTS_FILE.read_text(encoding="utf-8"))
+                except Exception:
+                    pass
+            self._send({"ok": True, **cur})
+            return
+
+        if path == "/api/files/disks":
+            disks = []
+            try:
+                out = subprocess.check_output(["df", "-B1", "--output=source,size,used,avail,pcent,target"], text=True, stderr=subprocess.DEVNULL)
+                for ln in out.splitlines()[1:]:
+                    p = ln.split(None, 5)
+                    if len(p) == 6 and (p[0].startswith("/dev/") or p[5] in ("/", "/DATA")):
+                        disks.append({"device": p[0], "size": int(p[1]), "used": int(p[2]), "avail": int(p[3]), "pct": p[4], "mount": p[5]})
+            except Exception:
+                pass
+            self._send({"ok": True, "disks": disks})
             return
 
         self._send({
@@ -204,8 +250,15 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
             })
             return
 
+        if path == "/api/dashboard/shortcuts":
+            ROOT_DIR.mkdir(parents=True, exist_ok=True)
+            SHORTCUTS_FILE.write_text(json.dumps(payload, indent=2), encoding="utf-8", newline="\n")
+            append_cmd_log("Updated Home Launcher app shortcuts")
+            self._send({"ok": True})
+            return
+
         if path == "/api/dashboard/settings":
-            settings_file = ROOT_DIR / "dashboard-settings.json"
+            settings_file = SETTINGS_FILE
             cur = {}
             if settings_file.is_file():
                 try:
@@ -229,6 +282,29 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
                         gp.write_text(gov)
                     except Exception:
                         pass
+            if "log_retention_days" in payload:
+                days = max(1, min(365, int(payload.get("log_retention_days") or 14)))
+                lr = pathlib.Path("/etc/logrotate.d/instant-server")
+                try:
+                    lr.write_text(f"/var/log/instant-server/*.log {{\n    daily\n    rotate {days}\n    missingok\n    notifempty\n    compress\n    delaycompress\n    copytruncate\n    dateext\n}}\n", encoding="utf-8", newline="\n")
+                except Exception:
+                    pass
+            if "address_host" in payload and str(payload.get("address_host", "")).strip():
+                nh = re.sub(r"[^a-zA-Z0-9-]", "", str(payload["address_host"]).strip())
+                if nh:
+                    subprocess.run(["hostnamectl", "set-hostname", nh], capture_output=True)
+            if "wifi_ssid" in payload and str(payload.get("wifi_ssid", "")).strip():
+                ssid = str(payload["wifi_ssid"]).strip()
+                wpass = str(payload.get("wifi_password", ""))
+                np_file = pathlib.Path("/etc/netplan/60-instant-wifi.yaml")
+                try:
+                    auth = f'\n          password: "{wpass}"' if wpass else " {}"
+                    np_file.write_text(f'network:\n  version: 2\n  wifis:\n    wlan0:\n      dhcp4: true\n      optional: true\n      access-points:\n        "{ssid}":{auth}\n', encoding="utf-8", newline="\n")
+                    os.chmod(np_file, 0o600)
+                except Exception:
+                    pass
+            append_cmd_log(f"Settings updated: {list(payload.keys())}")
+            subprocess.run(["/usr/local/sbin/instant-server-banner-refresh"], capture_output=True)
             self._send({"ok": True, "settings": cur})
             return
 
@@ -285,6 +361,7 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
 
         if path == "/api/terminal/exec":
             cmd_str = str(payload.get("command", "uptime")).strip()
+            append_cmd_log(f"TERMINAL: {cmd_str}")
             cwd = str(payload.get("cwd", "/DATA")).strip() or "/DATA"
             if not os.path.isdir(cwd):
                 cwd = "/"
@@ -364,5 +441,11 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    if PORT != 80:
+        try:
+            srv80 = ReusableThreadingHTTPServer(("0.0.0.0", 80), DashboardHandler)
+            threading.Thread(target=srv80.serve_forever, daemon=True).start()
+        except OSError:
+            pass
     srv = ReusableThreadingHTTPServer(("0.0.0.0", PORT), DashboardHandler)
     srv.serve_forever()
