@@ -171,8 +171,14 @@ func (a *App) FlashUSBDevice(profile usb.ServerProfileConfig, isoPath string) ma
 		a.mu.Unlock()
 
 		baseDataDir := resolveWritableDataDir()
-		hardeningBytes, _ := a.assets.ReadFile("src/instant_server/scripts/laptop_hardening.sh")
-		dashBytes, _ := a.assets.ReadFile("src/instant_server/ui/server_dashboard.html")
+		hardeningBytes, errH := a.assets.ReadFile("src/instant_server/scripts/os/laptop_hardening.sh")
+		if errH != nil {
+			hardeningBytes, _ = a.assets.ReadFile("src/instant_server/scripts/laptop_hardening.sh")
+		}
+		dashBytes, errD := a.assets.ReadFile("src/instant_server/ui/dashboard/server_dashboard.html")
+		if errD != nil {
+			dashBytes, _ = a.assets.ReadFile("src/instant_server/ui/server_dashboard.html")
+		}
 		stagingDir := filepath.Join(baseDataDir, "cidata_stage")
 		stagedFiles, stageErr := usb.StageCIDATAPayload(stagingDir, profile, hardeningBytes, dashBytes)
 		if stageErr != nil {

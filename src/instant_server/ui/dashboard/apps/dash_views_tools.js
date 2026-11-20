@@ -360,18 +360,19 @@ function renderSettingsAppTab() {
 function renderDashboard() {
   renderTelemetry();
   renderSidebar();
+  document.querySelectorAll(".mobile-dock-btn").forEach(b => b.classList.toggle("active", b.getAttribute("data-tab") === state.activeTab));
   const pane = document.getElementById("mainPane");
   if (!pane) return;
   if (state.activeTab === "home") pane.innerHTML = renderHomeLauncherTab();
-  else if (state.activeTab === "settings") pane.innerHTML = renderSettingsAppTab();
+  else if (state.activeTab === "settings") pane.innerHTML = (typeof renderDetailedSettingsApp === "function" ? renderDetailedSettingsApp() : renderSettingsAppTab());
   else if (state.activeTab === "apps") pane.innerHTML = renderAppsTab();
-  else if (state.activeTab === "minecraft") pane.innerHTML = renderMinecraftTab();
+  else if (state.activeTab === "minecraft") pane.innerHTML = (typeof renderProMinecraftApp === "function" ? renderProMinecraftApp() : renderMinecraftTab());
   else if (state.activeTab === "cluster") pane.innerHTML = renderClusterTab();
   else if (state.activeTab === "kiwix") pane.innerHTML = renderKiwixTab();
   else if (state.activeTab === "hardware") pane.innerHTML = renderHardwareTab();
   else if (state.activeTab === "terminal") pane.innerHTML = renderTerminalTab();
-  else if (state.activeTab === "files") pane.innerHTML = renderFilesTab();
-  else if (state.activeTab === "updates") pane.innerHTML = renderUpdatesTab();
+  else if (state.activeTab === "files") pane.innerHTML = (typeof renderFullFileManagerTab === "function" ? renderFullFileManagerTab() : renderFilesTab());
+  else if (state.activeTab === "updates") pane.innerHTML = (typeof renderOfficialUpdatesCenter === "function" ? renderOfficialUpdatesCenter() : renderUpdatesTab());
   else if (state.activeTab === "handbook") pane.innerHTML = renderHandbookTab();
   else if (state.activeTab === "pro_control") pane.innerHTML = renderProControlTab();
 }

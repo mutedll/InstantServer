@@ -1,0 +1,169 @@
+/* FILE: src/instant_server/ui/dashboard/dash_file_manager.css */
+/* Sleek Windows 11 Explorer / macOS Finder–style File Manager Styles */
+
+.fm-shell {
+  display: grid;
+  grid-template-columns: 230px 1fr;
+  gap: 14px;
+  min-height: 540px;
+  animation: dashFadeSlide 0.22s ease;
+}
+
+.fm-sidebar {
+  background: var(--surface-card, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fm-side-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  padding: 2px 4px;
+}
+
+.fm-disk-item, .fm-label-item {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-primary);
+  border-radius: 9px;
+  padding: 8px 9px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: background 0.16s ease, border-color 0.16s ease, transform 0.12s ease;
+}
+
+.fm-label-item {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.fm-disk-item:hover, .fm-label-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.fm-disk-item.active, .fm-label-item.active {
+  background: rgba(10, 132, 255, 0.14);
+  border-color: rgba(10, 132, 255, 0.42);
+}
+
+.fm-disk-bar {
+  width: 100%;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.09);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.fm-disk-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #0a84ff, #30d158);
+  border-radius: 99px;
+  transition: width 0.3s ease;
+}
+
+.fm-main {
+  background: var(--surface-card, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.fm-toolbar, .fm-actionbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.fm-actionbar {
+  background: rgba(255, 255, 255, 0.015);
+  padding: 8px 12px;
+}
+
+.fm-breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  min-width: 140px;
+  overflow-x: auto;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 3px 8px;
+}
+
+.fm-crumb {
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 3px 5px;
+  border-radius: 5px;
+}
+
+.fm-crumb:hover { background: rgba(10, 132, 255, 0.18); color: var(--accent); }
+.fm-crumb-sep { color: var(--text-secondary); font-size: 12px; }
+
+.fm-toolbar-right { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.fm-search { width: 150px; height: 30px; font-size: 12px; }
+.fm-content-scroll { flex: 1; overflow: auto; padding: 8px; }
+
+.fm-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.fm-table th { text-align: left; padding: 8px 10px; color: var(--text-secondary); font-size: 11px; text-transform: uppercase; border-bottom: 1px solid var(--border-subtle); }
+.fm-list-row td { padding: 8px 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.04); vertical-align: middle; }
+.fm-list-row:hover { background: rgba(10, 132, 255, 0.07); }
+.fm-name-cell { display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 600; }
+.fm-fname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 240px; }
+.fm-crit-dot { color: #ff453a; font-size: 10px; }
+
+.fm-lbl-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.fm-lbl-badge { font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 99px; text-transform: capitalize; }
+.fm-lbl-all { background: #64748b; }
+.fm-lbl-logs { background: rgba(48, 209, 88, 0.18); color: #30d158; }
+.fm-lbl-configs { background: rgba(10, 132, 255, 0.18); color: #38bdf8; }
+.fm-lbl-system { background: rgba(255, 69, 58, 0.18); color: #ff6961; }
+.fm-lbl-apps { background: rgba(191, 90, 242, 0.18); color: #d8b4fe; }
+.fm-lbl-backups { background: rgba(255, 159, 10, 0.18); color: #fbbf24; }
+.fm-lbl-user { background: rgba(148, 163, 184, 0.16); color: #cbd5e1; }
+
+.fm-row-actions { display: flex; gap: 4px; flex-wrap: wrap; }
+.fm-act-btn { background: rgba(255, 255, 255, 0.07); border: 1px solid var(--border-subtle); color: var(--text-primary); border-radius: 6px; padding: 3px 7px; font-size: 11px; cursor: pointer; text-decoration: none; transition: background 0.15s; }
+.fm-act-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.fm-act-danger:hover { background: #ff453a; border-color: #ff453a; }
+
+.fm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); gap: 10px; padding: 4px; }
+.fm-grid-card { background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 11px; display: flex; flex-direction: column; gap: 6px; transition: transform 0.15s, border-color 0.15s; }
+.fm-grid-card:hover { transform: translateY(-2px); border-color: var(--accent); }
+.fm-grid-top { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+.fm-grid-name { font-weight: 700; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.fm-grid-meta { font-size: 11px; color: var(--text-secondary); }
+.fm-empty { text-align: center; padding: 36px 12px; color: var(--text-secondary); font-size: 13px; }
+
+.fm-editor-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.65); backdrop-filter: blur(6px); z-index: 900; display: flex; align-items: center; justify-content: center; padding: 14px; animation: dashFadeSlide 0.18s ease; }
+.fm-editor-dialog { width: min(860px, 100%); max-height: 88vh; background: var(--bg-panel, #121620); border: 1px solid var(--border-subtle); border-radius: 14px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55); }
+.fm-editor-hdr, .fm-editor-ftr { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); flex-wrap: wrap; }
+.fm-editor-ftr { border-bottom: none; border-top: 1px solid var(--border-subtle); }
+.fm-crit-banner { background: rgba(255, 159, 10, 0.12); border-left: 4px solid #ff9f0a; padding: 10px 14px; font-size: 12px; }
+.fm-editor-code { flex: 1; min-height: 320px; width: 100%; background: #0a0d14; color: #e2e8f0; border: none; padding: 14px; font-family: var(--font-mono, monospace); font-size: 12.5px; line-height: 1.5; resize: vertical; outline: none; }

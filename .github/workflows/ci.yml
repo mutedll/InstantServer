@@ -86,7 +86,7 @@ jobs:
           for scf in laptop_hardening.sh apps_setup.sh autoinstall_config.py dualboot_storage.py dashboard_server.py; do
             [ -f "$scf" ] && mv -f "$scf" "src/instant_server/scripts/$scf" || true
           done
-          sed -i 's/\r$//' src/instant_server/scripts/*.sh src/instant_server/scripts/*.py 2>/dev/null || true
+          find src/instant_server/scripts -type f \( -name '*.sh' -o -name '*.py' \) -exec sed -i 's/\r$//' {} + 2>/dev/null || true
 
           if [ ! -f "go.mod" ]; then
             go mod init github.com/mutedll/InstantServer
@@ -200,7 +200,7 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          for shf in src/instant_server/scripts/laptop_hardening.sh src/instant_server/scripts/apps_setup.sh; do
+          for shf in src/instant_server/scripts/os/laptop_hardening.sh src/instant_server/scripts/os/apps_setup.sh src/instant_server/scripts/laptop_hardening.sh src/instant_server/scripts/apps_setup.sh; do
             sed -i 's/\r$//' "$shf"
             bash -n "$shf"
             shellcheck -s bash "$shf"

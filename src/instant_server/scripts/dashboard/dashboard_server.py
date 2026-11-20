@@ -10,6 +10,7 @@ Why this file is separate from laptop_hardening.sh:
 """
 
 import http.server
+import importlib
 import json
 import os
 import pathlib
@@ -18,7 +19,17 @@ import shutil
 import subprocess
 import threading
 import time
+import sys
 import urllib.parse
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "os"))
+import dashboard_files_api as fm_api
+import dashboard_mc_api as mc_api
+import dashboard_updates_api as upd_api
+try:
+    dm_api = importlib.import_module("disk_manager")
+except Exception:
+    dm_api = None
 
 ROOT_DIR = pathlib.Path("/opt/instant-server")
 APPDATA_DIR = pathlib.Path("/DATA/AppData")
@@ -72,7 +83,7 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
         params = dict(urllib.parse.parse_qsl(parsed_url.query))
 
         if path in ("/", "/index.html", "/server_dashboard.html"):
-            for cand in (ROOT_DIR / "server_dashboard.html", ROOT_DIR / "ui" / "server_dashboard.html"):
+            for cand in (ROOT_DIR / "server_dashboard.html", ROOT_DIR / "ui" / "dashboard" / "server_dashboard.html", ROOT_DIR / "ui" / "server_dashboard.html"):
                 if cand.is_file():
                     raw = cand.read_bytes()
                     try:
@@ -85,9 +96,18 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
                         pass
                     return
 
-        if path.startswith("/dash_") and (path.endswith(".css") or path.endswith(".js")):
+        if (path.endswith(".css") or path.endswith(".js")) and "dash_" in pathlib.Path(path).name:
             asset_name = pathlib.Path(path).name
-            for cand in (ROOT_DIR / asset_name, ROOT_DIR / "ui" / asset_name):
+            rel_sub = path.lstrip("/")
+            for cand in (
+                ROOT_DIR / rel_sub,
+                ROOT_DIR / "ui" / "dashboard" / rel_sub,
+                ROOT_DIR / asset_name,
+                ROOT_DIR / "ui" / asset_name,
+                ROOT_DIR / "ui" / "dashboard" / "styles" / asset_name,
+                ROOT_DIR / "ui" / "dashboard" / "core" / asset_name,
+                ROOT_DIR / "ui" / "dashboard" / "apps" / asset_name,
+            ):
                 if cand.is_file():
                     raw = cand.read_bytes()
                     ctype = "text/css; charset=utf-8" if asset_name.endswith(".css") else "application/javascript; charset=utf-8"
@@ -100,6 +120,65 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
                     except (BrokenPipeError, ConnectionResetError):
                         pass
                     return
+
+        if path == "/disk-manager" and dm_api is not None:
+            raw = dm_api.DISK_UI_HTML.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+            return
+
+        if path == "/api/disk/list" and dm_api is not None:
+            self._send({"ok": True, "is_root": dm_api.is_root(), "disks": dm_api.list_disks()})
+            return
+
+        if path == "/api/mc/status":
+            self._send(mc_api.get_status())
+            return
+
+        if path == "/api/mc/console":
+            self._send(mc_api.get_console_logs(int(params.get("lines", "120") or "120")))
+            return
+
+        if path == "/api/mc/addons":
+            self._send(mc_api.list_addons(params.get("kind", "plugins")))
+            return
+
+        if path == "/api/mc/backups":
+            self._send(mc_api.list_backups())
+            return
+
+        if path == "/api/updates/check":
+            self._send(upd_api.check_all_updates())
+            return
+
+        if path == "/api/fm/disks":
+            self._send({"ok": True, "disks": fm_api.get_mounted_disks()})
+            return
+
+        if path == "/api/fm/list":
+            self._send(fm_api.list_directory(params.get("path", ""), params.get("label", "all"), params.get("q", ""), params.get("sort", "name")))
+            return
+
+        if path == "/api/fm/read":
+            self._send(fm_api.read_file(params.get("path", "")))
+            return
+
+        if path == "/api/fm/download":
+            fp = pathlib.Path(params.get("path", "")).resolve()
+            if fp.is_file():
+                raw = fp.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/octet-stream")
+                self.send_header("Content-Disposition", f'attachment; filename="{fp.name}"')
+                self.send_header("Content-Length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+                return
+            self._send({"ok": False, "error": "File not found"}, status=404)
+            return
 
         if path == "/api/dashboard/apps/files":
             app_dir = safe_app_dir(params.get("app_id", "minecraft"))
@@ -166,6 +245,33 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
         path = urllib.parse.urlsplit(self.path).path
         length = int(self.headers.get("Content-Length", "0") or "0")
         payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}") if length > 0 else {}
+
+        if path.startswith("/api/mc/"):
+            op = path[len("/api/mc/"):].strip("/")
+            res = mc_api.handle_mc_post(op, payload)
+            append_cmd_log(f"MC {op}: {payload.get('action') or payload.get('command', '')}")
+            self._send(res, status=200 if res.get("ok") else 400)
+            return
+
+        if path == "/api/updates/install":
+            res = upd_api.install_selected_updates(list(payload.get("ids") or []))
+            append_cmd_log(f"UPDATES installed: {len(payload.get('ids') or [])}")
+            self._send(res)
+            return
+
+        if path.startswith("/api/fm/"):
+            op = path[len("/api/fm/"):].strip("/")
+            res = fm_api.handle_fm_post(op, payload)
+            append_cmd_log(f"FM {op}: {payload.get('path') or payload.get('src') or payload.get('filename', '')}")
+            self._send(res, status=200 if res.get("ok") else 400)
+            return
+
+        if path == "/api/disk/action" and dm_api is not None:
+            res = dm_api.handle_disk_action(payload)
+            append_cmd_log(f"DISK {payload.get('action')}: {payload.get('device')}")
+            self._send(res, status=200 if res.get("ok") else 400)
+            return
+
 
         if path == "/api/dashboard/apps/files":
             app_dir = safe_app_dir(str(payload.get("app_id", "minecraft")))

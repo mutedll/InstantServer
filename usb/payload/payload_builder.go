@@ -265,11 +265,11 @@ autoinstall:
     - find /cdrom/pool -type f \( -name "wpasupplicant*.deb" -o -name "wireless-tools*.deb" -o -name "libnl-*.deb" -o -name "libpcsclite*.deb" -o -name "rfkill*.deb" -o -name "ethtool*.deb" \) -exec cp -f {} /target/opt/instant-server/debs/ \; 2>/dev/null || true%s
     - date +%%s > /target/opt/instant-server/.install_complete_epoch 2>/dev/null || true
     - chmod 600 /etc/netplan/*.yaml 2>/dev/null || true
-    - mkdir -p /target/var/log/instant-server/install /mnt/usb_logs/logs 2>/dev/null || true
+    - mkdir -p /target/var/log/instant-server/install /mnt/usb_logs/instant_server_logs 2>/dev/null || true
     - chmod 600 /target/etc/netplan/*.yaml /etc/netplan/*.yaml 2>/dev/null || true
     - curtin in-target -- chmod +x /opt/instant-server/laptop_hardening.sh 2>/dev/null || true
-    - curtin in-target -- bash /opt/instant-server/laptop_hardening.sh >> /mnt/usb_logs/logs/INSTANT-SERVER-INSTALL.log 2>&1 || true
-    - cp -f /mnt/usb_logs/logs/INSTANT-SERVER-INSTALL.log /target/var/log/instant-server/install/INSTANT-SERVER-INSTALL.log 2>/dev/null || true
+    - curtin in-target -- bash /opt/instant-server/laptop_hardening.sh >> /mnt/usb_logs/instant_server_logs/instant_server_install.log 2>&1 || true
+    - cp -f /mnt/usb_logs/instant_server_logs/instant_server_install.log /target/var/log/instant-server/install/instant_server_install.log 2>/dev/null || true
     - bash /tmp/cidata/dump_error_logs_to_usb.sh SUCCESS 2>/dev/null || bash /mnt/cidata/dump_error_logs_to_usb.sh SUCCESS 2>/dev/null || true
     - sync
     - 'printf "\033[2J\033[H\n======================================================================\n  INSTANT SERVER INSTALLATION COMPLETE!\n======================================================================\n  1. REMOVE YOUR USB DRIVE NOW so the server boots from its internal disk.\n  2. The computer will restart automatically in 12 seconds.\n  3. If it does not restart, press ENTER or tap the Power button once.\n======================================================================\n" > /dev/tty1 2>/dev/null || true; sleep 12'

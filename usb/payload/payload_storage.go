@@ -190,7 +190,17 @@ done < <(lsblk -brndo NAME,TYPE,SIZE,TRAN,RM 2>/dev/null | awk '{print "/dev/"$1
 
 # 7b. Interactive Target Disk Picker UI Mode (on-screen GUI menu + port :8088 Web Picker)
 if [ "$INSTALL_MODE" = "interactive_gui_disk" ] && [ "${#DISK_LIST[@]}" -gt 0 ]; then
-    log_usb "Launching Interactive Target Disk Picker UI on /dev/tty1 and port :8088..."
+    log_usb "Launching Full Disk Management & Target Selector UI (disk_manager.py) on port :8088..."
+    DM_SCRIPT=""
+    for cand in /tmp/cidata/disk_manager.py /mnt/cidata/disk_manager.py /cdrom/cidata/disk_manager.py; do [ -f "$cand" ] && DM_SCRIPT="$cand" && break; done
+    if [ -n "$DM_SCRIPT" ]; then
+        INSTANT_USB_DISKS="${USB_DISK},${CIDATA_DISK}" INSTANT_INSTALLER_MODE=1 python3 "$DM_SCRIPT" >/dev/null 2>&1 &
+        DM_PID=$!
+        LIVE_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "<server-ip>")
+        printf "\n[INSTANT SERVER] Full Disk Manager is live at: http://%s:8088\n(Format, create/split/wipe volumes, then click Select Target — or press ENTER to use Subiquity GUI)\n" "$LIVE_IP" > /dev/tty1 2>/dev/null || true
+        read -r -t 180 _ < /dev/tty1 || true
+        kill "$DM_PID" 2>/dev/null || true
+    fi
     python3 - "${DISK_LIST[@]}" << 'PYPICK' 2>/dev/null || true
 import http.server, json, os, subprocess, sys, threading
 
