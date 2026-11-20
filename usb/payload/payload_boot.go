@@ -18,6 +18,12 @@ import (
 // falling back to a minimal built-in version during isolated unit tests.
 func LoadBundledScript(fileName string, fallback string) []byte {
 	candidates := []string{
+		filepath.Join("src", "instant_server", "scripts", "os", fileName),
+		filepath.Join("src", "instant_server", "scripts", "dashboard", fileName),
+		filepath.Join("..", "src", "instant_server", "scripts", "os", fileName),
+		filepath.Join("..", "src", "instant_server", "scripts", "dashboard", fileName),
+		filepath.Join("..", "..", "src", "instant_server", "scripts", "os", fileName),
+		filepath.Join("..", "..", "src", "instant_server", "scripts", "dashboard", fileName),
 		filepath.Join("src", "instant_server", "scripts", fileName),
 		filepath.Join("..", "src", "instant_server", "scripts", fileName),
 		filepath.Join("..", "..", "src", "instant_server", "scripts", fileName),

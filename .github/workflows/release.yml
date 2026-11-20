@@ -22,9 +22,9 @@ jobs:
         include:
           - os: windows-2025
             binary_name: InstantServer-Windows.exe
-          - os: macos-15-intel
+          - os: macos-26
             binary_name: InstantServer-macOS.dmg
-          - os: ubuntu-24.04
+          - os: ubuntu-26.04
             binary_name: InstantServer-Linux
 
     steps:
