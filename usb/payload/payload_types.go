@@ -69,6 +69,7 @@ type ServerProfileConfig struct {
 	InstallMode                 string                 `json:"install_mode"`
 	DualBootAllocationGB        int                    `json:"dual_boot_Allocation_gb"`
 	ConfirmEraseMainDrive       bool                   `json:"confirm_erase_main_drive"`
+	SkipBeginnerChecks          bool                   `json:"skip_beginner_checks,omitempty"`
 	ConfirmWipeServerData       string                 `json:"confirm_wipe_server_data,omitempty"`
 	UbuntuRelease               string                 `json:"ubuntu_release"`
 	StorageLayout               string                 `json:"storage_layout"`

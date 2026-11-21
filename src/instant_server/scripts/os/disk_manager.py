@@ -24,6 +24,85 @@ import shutil
 import subprocess
 import sys
 import urllib.parse
+import http.client
+import socket
+import threading
+import time
+
+
+class _UnixHTTPConnection(http.client.HTTPConnection):
+    def __init__(self, sock_path: str, timeout: float = 10.0):
+        super().__init__("localhost", timeout=timeout)
+        self._sock_path = sock_path
+
+    def connect(self) -> None:
+        af_unix = getattr(socket, "AF_UNIX", None)
+        if af_unix is None:
+            raise OSError("Unix domain sockets are only supported on Linux/POSIX hosts")
+        s = socket.socket(af_unix, socket.SOCK_STREAM)
+        s.settimeout(self.timeout)
+        s.connect(self._sock_path)
+        self.sock = s
+
+
+def _subiquity_req(method: str, path: str, body: dict | None = None) -> tuple[int, dict | list | str | None]:
+    sock_path = "/run/subiquity/socket"
+    if not os.path.exists(sock_path):
+        return 0, None
+    try:
+        conn = _UnixHTTPConnection(sock_path, timeout=15.0)
+        headers = {"Content-Type": "application/json"} if body is not None else {}
+        payload = json.dumps(body).encode("utf-8") if body is not None else None
+        conn.request(method, path, body=payload, headers=headers)
+        resp = conn.getresponse()
+        raw = resp.read().decode("utf-8", errors="replace")
+        conn.close()
+        try:
+            return resp.status, json.loads(raw) if raw.strip() else None
+        except Exception:
+            return resp.status, raw
+    except Exception as exc:
+        return 0, str(exc)
+
+
+def drive_subiquity_live_selection(target_disk: str) -> tuple[bool, str]:
+    """If Subiquity native Disk Selector is currently WAITING, apply DIRECT full-disk layout & start install."""
+    st_code, st_data = _subiquity_req("GET", "/meta/status")
+    if st_code != 200 or not isinstance(st_data, dict):
+        return False, ""
+    if st_data.get("state") not in ("WAITING", "NEEDS_CONFIRMATION"):
+        return False, ""
+
+    disk_id = f"disk-{os.path.basename(target_disk)}"
+    g_code, g_data = _subiquity_req("GET", "/storage/v2/guided")
+    if g_code != 200 or not isinstance(g_data, dict):
+        return False, "Subiquity guided storage not ready yet"
+
+    chosen_target = None
+    for t in g_data.get("targets", []) or []:
+        if isinstance(t, dict) and t.get("disk_id") == disk_id:
+            chosen_target = t
+            break
+    if not chosen_target:
+        return False, f"Disk {disk_id} not found in Subiquity guided targets"
+
+    choice_body = {
+        "target": chosen_target,
+        "capability": "DIRECT",
+        "sizing_policy": "ALL",
+        "reset_partition": False,
+    }
+    p_code, _ = _subiquity_req("POST", "/storage/v2/guided", choice_body)
+    if p_code not in (200, 201, 204):
+        return False, f"Subiquity guided POST failed ({p_code})"
+
+    s_code, s_data = _subiquity_req("GET", "/storage")
+    if s_code == 200 and isinstance(s_data, dict) and s_data.get("config"):
+        _subiquity_req("POST", "/storage", s_data.get("config"))
+    _subiquity_req("POST", "/meta/mark_configured", {})
+    _subiquity_req("POST", "/meta/confirm", {"tty": "/dev/tty1"})
+    return True, f"Applied {target_disk} (Direct full-disk, no LVM) directly to Subiquity — installation started automatically!"
+
 
 PORT = int(os.environ.get("INSTANT_DISK_MANAGER_PORT", "8088"))
 MIN_TARGET_BYTES = 15 * 1024 * 1024 * 1024  # 15 GB minimum for Ubuntu Server
@@ -319,7 +398,9 @@ def handle_disk_action(payload: dict) -> dict:
         if not chosen_ok:
             return {"ok": False, "error": f"Cannot select {target}: {reason}"}
         PICK_OUT.write_text(f"{target}|{mode}\n", encoding="utf-8")
-        return {"ok": True, "selected": target, "mode": mode, "output": f"Selected {target} ({mode}). Continuing Ubuntu Server installation..."}
+        live_ok, live_msg = drive_subiquity_live_selection(target)
+        out_msg = live_msg if live_ok else f"Selected {target} ({mode}). Continuing Ubuntu Server installation automatically..."
+        return {"ok": True, "selected": target, "mode": mode, "live_applied": live_ok, "output": out_msg}
 
     return {"ok": False, "error": f"Unknown disk action: {op}"}
 
@@ -477,4 +558,16 @@ class DiskManagerHandler(http.server.BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     srv = http.server.ThreadingHTTPServer(("0.0.0.0", PORT), DiskManagerHandler)
+    def _watch_subiquity_running():
+        while True:
+            time.sleep(3)
+            code, st = _subiquity_req("GET", "/meta/status")
+            if code == 200 and isinstance(st, dict) and st.get("state") in ("RUNNING", "POST_RUNNING", "DONE"):
+                try:
+                    srv.shutdown()
+                except Exception:
+                    pass
+                break
+    if INSTALLER_MODE:
+        threading.Thread(target=_watch_subiquity_running, daemon=True).start()
     srv.serve_forever()

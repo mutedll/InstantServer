@@ -305,6 +305,21 @@
             </label>
           </div>
 
+          <div class="win-card" style="border-color:${state.skip_beginner_checks ? "var(--warning)" : "var(--border-subtle)"};">
+            <div class="card-left">
+              <div class="card-text">
+                <div class="card-title">I know what I'm doing (Skip beginner checks &amp; confirmations)</div>
+                <div class="card-desc">Bypasses the "Instant Server already installed" safeguard prompt on USB boot and extra erase/wipe confirmation checkboxes</div>
+              </div>
+            </div>
+            <div class="card-right">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12.5px;font-weight:600;">
+                <input type="checkbox" data-action="toggle-skip-beginner-checks" ${state.skip_beginner_checks ? "checked" : ""} style="accent-color:var(--warning);width:17px;height:17px;" />
+                <span>Skip checks</span>
+              </label>
+            </div>
+          </div>
+
           
           <div class="win-card" style="flex-direction:column;align-items:stretch;gap:10px;">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">

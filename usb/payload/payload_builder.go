@@ -408,6 +408,7 @@ INSTANT_CLUSTER_POLICY=%q
 INSTANT_CPU_GOVERNOR=%q
 INSTANT_DISABLE_TURBO=%q
 INSTANT_INSTALL_MODE=%q
+INSTANT_SKIP_BEGINNER_CHECKS=%q
 INSTANT_SELECTED_APPS=%q
 `,
 		host,
@@ -447,6 +448,7 @@ INSTANT_SELECTED_APPS=%q
 		gov,
 		bool01(cfg.DisableCPUTurboBoost),
 		cfg.InstallMode,
+		bool01(cfg.SkipBeginnerChecks),
 		strings.Join(cfg.SelectedApps, ","),
 	)
 }

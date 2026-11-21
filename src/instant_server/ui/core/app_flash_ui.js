@@ -135,13 +135,13 @@
           missing.push(state.storageInputError || "Enter a valid Server Partition Size between 15 GB and 64 TB (65,536 GB).");
         }
       }
-      if (state.install_mode === "auto_erase" && !state.confirm_erase_main_drive) {
+      if (state.install_mode === "auto_erase" && !state.confirm_erase_main_drive && !state.skip_beginner_checks) {
         missing.push("Confirm 'I know what I'm doing' for Erase Main Drive mode, or switch to Dual-Boot.");
       }
-      if (state.install_mode === "reinstall_wipe_data" && !state.confirm_wipe_server_data) {
+      if (state.install_mode === "reinstall_wipe_data" && !state.confirm_wipe_server_data && !state.skip_beginner_checks) {
         missing.push("Confirm wiping all existing server data for Factory Reinstall mode, or switch to Reinstall While Retaining Data.");
       }
-      if (state.cluster_mode !== "standalone" && state.cluster_storage_policy === "wipe_secondary_expand" && !state.confirm_wipe_secondary) {
+      if (state.cluster_mode !== "standalone" && state.cluster_storage_policy === "wipe_secondary_expand" && !state.confirm_wipe_secondary && !state.skip_beginner_checks) {
         missing.push("Confirm erasing the second computer's files, or switch to 'Keep all files on both computers'.");
       }
       if (state.iso_source_mode === "local_file" && !state.custom_iso_path.trim()) {
@@ -151,7 +151,7 @@
       if (!usb) {
         missing.push("Select an approved removable USB flash drive in Laptop & USB.");
       }
-      if (!state.confirm_usb_erase) {
+      if (!state.confirm_usb_erase && !state.skip_beginner_checks) {
         missing.push("Confirm that all existing data on the selected USB drive will be erased and formatted.");
       }
       return missing;

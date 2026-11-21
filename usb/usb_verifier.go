@@ -54,7 +54,7 @@ const linuxNextBootShTemplate = "#!/usr/bin/env bash\n" +
 	"systemctl reboot --firmware-setup || reboot\n"
 
 const nextBootReadmeTxt = "INSTANT SERVER — USB LOGS & ONE-CLICK NEXT-BOOT RUNNERS\r\n" +
-	"1. logs/ folder: Live installer logs (INSTANT-SERVER-INSTALL.log) are saved here.\r\n" +
+	"1. instant_server_logs/ folder: Live installer logs (instant_server_install.log) are saved here.\r\n" +
 	"2. BOOT-USB-NEXT-RESTART-WINDOWS.bat: Double-click on Windows to boot this USB on next restart.\r\n" +
 	"3. boot-usb-next-restart-linux.sh: Run on Linux to set EFI BootNext to this USB.\r\n"
 
@@ -157,7 +157,7 @@ func FormatRemainingUSBAsFAT32(disk RawDiskHandle, startLBA uint64, endLBA uint6
 		cluster uint32
 		data    []byte
 	}{
-		{"logs", 0x10, 3, nil},
+		{"instant_server_logs", 0x10, 3, nil},
 		{"BOOT-USB-NEXT-RESTART-WINDOWS.bat", 0x20, 4, []byte(windowsNextBootBatTemplate)},
 		{"boot-usb-next-restart-linux.sh", 0x20, 5, []byte(linuxNextBootShTemplate)},
 		{"README-INSTANT-USB.txt", 0x20, 6, []byte(nextBootReadmeTxt)},
@@ -179,7 +179,7 @@ func FormatRemainingUSBAsFAT32(disk RawDiskHandle, startLBA uint64, endLBA uint6
 		}
 	}
 
-	// Cluster 3: `logs` subdirectory with mandatory "." and ".." entries
+	// Cluster 3: `instant_server_logs` subdirectory with mandatory "." and ".." entries
 	logsOff := int(3-2) * clusterBytes
 	dotSelf := iso.MakeDotEntry(".          ", 3)
 	dotParent := iso.MakeDotEntry("..         ", 0)

@@ -430,6 +430,16 @@
       } else if (action === "toggle-confirm-usb-erase") {
         state.confirm_usb_erase = !!target.checked;
         return;
+      } else if (action === "toggle-skip-beginner-checks") {
+        state.skip_beginner_checks = !!target.checked;
+        if (state.skip_beginner_checks) {
+          state.confirm_erase_main_drive = true;
+          state.confirm_wipe_server_data = true;
+          state.confirm_wipe_secondary = true;
+          state.confirm_usb_erase = true;
+        }
+        renderApp();
+        return;
       } else if (action === "toggle-confirm-wipe-server-data") {
         state.confirm_wipe_server_data = !!target.checked;
         return;

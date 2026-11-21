@@ -25,8 +25,10 @@ for env_cand in /tmp/cidata/instant-server-env.conf /mnt/cidata/instant-server-e
     fi
 done
 
-# Skip safeguard for dedicated updater / repair USB modes
-if [ "$INSTALL_MODE" = "offline_updater_usb" ] || [ "$INSTALL_MODE" = "repair_rescue_usb" ]; then
+[ -n "${INSTANT_INSTALL_MODE:-}" ] && INSTALL_MODE="$INSTANT_INSTALL_MODE"
+
+# Skip safeguard when user enabled "I know what I'm doing" or for updater/repair USBs
+if [ "${INSTANT_SKIP_BEGINNER_CHECKS:-0}" = "1" ] || [ "$INSTALL_MODE" = "offline_updater_usb" ] || [ "$INSTALL_MODE" = "repair_rescue_usb" ]; then
     exit 0
 fi
 
@@ -171,7 +173,7 @@ log_usb "Detected installer media: USB_DISK=${USB_DISK} CIDATA_DISK=${CIDATA_DIS
 
 # 5. Existing-OS safeguard now runs at the very start of early-commands via check_existing_os_safeguard.sh.
 
-# 6. Load INSTALL_MODE from instant-server-env.conf
+# 6. Load INSTALL_MODE from instant-server-env.conf (maps INSTANT_INSTALL_MODE -> INSTALL_MODE)
 INSTALL_MODE="whole_disk"
 for env_cand in /tmp/cidata/instant-server-env.conf /mnt/cidata/instant-server-env.conf /cdrom/cidata/instant-server-env.conf; do
     if [ -f "$env_cand" ]; then
@@ -180,6 +182,8 @@ for env_cand in /tmp/cidata/instant-server-env.conf /mnt/cidata/instant-server-e
         break
     fi
 done
+[ -n "${INSTANT_INSTALL_MODE:-}" ] && INSTALL_MODE="$INSTANT_INSTALL_MODE"
+log_usb "Loaded INSTALL_MODE=${INSTALL_MODE} (skip_beginner_checks=${INSTANT_SKIP_BEGINNER_CHECKS:-0})" 
 
 # 7. Enumerate all internal candidate disks (excluding USB installer media)
 BEST_DISK=""
@@ -241,7 +245,7 @@ if [ "$INSTALL_MODE" = "interactive_gui_disk" ] || [ "$INSTALL_MODE" = "interact
                 printf '       no LVM cap, and no native Ubuntu disk screen needed).\n\n' > /dev/tty1
                 printf '  OPTION B — Use Native Ubuntu Disk Selector (Keyboard Only):\n' > /dev/tty1
                 printf '    -> Press ENTER right now ONLY if you want to skip the Web GUI\n' > /dev/tty1
-                printf '       and use Ubuntu'''s built-in keyboard Disk Selector instead.\n' > /dev/tty1
+                printf '       and use the built-in Ubuntu keyboard Disk Selector instead.\n' > /dev/tty1
                 printf '       (Tip: Unchecking "LVM group" is simplest — or leave it checked\n' > /dev/tty1
                 printf '        and Instant Server will auto-expand LVM to 100%% after install.)\n' > /dev/tty1
                 printf '======================================================================\n' > /dev/tty1
@@ -265,7 +269,11 @@ if [ "$INSTALL_MODE" = "interactive_gui_disk" ] || [ "$INSTALL_MODE" = "interact
                 print_dm_banner "$LIVE_IP"
             fi
         done
-        kill "$DM_PID" 2>/dev/null || true
+        if [ "$WEB_PICKED" -eq 1 ]; then
+            kill "$DM_PID" 2>/dev/null || true
+        else
+            log_usb "Keeping Custom Web Disk Manager (:8088) running in background alongside Native Disk Selector."
+        fi
     else
         log_usb "disk_manager.py not found; falling back to native Ubuntu Disk Selector."
         USE_NATIVE_SELECTOR=1
