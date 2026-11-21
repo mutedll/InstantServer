@@ -1,8 +1,10 @@
 // ============================================================================
 // FILE: usb/payload/payload_builder.go
 // PURPOSE: Generates Ubuntu Autoinstall Cloud-Config ("user-data", "meta-data"),
-//          target environment variables ("instant-server-env.conf"), and stages
-//          all provisioning scripts and Docker Compose stacks into CIDATA.
+//
+//	target environment variables ("instant-server-env.conf"), and stages
+//	all provisioning scripts and Docker Compose stacks into CIDATA.
+//
 // ============================================================================
 package payload
 
@@ -135,7 +137,7 @@ func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
     - bash /tmp/cidata/start_usb_logger.sh 2>/dev/null || bash /mnt/cidata/start_usb_logger.sh 2>/dev/null || true
     - rfkill unblock all 2>/dev/null || true
     - systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target 2>/dev/null || true
-    - 'mkdir -p /etc/systemd/logind.conf.d && printf "[Login]\nHandleLidSwitch=ignore\nHandleLidSwitchExternalPower=ignore\nHandleLidSwitchDocked=ignore\nIdleAction=ignore\n" > /etc/systemd/logind.conf.d/00-live-nosleep.conf && systemctl restart systemd-logind 2>/dev/null || true'
+    - 'mkdir -p /etc/systemd/logind.conf.d && printf "[Login]\nHandlePowerKey=poweroff\nHandlePowerKeyLongPress=poweroff\nHandleLidSwitch=ignore\nHandleLidSwitchExternalPower=ignore\nHandleLidSwitchDocked=ignore\nIdleAction=ignore\n" > /etc/systemd/logind.conf.d/00-live-nosleep.conf && systemctl restart systemd-logind 2>/dev/null || true'
     - chmod 600 /etc/netplan/*.yaml 2>/dev/null || true
     - bash /tmp/cidata/select_target_disk.sh 2>/dev/null || bash /mnt/cidata/select_target_disk.sh 2>/dev/null || true
     - udevadm settle --timeout=15 2>/dev/null || true`
@@ -266,6 +268,7 @@ autoinstall:
     - chmod 600 /etc/netplan/*.yaml 2>/dev/null || true
     - mkdir -p /target/var/log/instant-server/install /mnt/usb_logs/instant_server_logs 2>/dev/null || true
     - chmod 600 /target/etc/netplan/*.yaml /etc/netplan/*.yaml 2>/dev/null || true
+    - 'if lvdisplay /dev/ubuntu-vg/ubuntu-lv >/dev/null 2>&1; then lvextend -l +100%FREE /dev/ubuntu-vg/ubuntu-lv 2>/dev/null || true; resize2fs /dev/mapper/ubuntu--vg-ubuntu--lv 2>/dev/null || true; fi'
     - curtin in-target -- chmod +x /opt/instant-server/laptop_hardening.sh 2>/dev/null || true
     - curtin in-target -- bash /opt/instant-server/laptop_hardening.sh >> /mnt/usb_logs/instant_server_logs/instant_server_install.log 2>&1 || true
     - cp -f /mnt/usb_logs/instant_server_logs/instant_server_install.log /target/var/log/instant-server/install/instant_server_install.log 2>/dev/null || true

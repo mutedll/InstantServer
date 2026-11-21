@@ -1,7 +1,9 @@
 // ============================================================================
 // FILE: usb/payload_storage.go
 // PURPOSE: Target disk selection, non-destructive Dual-Boot storage planner
-//          invocation, data-preserving OS reinstall, and offline USB updater.
+//
+//	invocation, data-preserving OS reinstall, and offline USB updater.
+//
 // ============================================================================
 package payload
 
@@ -57,22 +59,37 @@ for part in $(lsblk -lnpo NAME,FSTYPE | awk '$2 ~ /ext4|btrfs|xfs/ {print $1}');
 done
 
 if [ -n "$EXISTING_OS_PART" ] && [ -e /dev/tty1 ]; then
+    # Ensure a short press of the Power button shuts down immediately without delay
+    mkdir -p /etc/systemd/logind.conf.d 2>/dev/null || true
+    printf '[Login]
+HandlePowerKey=poweroff
+HandlePowerKeyLongPress=poweroff
+' > /etc/systemd/logind.conf.d/01-powerkey-immediate.conf 2>/dev/null || true
+    systemctl reload-or-restart systemd-logind 2>/dev/null || true
+
     printf '\033[2J\033[H\n======================================================================\n' > /dev/tty1
     printf '  SAFEGUARD: INSTANT SERVER IS ALREADY INSTALLED ON THIS COMPUTER!\n' > /dev/tty1
     printf '======================================================================\n' > /dev/tty1
     printf '  Detected existing Instant Server partition: %s\n\n' "$EXISTING_OS_PART" > /dev/tty1
-    printf '  -> To PROTECT your server (DEFAULT):\n' > /dev/tty1
-    printf '     Do NOTHING — this computer will SHUT DOWN safely in 20 seconds.\n' > /dev/tty1
-    printf '     Then unplug the USB drive and power on to boot your server.\n\n' > /dev/tty1
+    printf '  -> To TURN OFF right now: Press the POWER BUTTON (no delay).\n' > /dev/tty1
+    printf '  -> To PROTECT your server (DEFAULT): Do NOTHING — shuts down in 60s.\n' > /dev/tty1
+    printf '     (Then unplug the USB drive and power on to boot your server.)\n\n' > /dev/tty1
     printf '  -> To CONTINUE installing / reinstalling anyway:\n' > /dev/tty1
-    printf '     Press ENTER within 20 seconds.\n' > /dev/tty1
+    printf '     Press ENTER within 60 seconds.\n' > /dev/tty1
     printf '======================================================================\n' > /dev/tty1
-    printf '  Press ENTER to continue installing (auto-shutdown in 20s)... ' > /dev/tty1
-    if read -r -t 20 _ < /dev/tty1; then
-        printf '\n[INSTANT SERVER] Confirmed — continuing installation...\n' > /dev/tty1
+    CONFIRMED=0
+    for rem in $(seq 60 -1 1); do
+        printf '\r  Press ENTER to proceed | Power button to turn off | Auto-off in %2ds... ' "$rem" > /dev/tty1
+        if read -r -t 1 _ < /dev/tty1; then
+            CONFIRMED=1
+            break
+        fi
+    done
+    if [ "$CONFIRMED" -eq 1 ]; then
+        printf '\n\n[INSTANT SERVER] Confirmed — continuing installation...\n' > /dev/tty1
         exit 0
     else
-        printf '\n[INSTANT SERVER] No confirmation received. Shutting down safely...\n' > /dev/tty1
+        printf '\n\n[INSTANT SERVER] 60 seconds elapsed with no confirmation. Shutting down safely...\n' > /dev/tty1
         sync
         poweroff -f
         exit 0
@@ -187,107 +204,103 @@ while read -r dname dtype dsize dtran drm; do
     fi
 done < <(lsblk -brndo NAME,TYPE,SIZE,TRAN,RM 2>/dev/null | awk '{print "/dev/"$1, $2, $3, ($4==""?"none":$4), $5}')
 
-# 7b. Interactive Target Disk Picker UI Mode (on-screen GUI menu + port :8088 Web Picker)
-if [ "$INSTALL_MODE" = "interactive_gui_disk" ] && [ "${#DISK_LIST[@]}" -gt 0 ]; then
-    log_usb "Launching Full Disk Management & Target Selector UI (disk_manager.py) on port :8088..."
+# 7b. Custom Web Disk Manager (port :8088) — waits indefinitely; NEVER auto-forwards!
+#     Only switches to native Ubuntu Disk Selector if the user explicitly presses ENTER.
+WEB_PICKED=0
+USE_NATIVE_SELECTOR=0
+if [ "$INSTALL_MODE" = "interactive_gui_disk" ] || [ "$INSTALL_MODE" = "interactive_select" ]; then
     DM_SCRIPT=""
-    for cand in /tmp/cidata/disk_manager.py /mnt/cidata/disk_manager.py /cdrom/cidata/disk_manager.py; do [ -f "$cand" ] && DM_SCRIPT="$cand" && break; done
+    for cand in /tmp/cidata/disk_manager.py /mnt/cidata/disk_manager.py /cdrom/cidata/disk_manager.py; do
+        [ -f "$cand" ] && DM_SCRIPT="$cand" && break
+    done
     if [ -n "$DM_SCRIPT" ]; then
         rm -f /tmp/instant_picked_disk
+        log_usb "Starting Custom Web Disk Manager (disk_manager.py) on port :8088..."
         INSTANT_USB_DISKS="${USB_DISK},${CIDATA_DISK}" INSTANT_INSTALLER_MODE=1 python3 "$DM_SCRIPT" >/dev/null 2>&1 &
         DM_PID=$!
-        LIVE_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
-        [ -z "$LIVE_IP" ] && LIVE_IP="<connect-ethernet-or-wifi>"
-        if [ -e /dev/tty1 ]; then
-            printf '\033[2J\033[H\n======================================================================\n' > /dev/tty1
-            printf '  INSTANT SERVER — CUSTOM WEB DISK MANAGER (WINDOWS-STYLE GUI)\n' > /dev/tty1
-            printf '======================================================================\n' > /dev/tty1
-            printf '  Want to visually format, split, wipe, or inspect drives first?\n\n' > /dev/tty1
-            printf '  OPTION A — Open Custom Web Disk Manager (from your phone or PC):\n' > /dev/tty1
-            printf '    1. Make sure your phone/PC is on the SAME Wi-Fi/router.\n' > /dev/tty1
-            printf '    2. Open any web browser and go to:\n\n' > /dev/tty1
-            printf '         http://%s:8088\n\n' "$LIVE_IP" > /dev/tty1
-            printf '    3. Manage partitions & click "Select as Target" to continue.\n\n' > /dev/tty1
-            printf '  OPTION B — Use the built-in keyboard Disk Selector on this screen:\n' > /dev/tty1
-            printf '    -> Press ENTER right now to open Ubuntu Disk Selector.\n' > /dev/tty1
-            printf '======================================================================\n' > /dev/tty1
-            printf '  Waiting for Web Disk Manager or press ENTER to continue... ' > /dev/tty1
-        fi
-        ELAPSED=0
-        while [ "$ELAPSED" -lt 300 ]; do
+        # Give DHCP a few seconds to acquire a LAN IP so we display a real URL immediately
+        LIVE_IP=""
+        for _w in 1 2 3 4 5 6; do
+            LIVE_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+            [ -n "$LIVE_IP" ] && break
+            sleep 1
+        done
+        DISPLAY_IP="${LIVE_IP:-<waiting-for-network-ip>}"
+        print_dm_banner() {
+            if [ -e /dev/tty1 ]; then
+                printf '\033[2J\033[H\n======================================================================\n' > /dev/tty1
+                printf '  INSTANT SERVER — CUSTOM WEB DISK MANAGER (WINDOWS-STYLE GUI)\n' > /dev/tty1
+                printf '======================================================================\n' > /dev/tty1
+                printf '  Manage, format, split, wipe, and select your target drive visually:\n\n' > /dev/tty1
+                printf '  OPTION A — Use Custom Web Disk Manager (Recommended):\n' > /dev/tty1
+                printf '    1. Connect your phone or another PC to the SAME Wi-Fi / router.\n' > /dev/tty1
+                printf '    2. Open any web browser and go to:\n\n' > /dev/tty1
+                printf '         http://%s:8088\n\n' "$1" > /dev/tty1
+                printf '    3. Format/partition if needed, then click "Select as Target".\n' > /dev/tty1
+                printf '       Installation will start automatically (direct full-disk layout,\n' > /dev/tty1
+                printf '       no LVM cap, and no native Ubuntu disk screen needed).\n\n' > /dev/tty1
+                printf '  OPTION B — Use Native Ubuntu Disk Selector (Keyboard Only):\n' > /dev/tty1
+                printf '    -> Press ENTER right now ONLY if you want to skip the Web GUI\n' > /dev/tty1
+                printf '       and use Ubuntu'''s built-in keyboard Disk Selector instead.\n' > /dev/tty1
+                printf '       (Tip: Unchecking "LVM group" is simplest — or leave it checked\n' > /dev/tty1
+                printf '        and Instant Server will auto-expand LVM to 100%% after install.)\n' > /dev/tty1
+                printf '======================================================================\n' > /dev/tty1
+                printf '  Waiting for Web Disk Manager selection (press ENTER for native GUI)... ' > /dev/tty1
+            fi
+        }
+        print_dm_banner "$DISPLAY_IP"
+        while true; do
             if [ -f /tmp/instant_picked_disk ]; then
+                WEB_PICKED=1
                 break
             fi
             if [ -e /dev/tty1 ] && read -r -t 1 _ < /dev/tty1; then
+                USE_NATIVE_SELECTOR=1
                 break
             fi
-            ELAPSED=$((ELAPSED + 1))
+            # Refresh displayed URL automatically if IP arrives after initial banner
+            CUR_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+            if [ -n "$CUR_IP" ] && [ "$CUR_IP" != "$LIVE_IP" ]; then
+                LIVE_IP="$CUR_IP"
+                print_dm_banner "$LIVE_IP"
+            fi
         done
         kill "$DM_PID" 2>/dev/null || true
-    fi
-    python3 - "${DISK_LIST[@]}" << 'PYPICK' 2>/dev/null || true
-import http.server, json, os, subprocess, sys, threading
-
-disks = []
-for arg in sys.argv[1:]:
-    if "|" in arg:
-        dev, desc = arg.split("|", 1)
-        disks.append({"dev": dev, "desc": desc})
-
-chosen = {"disk": disks[0]["dev"] if disks else "/dev/sda", "gap": False, "done": False}
-
-class PickerHandler(http.server.BaseHTTPRequestHandler):
-    def log_message(self, *args): pass
-    def do_GET(self):
-        if self.path.startswith("/pick?"):
-            from urllib.parse import parse_qs, urlparse
-            q = parse_qs(urlparse(self.path).query)
-            chosen["disk"] = q.get("disk", [chosen["disk"]])[0]
-            chosen["gap"] = q.get("mode", ["whole"])[0] == "gap"
-            chosen["done"] = True
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html")
-            self.end_headers()
-            self.wfile.write(b"<h2>Target disk selected! Continuing Ubuntu Server installation...</h2>")
-            return
-        rows = "".join([f"<div style='margin:10px 0;padding:12px;border:1px solid #334;border-radius:8px;'><b>{d['dev']}</b> — {d['desc']}<br/><br/><a href='/pick?disk={d['dev']}&mode=whole' style='padding:8px 14px;background:#0A84FF;color:#fff;border-radius:6px;text-decoration:none;margin-right:8px;'>Install on Whole Disk</a><a href='/pick?disk={d['dev']}&mode=gap' style='padding:8px 14px;background:#24272F;color:#fff;border-radius:6px;text-decoration:none;'>Use Largest Free Space (Dual-Boot)</a></div>" for d in disks])
-        html = f"<html><body style='background:#0B0C0E;color:#F4F4F6;font-family:sans-serif;max-width:600px;margin:40px auto;padding:20px;'><h2>Instant Server — Select Target Disk</h2><p>Choose which drive on this computer to install Ubuntu Server onto:</p>{rows}</body></html>"
-        self.send_response(200)
-        self.send_header("Content-Type", "text/html")
-        self.end_headers()
-        self.wfile.write(html.encode())
-
-srv = http.server.HTTPServer(("0.0.0.0", 8088), PickerHandler)
-threading.Thread(target=srv.serve_forever, daemon=True).start()
-
-if os.path.exists("/dev/tty1") and subprocess.call(["which", "whiptail"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0:
-    menu_args = ["whiptail", "--title", "Instant Server — Select Target Disk", "--menu", "Choose the internal disk on this computer for Ubuntu Server (or open http://<ip>:8088):", "18", "74", "8"]
-    for d in disks:
-        menu_args.extend([d["dev"], d["desc"]])
-    try:
-        with open("/dev/tty1", "rb") as tin, open("/dev/tty1", "wb") as tout:
-            p = subprocess.Popen(menu_args, stdin=tin, stdout=tout, stderr=subprocess.PIPE, text=True)
-            _, err_out = p.communicate(timeout=180)
-            if p.returncode == 0 and err_out.strip():
-                chosen["disk"] = err_out.strip()
-    except Exception:
-        pass
-
-with open("/tmp/instant_picked_disk", "w") as f:
-    f.write(chosen["disk"] + ("|gap" if chosen["gap"] else "|whole"))
-PYPICK
-    if [ -f /tmp/instant_picked_disk ]; then
-        PICK_RAW=$(cat /tmp/instant_picked_disk)
-        BEST_DISK="${PICK_RAW%%|*}"
-        if [[ "$PICK_RAW" == *"|gap" ]]; then
-            USE_GAP_FLAG="--use-largest-gap"
-        fi
-        log_usb "User selected target disk via Interactive Picker: ${BEST_DISK} (${USE_GAP_FLAG:-whole_disk})"
+    else
+        log_usb "disk_manager.py not found; falling back to native Ubuntu Disk Selector."
+        USE_NATIVE_SELECTOR=1
     fi
 fi
 
-if [ "$INSTALL_MODE" = "interactive_gui_disk" ] || [ "$INSTALL_MODE" = "interactive_select" ] || [ "${#DISK_LIST[@]}" -gt 1 ] || [ -z "$BEST_DISK" ]; then
-    log_usb "Interactive Disk Selection GUI enabled (${INSTALL_MODE}): ensuring Subiquity opens storage GUI even on empty disks."
+if [ "$WEB_PICKED" -eq 1 ] && [ -f /tmp/instant_picked_disk ]; then
+    PICK_RAW=$(cat /tmp/instant_picked_disk)
+    BEST_DISK="${PICK_RAW%%|*}"
+    if [[ "$PICK_RAW" == *"|gap" ]]; then
+        USE_GAP_FLAG="--use-largest-gap"
+    fi
+    echo "$BEST_DISK" > /run/instant-target-disk
+    log_usb "User selected target disk via Custom Web Disk Manager: ${BEST_DISK} (${USE_GAP_FLAG:-whole_disk}). Bypassing native Subiquity storage screen."
+    python3 - "$BEST_DISK" << 'PYWEB' 2>/dev/null || true
+import pathlib, sys, yaml
+target_disk = sys.argv[1] if len(sys.argv) > 1 else ""
+for p in (pathlib.Path("/autoinstall.yaml"), pathlib.Path("/cdrom/autoinstall.yaml")):
+    if not p.is_file():
+        continue
+    try:
+        data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        ai = data.get("autoinstall") if isinstance(data.get("autoinstall"), dict) else data
+        inter = [s for s in (ai.get("interactive-sections") or []) if s != "storage"]
+        ai["interactive-sections"] = inter
+        layout = {"name": "direct"}
+        if target_disk:
+            layout["match"] = {"path": target_disk}
+        ai["storage"] = {"layout": layout}
+        p.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    except Exception:
+        pass
+PYWEB
+elif [ "$USE_NATIVE_SELECTOR" -eq 1 ] || [ -z "$BEST_DISK" ]; then
+    log_usb "User requested Native Ubuntu Disk Selector (or no target disk auto-detected): enabling interactive storage screen."
     python3 - << 'PYINTER' 2>/dev/null || true
 import yaml, pathlib
 for p in (pathlib.Path("/autoinstall.yaml"), pathlib.Path("/cdrom/autoinstall.yaml")):
@@ -345,7 +358,6 @@ if [ "$WIRED_ONLINE" -eq 1 ]; then
     exit 0
 fi
 `
-
 
 const ScriptDynamicDualBootStorageSh = `#!/usr/bin/env bash
 # ==============================================================================
