@@ -268,7 +268,7 @@ autoinstall:
     - chmod 600 /etc/netplan/*.yaml 2>/dev/null || true
     - mkdir -p /target/var/log/instant-server/install /mnt/usb_logs/instant_server_logs 2>/dev/null || true
     - chmod 600 /target/etc/netplan/*.yaml /etc/netplan/*.yaml 2>/dev/null || true
-    - 'if lvdisplay /dev/ubuntu-vg/ubuntu-lv >/dev/null 2>&1; then lvextend -l +100%FREE /dev/ubuntu-vg/ubuntu-lv 2>/dev/null || true; resize2fs /dev/mapper/ubuntu--vg-ubuntu--lv 2>/dev/null || true; fi'
+    - 'if lvdisplay /dev/ubuntu-vg/ubuntu-lv >/dev/null 2>&1; then lvextend -l +100%%FREE /dev/ubuntu-vg/ubuntu-lv 2>/dev/null || true; resize2fs /dev/mapper/ubuntu--vg-ubuntu--lv 2>/dev/null || true; fi'
     - curtin in-target -- chmod +x /opt/instant-server/laptop_hardening.sh 2>/dev/null || true
     - curtin in-target -- bash /opt/instant-server/laptop_hardening.sh >> /mnt/usb_logs/instant_server_logs/instant_server_install.log 2>&1 || true
     - cp -f /mnt/usb_logs/instant_server_logs/instant_server_install.log /target/var/log/instant-server/install/instant_server_install.log 2>/dev/null || true
