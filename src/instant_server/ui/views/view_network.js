@@ -171,8 +171,13 @@
       const modeNames = {
         dual_boot: `Dual-Boot (${state.dual_boot_Allocation_gb} GB)`,
         auto_erase: "Erase Main Drive",
-        interactive_select: "Select on Screen",
+        whole_disk: "Erase Main Drive",
+        interactive_select: "Select Disk on Screen",
+        interactive_gui_disk: "Disk Manager & Selector",
         secondary_drive: "Secondary Drive Only",
+        reinstall_keep_data: "Reinstall (Keep Data)",
+        reinstall_wipe_data: "Factory Reinstall (Wipe)",
+        offline_updater_usb: "Offline Updater USB",
         repair_rescue_usb: "Repair & Rescue USB"
       };
       const dashNames = {

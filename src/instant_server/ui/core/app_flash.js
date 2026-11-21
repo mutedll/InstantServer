@@ -79,6 +79,8 @@
       state.flashProgress = 6;
       state.flashStageIndex = 1;
       state.smoothedEtaSec = 0;
+      state.etaSamplesCount = 0;
+      state.flashStartEpochMs = Date.now();
       state.lastEtaRenderMs = 0;
       state.flashEtaText = "ETA: calculating...";
       state.logAutoScroll = true;

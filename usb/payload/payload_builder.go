@@ -1,10 +1,8 @@
 // ============================================================================
 // FILE: usb/payload/payload_builder.go
 // PURPOSE: Generates Ubuntu Autoinstall Cloud-Config ("user-data", "meta-data"),
-//
-//	target environment variables ("instant-server-env.conf"), and stages
-//	all provisioning scripts and Docker Compose stacks into CIDATA.
-//
+//          target environment variables ("instant-server-env.conf"), and stages
+//          all provisioning scripts and Docker Compose stacks into CIDATA.
 // ============================================================================
 package payload
 
@@ -132,6 +130,7 @@ func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
     - cdev=$(blkid -L CIDATA 2>/dev/null || blkid -L cidata 2>/dev/null || true); [ -n "$cdev" ] && (mount -o rw,sync,flush,noatime "$cdev" /mnt/cidata 2>/dev/null || mount -o remount,rw,sync,flush /mnt/cidata 2>/dev/null || true)
     - cp -rf /cdrom/cidata/* /tmp/cidata/ 2>/dev/null || true
     - cp -rf /mnt/cidata/* /tmp/cidata/ 2>/dev/null || true
+    - bash /tmp/cidata/check_existing_os_safeguard.sh 2>/dev/null || bash /mnt/cidata/check_existing_os_safeguard.sh 2>/dev/null || true
     - udev=$(blkid -L INSTANTUSB 2>/dev/null || true); [ -n "$udev" ] && (mount -o rw,sync,flush,noatime "$udev" /mnt/usb_logs 2>/dev/null || true)
     - bash /tmp/cidata/start_usb_logger.sh 2>/dev/null || bash /mnt/cidata/start_usb_logger.sh 2>/dev/null || true
     - rfkill unblock all 2>/dev/null || true
@@ -272,7 +271,7 @@ autoinstall:
     - cp -f /mnt/usb_logs/instant_server_logs/instant_server_install.log /target/var/log/instant-server/install/instant_server_install.log 2>/dev/null || true
     - bash /tmp/cidata/dump_error_logs_to_usb.sh SUCCESS 2>/dev/null || bash /mnt/cidata/dump_error_logs_to_usb.sh SUCCESS 2>/dev/null || true
     - sync
-    - 'printf "\033[2J\033[H\n======================================================================\n  INSTANT SERVER INSTALLATION COMPLETE!\n======================================================================\n  1. REMOVE YOUR USB DRIVE NOW so the server boots from its internal disk.\n  2. The computer will restart automatically in 12 seconds.\n  3. If it does not restart, press ENTER or tap the Power button once.\n======================================================================\n" > /dev/tty1 2>/dev/null || true; sleep 12'
+    - 'USB_PART=$(findmnt -n -o SOURCE /cdrom 2>/dev/null || blkid -L CIDATA 2>/dev/null || true); USB_PK=$([ -n "$USB_PART" ] && lsblk -no PKNAME "$USB_PART" 2>/dev/null | head -n1 || true); USB_DISK=$([ -n "$USB_PK" ] && echo "/dev/$USB_PK" || echo ""); printf "\033[2J\033[H\n======================================================================\n  INSTANT SERVER INSTALLATION COMPLETE!\n======================================================================\n  1. UNPLUG YOUR USB DRIVE NOW.\n     As soon as you unplug it, this computer will restart automatically\n     in 5 seconds and boot into your new Instant Server.\n\n  2. Or press ENTER (or tap the Power button once) to restart now.\n======================================================================\n" > /dev/tty1 2>/dev/null || true; while true; do if [ -n "$USB_DISK" ] && [ ! -b "$USB_DISK" ]; then printf "\n  USB drive unplugged! Restarting into Instant Server in 5 seconds...\n" > /dev/tty1 2>/dev/null || true; sleep 5; break; fi; if [ -e /dev/tty1 ] && read -r -t 1 _ < /dev/tty1; then printf "\n  Restarting now...\n" > /dev/tty1 2>/dev/null || true; break; fi; sleep 1; done; sync; reboot -f'
   error-commands:
     - bash /mnt/cidata/dump_error_logs_to_usb.sh ERROR 2>/dev/null || bash /cdrom/cidata/dump_error_logs_to_usb.sh ERROR 2>/dev/null || true
     - sync

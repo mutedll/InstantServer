@@ -1,9 +1,7 @@
 // ============================================================================
 // FILE: usb/payload_boot.go
 // PURPOSE: Loads bundled Python/Bash scripts and provides early-boot USB logging,
-//
-//	error dumping, and emergency password/bootloader repair scripts.
-//
+//          error dumping, and emergency password/bootloader repair scripts.
 // ============================================================================
 package payload
 
@@ -313,41 +311,11 @@ while true; do
         cp -f "$LOG_PRIMARY" /target/var/log/instant-server/install/instant_server_install.log 2>/dev/null || true
     fi
     sync
-    python3 - << 'PYCLEAN' 2>/dev/null || true
-import subprocess
-out = subprocess.check_output(["lsblk", "-lnpo", "NAME,FSTYPE"], text=True, stderr=subprocess.DEVNULL)
-for line in out.splitlines():
-    parts = line.split()
-    if len(parts) == 2 and parts[1].lower() == "vfat":
-        dev = parts[0]
-        try:
-            with open(dev, "r+b") as f:
-                bpb = bytearray(f.read(512))
-                if len(bpb) == 512:
-                    if bpb[54:62] == b"FAT16   ":
-                        bpb[37] = 0x00
-                        f.seek(0)
-                        f.write(bpb)
-                        res = bpb[14] | (bpb[15] << 8)
-                        f.seek(res * 512 + 2)
-                        f.write(b"\xff\xff")
-                    elif bpb[82:90] == b"FAT32   ":
-                        bpb[65] = 0x00
-                        f.seek(0)
-                        f.write(bpb)
-                        f.seek(6 * 512)
-                        b6 = bytearray(f.read(512))
-                        if len(b6) == 512:
-                            b6[65] = 0x00
-                            f.seek(6 * 512)
-                            f.write(b6)
-                        res = bpb[14] | (bpb[15] << 8)
-                        f.seek(res * 512 + 4)
-                        f.write(b"\xff\xff\xff\x0f")
-        except Exception:
-            pass
-PYCLEAN
-    sleep 2
+    # NOTE: Never open raw /dev/sd* block devices in O_RDWR ("r+b") inside this loop!
+    # udev's OPTIONS+="watch" synthesizes a CHANGE uevent on every writable close,
+    # which triggers Subiquity's probert storage re-probe loop and crashes the Disk Selector.
+    # FAT dirty-bit cleanup runs ONLY once in dump_error_logs_to_usb.sh after unmount.
+    sleep 6
 done
 `
 

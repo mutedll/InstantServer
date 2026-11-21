@@ -170,14 +170,25 @@
 
     function updateSmoothedFlashETA(rawSec) {
       const sec = Number(rawSec);
-      if (!Number.isFinite(sec) || sec <= 0) return;
+      if (!Number.isFinite(sec) || sec <= 0 || sec > 21600) return;
       const now = Date.now();
+      state.etaSamplesCount = (state.etaSamplesCount || 0) + 1;
+      const elapsedSinceStart = state.flashStartEpochMs ? (now - state.flashStartEpochMs) / 1000 : 0;
+
+      // Suppress wild initial burst/setup estimates during the first 5 seconds or first 3 samples
+      if (elapsedSinceStart < 5 || state.etaSamplesCount < 3 || (state.flashProgress || 0) < 8) {
+        state.smoothedEtaSec = state.smoothedEtaSec ? (state.smoothedEtaSec * 0.5 + sec * 0.5) : sec;
+        state.flashEtaText = "ETA: calculating...";
+        return;
+      }
+
       if (!state.smoothedEtaSec || state.smoothedEtaSec <= 0) {
         state.smoothedEtaSec = sec;
       } else {
-        // Clamp sudden upward spikes so transient USB buffer pauses don't make ETA jump wildly
-        const bounded = Math.min(sec, state.smoothedEtaSec * 1.18 + 3);
-        state.smoothedEtaSec = state.smoothedEtaSec * 0.84 + bounded * 0.16;
+        // Adaptive EMA: faster convergence early on, steady smoothing once settled
+        const alpha = state.etaSamplesCount <= 8 ? 0.35 : 0.18;
+        const bounded = Math.min(sec, state.smoothedEtaSec * 1.25 + 5);
+        state.smoothedEtaSec = state.smoothedEtaSec * (1 - alpha) + bounded * alpha;
       }
       if (!state.lastEtaRenderMs || now - state.lastEtaRenderMs >= 1000) {
         state.lastEtaRenderMs = now;

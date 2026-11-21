@@ -102,7 +102,7 @@
           renderApp();
           return;
         }
-        if (field === "cluster_mode" || field === "cluster_storage_policy") {
+        if (field === "cluster_mode" || field === "cluster_storage_policy" || field === "install_mode" || field === "dashboard_choice") {
           state.openDropdownField = null;
           renderApp();
           return;

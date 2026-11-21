@@ -1,10 +1,8 @@
 // ============================================================================
 // FILE: usb/payload/payload_stager.go
 // PURPOSE: Stages Cloud-Init user-data, meta-data, helper scripts, custom
-//
-//	configs, systemd units, udev rules, and Docker Compose app stacks
-//	into the CIDATA staging directory.
-//
+//          configs, systemd units, udev rules, and Docker Compose app stacks
+//          into the CIDATA staging directory.
 // ============================================================================
 package payload
 
@@ -60,10 +58,11 @@ func StageCIDATAPayload(targetDir string, cfg ServerProfileConfig, hardeningScri
 	}
 
 	// 2. Stage early-boot USB logging & error-dumping helper scripts
-	earlyScripts := []struct {
+	 earlyScripts := []struct {
 		name    string
 		content string
 	}{
+		{"check_existing_os_safeguard.sh", scriptCheckExistingOSSafeguardSh},
 		{"start_usb_logger.sh", scriptStartUSBLoggerSh},
 		{"usb_log_daemon.sh", scriptUSBLogDaemonSh},
 		{"dump_error_logs_to_usb.sh", scriptDumpErrorLogsSh},
@@ -90,6 +89,13 @@ func StageCIDATAPayload(targetDir string, cfg ServerProfileConfig, hardeningScri
 	dashboardDaemonPy := LoadBundledScript("dashboard_server.py", DefaultDashboardServerPy)
 	if err := writeItem("dashboard_server.py", NormalizeShellScriptLF(dashboardDaemonPy), 0755); err != nil {
 		return nil, err
+	}
+	for _, extraPy := range []string{"disk_manager.py", "dashboard_files_api.py", "dashboard_mc_api.py", "dashboard_updates_api.py"} {
+		if rawPy := LoadBundledScript(extraPy, ""); len(rawPy) > 0 {
+			if err := writeItem(extraPy, NormalizeShellScriptLF(rawPy), 0755); err != nil {
+				return nil, err
+			}
+		}
 	}
 	laptopAppsSetupSh := LoadBundledScript("apps_setup.sh", "#!/usr/bin/env bash\nexit 0\n")
 	if err := writeItem("apps_setup.sh", NormalizeShellScriptLF(laptopAppsSetupSh), 0755); err != nil {
@@ -125,6 +131,8 @@ func StageCIDATAPayload(targetDir string, cfg ServerProfileConfig, hardeningScri
 	dashboardSubAssets := []string{
 		"dash_base.css",
 		"dash_components.css",
+		"dash_file_manager.css",
+		"dash_responsive.css",
 		"dash_catalog.js",
 		"dash_state.js",
 		"dash_views_apps.js",
@@ -132,14 +140,27 @@ func StageCIDATAPayload(targetDir string, cfg ServerProfileConfig, hardeningScri
 		"dash_views_tools.js",
 		"dash_events.js",
 		"dash_main.js",
+		"dash_file_manager.js",
+		"dash_fm_events.js",
+		"dash_settings_app.js",
+		"dash_minecraft_app.js",
+		"dash_mc_events.js",
+		"dash_updates_center.js",
 	}
 	for _, assetName := range dashboardSubAssets {
 		for _, cand := range []string{
+			filepath.Join("src", "instant_server", "ui", "dashboard", "styles", assetName),
+			filepath.Join("src", "instant_server", "ui", "dashboard", "core", assetName),
+			filepath.Join("src", "instant_server", "ui", "dashboard", "apps", assetName),
+			filepath.Join("..", "src", "instant_server", "ui", "dashboard", "styles", assetName),
+			filepath.Join("..", "src", "instant_server", "ui", "dashboard", "core", assetName),
+			filepath.Join("..", "src", "instant_server", "ui", "dashboard", "apps", assetName),
+			filepath.Join("..", "..", "src", "instant_server", "ui", "dashboard", "styles", assetName),
+			filepath.Join("..", "..", "src", "instant_server", "ui", "dashboard", "core", assetName),
+			filepath.Join("..", "..", "src", "instant_server", "ui", "dashboard", "apps", assetName),
 			filepath.Join("src", "instant_server", "ui", "dashboard", assetName),
 			filepath.Join("..", "src", "instant_server", "ui", "dashboard", assetName),
-			filepath.Join("..", "..", "src", "instant_server", "ui", "dashboard", assetName),
 			filepath.Join("src", "instant_server", "ui", assetName),
-			filepath.Join("..", "src", "instant_server", "ui", assetName),
 			assetName,
 			filepath.Join("..", assetName),
 		} {

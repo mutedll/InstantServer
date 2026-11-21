@@ -1,58 +1,94 @@
 // ============================================================================
 // FILE: usb/payload_storage.go
 // PURPOSE: Target disk selection, non-destructive Dual-Boot storage planner
-//
-//	invocation, data-preserving OS reinstall, and offline USB updater.
-//
+//          invocation, data-preserving OS reinstall, and offline USB updater.
 // ============================================================================
 package payload
 
+// scriptCheckExistingOSSafeguardSh runs as the VERY FIRST command in early-commands
+// so that if Instant Server is already installed on an internal drive, the user is
+// prompted immediately after Linux/cloud-init mounts CIDATA:
+//   - Press ENTER within 20s -> Proceed with installation / reinstallation
+//   - Do nothing for 20s     -> Safe SHUTDOWN (poweroff -f) so user can unplug USB
+const scriptCheckExistingOSSafeguardSh = `#!/usr/bin/env bash
+set -uo pipefail
+
+# Load INSTALL_MODE if available
+INSTALL_MODE="whole_disk"
+for env_cand in /tmp/cidata/instant-server-env.conf /mnt/cidata/instant-server-env.conf /cdrom/cidata/instant-server-env.conf; do
+    if [ -f "$env_cand" ]; then
+        # shellcheck disable=SC1090
+        source "$env_cand" 2>/dev/null || true
+        break
+    fi
+done
+
+# Skip safeguard for dedicated updater / repair USB modes
+if [ "$INSTALL_MODE" = "offline_updater_usb" ] || [ "$INSTALL_MODE" = "repair_rescue_usb" ]; then
+    exit 0
+fi
+
+# Identify USB installer disk(s) to exclude from OS scan
+CDROM_PART=$(findmnt -n -o SOURCE /cdrom 2>/dev/null || blkid -L UBUNTU-ISO 2>/dev/null || true)
+CIDATA_PART=$(blkid -L CIDATA 2>/dev/null || blkid -L cidata 2>/dev/null || true)
+USB_DISK=""
+CIDATA_DISK=""
+if [ -n "$CDROM_PART" ]; then
+    PK=$(lsblk -no PKNAME "$CDROM_PART" 2>/dev/null | head -n1)
+    [ -n "$PK" ] && USB_DISK="/dev/${PK}" || USB_DISK="$CDROM_PART"
+fi
+if [ -n "$CIDATA_PART" ]; then
+    PK2=$(lsblk -no PKNAME "$CIDATA_PART" 2>/dev/null | head -n1)
+    [ -n "$PK2" ] && CIDATA_DISK="/dev/${PK2}" || CIDATA_DISK="$CIDATA_PART"
+fi
+
+mkdir -p /mnt/check_existing
+EXISTING_OS_PART=""
+for part in $(lsblk -lnpo NAME,FSTYPE | awk '$2 ~ /ext4|btrfs|xfs/ {print $1}'); do
+    [ -n "$USB_DISK" ] && [[ "$part" == "${USB_DISK}"* ]] && continue
+    [ -n "$CIDATA_DISK" ] && [[ "$part" == "${CIDATA_DISK}"* ]] && continue
+    if mount -o ro "$part" /mnt/check_existing 2>/dev/null; then
+        if [ -f "/mnt/check_existing/opt/instant-server/.install_complete_epoch" ] || [ -f "/mnt/check_existing/opt/instant-server/laptop_hardening.sh" ]; then
+            EXISTING_OS_PART="$part"
+        fi
+        umount /mnt/check_existing 2>/dev/null || true
+    fi
+    [ -n "$EXISTING_OS_PART" ] && break
+done
+
+if [ -n "$EXISTING_OS_PART" ] && [ -e /dev/tty1 ]; then
+    printf '\033[2J\033[H\n======================================================================\n' > /dev/tty1
+    printf '  SAFEGUARD: INSTANT SERVER IS ALREADY INSTALLED ON THIS COMPUTER!\n' > /dev/tty1
+    printf '======================================================================\n' > /dev/tty1
+    printf '  Detected existing Instant Server partition: %s\n\n' "$EXISTING_OS_PART" > /dev/tty1
+    printf '  -> To PROTECT your server (DEFAULT):\n' > /dev/tty1
+    printf '     Do NOTHING — this computer will SHUT DOWN safely in 20 seconds.\n' > /dev/tty1
+    printf '     Then unplug the USB drive and power on to boot your server.\n\n' > /dev/tty1
+    printf '  -> To CONTINUE installing / reinstalling anyway:\n' > /dev/tty1
+    printf '     Press ENTER within 20 seconds.\n' > /dev/tty1
+    printf '======================================================================\n' > /dev/tty1
+    printf '  Press ENTER to continue installing (auto-shutdown in 20s)... ' > /dev/tty1
+    if read -r -t 20 _ < /dev/tty1; then
+        printf '\n[INSTANT SERVER] Confirmed — continuing installation...\n' > /dev/tty1
+        exit 0
+    else
+        printf '\n[INSTANT SERVER] No confirmation received. Shutting down safely...\n' > /dev/tty1
+        sync
+        poweroff -f
+        exit 0
+    fi
+fi
+exit 0
+`
+
 const scriptSelectTargetDiskSh = `#!/usr/bin/env bash
 set -uo pipefail
-LOG_A="/mnt/usb_logs/logs/INSTANT-SERVER-INSTALL.log"
-[ ! -d /mnt/usb_logs/logs ] && LOG_A="/tmp/INSTANT-SERVER-INSTALL.log"
-clear_usb_fat_dirty_bits() {
-    python3 - << 'PYCLEAN' 2>/dev/null || true
-import subprocess
-out = subprocess.check_output(["lsblk", "-lnpo", "NAME,FSTYPE"], text=True, stderr=subprocess.DEVNULL)
-for line in out.splitlines():
-    parts = line.split()
-    if len(parts) == 2 and parts[1].lower() == "vfat":
-        dev = parts[0]
-        try:
-            with open(dev, "r+b") as f:
-                bpb = bytearray(f.read(512))
-                if len(bpb) == 512:
-                    if bpb[54:62] == b"FAT16   ":
-                        bpb[37] = 0x00
-                        f.seek(0)
-                        f.write(bpb)
-                        res = bpb[14] | (bpb[15] << 8)
-                        f.seek(res * 512 + 2)
-                        f.write(b"\xff\xff")
-                    elif bpb[82:90] == b"FAT32   ":
-                        bpb[65] = 0x00
-                        f.seek(0)
-                        f.write(bpb)
-                        f.seek(6 * 512)
-                        b6 = bytearray(f.read(512))
-                        if len(b6) == 512:
-                            b6[65] = 0x00
-                            f.seek(6 * 512)
-                            f.write(b6)
-                        res = bpb[14] | (bpb[15] << 8)
-                        f.seek(res * 512 + 4)
-                        f.write(b"\xff\xff\xff\x0f")
-        except Exception:
-            pass
-PYCLEAN
-}
-
+LOG_A="/mnt/usb_logs/instant_server_logs/instant_server_install.log"
+[ ! -d /mnt/usb_logs/instant_server_logs ] && LOG_A="/tmp/instant_server_install.log"
 log_usb() {
     printf '[select_target_disk] %s\n' "$*" | tee -a "$LOG_A" 2>/dev/null || true
-    mkdir -p /mnt/usb_logs/logs 2>/dev/null || true
+    mkdir -p /mnt/usb_logs/instant_server_logs 2>/dev/null || true
     sync
-    clear_usb_fat_dirty_bits
 }
 
 # 1. Stop casper-md5check & multipathd immediately so Integrity and Probert never stall
@@ -116,44 +152,7 @@ if [ -z "$CIDATA_DISK" ] && [ -n "$INSTANT_PART" ]; then
 fi
 log_usb "Detected installer media: USB_DISK=${USB_DISK} CIDATA_DISK=${CIDATA_DISK}"
 
-# 5. Safeguard against accidental USB re-boot loop if an Instant Server OS is already installed
-mkdir -p /mnt/check_existing
-EXISTING_OS_PART=""
-for part in $(lsblk -lnpo NAME,FSTYPE | awk '$2 ~ /ext4|btrfs|xfs/ {print $1}'); do
-    [ -n "$USB_DISK" ] && [[ "$part" == "${USB_DISK}"* ]] && continue
-    [ -n "$CIDATA_DISK" ] && [[ "$part" == "${CIDATA_DISK}"* ]] && continue
-    if mount -o ro "$part" /mnt/check_existing 2>/dev/null; then
-        if [ -f "/mnt/check_existing/opt/instant-server/.install_complete_epoch" ] || [ -f "/mnt/check_existing/opt/instant-server/laptop_hardening.sh" ]; then
-            EXISTING_OS_PART="$part"
-        fi
-        umount /mnt/check_existing 2>/dev/null || true
-    fi
-    [ -n "$EXISTING_OS_PART" ] && break
-done
-if [ -n "$EXISTING_OS_PART" ] && [ "${INSTALL_MODE:-whole_disk}" = "whole_disk" ]; then
-    log_usb "SAFEGUARD: Existing Instant Server OS detected on ${EXISTING_OS_PART}. Prompting user on /dev/tty1."
-    if [ -e /dev/tty1 ]; then
-        printf '\033[2J\033[H\n======================================================================\n' > /dev/tty1
-        printf '  SAFEGUARD: INSTANT SERVER IS ALREADY INSTALLED ON THIS COMPUTER!\n' > /dev/tty1
-        printf '======================================================================\n' > /dev/tty1
-        printf '  Detected existing server partition: %s\n\n' "$EXISTING_OS_PART" > /dev/tty1
-        printf '  -> To boot your installed server: UNPLUG THE USB DRIVE now and\n' > /dev/tty1
-        printf '     press ENTER (or wait 20 seconds to auto-reboot).\n\n' > /dev/tty1
-        printf '  -> To WIPE and reinstall anyway: type REINSTALL and press ENTER.\n' > /dev/tty1
-        printf '======================================================================\n' > /dev/tty1
-        printf '  Your choice [Enter=Reboot / REINSTALL]: ' > /dev/tty1
-        USER_ANS=""
-        read -r -t 20 USER_ANS < /dev/tty1 || true
-        if [ "$USER_ANS" != "REINSTALL" ]; then
-            log_usb "Safeguard triggered reboot so user can boot existing OS (response=${USER_ANS:-timeout})."
-            clear_usb_fat_dirty_bits
-            sync
-            reboot -f
-            exit 0
-        fi
-        log_usb "User explicitly typed REINSTALL; continuing fresh installation."
-    fi
-fi
+# 5. Existing-OS safeguard now runs at the very start of early-commands via check_existing_os_safeguard.sh.
 
 # 6. Load INSTALL_MODE from instant-server-env.conf
 INSTALL_MODE="whole_disk"
@@ -194,11 +193,36 @@ if [ "$INSTALL_MODE" = "interactive_gui_disk" ] && [ "${#DISK_LIST[@]}" -gt 0 ];
     DM_SCRIPT=""
     for cand in /tmp/cidata/disk_manager.py /mnt/cidata/disk_manager.py /cdrom/cidata/disk_manager.py; do [ -f "$cand" ] && DM_SCRIPT="$cand" && break; done
     if [ -n "$DM_SCRIPT" ]; then
+        rm -f /tmp/instant_picked_disk
         INSTANT_USB_DISKS="${USB_DISK},${CIDATA_DISK}" INSTANT_INSTALLER_MODE=1 python3 "$DM_SCRIPT" >/dev/null 2>&1 &
         DM_PID=$!
-        LIVE_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "<server-ip>")
-        printf "\n[INSTANT SERVER] Full Disk Manager is live at: http://%s:8088\n(Format, create/split/wipe volumes, then click Select Target — or press ENTER to use Subiquity GUI)\n" "$LIVE_IP" > /dev/tty1 2>/dev/null || true
-        read -r -t 180 _ < /dev/tty1 || true
+        LIVE_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+        [ -z "$LIVE_IP" ] && LIVE_IP="<connect-ethernet-or-wifi>"
+        if [ -e /dev/tty1 ]; then
+            printf '\033[2J\033[H\n======================================================================\n' > /dev/tty1
+            printf '  INSTANT SERVER — CUSTOM WEB DISK MANAGER (WINDOWS-STYLE GUI)\n' > /dev/tty1
+            printf '======================================================================\n' > /dev/tty1
+            printf '  Want to visually format, split, wipe, or inspect drives first?\n\n' > /dev/tty1
+            printf '  OPTION A — Open Custom Web Disk Manager (from your phone or PC):\n' > /dev/tty1
+            printf '    1. Make sure your phone/PC is on the SAME Wi-Fi/router.\n' > /dev/tty1
+            printf '    2. Open any web browser and go to:\n\n' > /dev/tty1
+            printf '         http://%s:8088\n\n' "$LIVE_IP" > /dev/tty1
+            printf '    3. Manage partitions & click "Select as Target" to continue.\n\n' > /dev/tty1
+            printf '  OPTION B — Use the built-in keyboard Disk Selector on this screen:\n' > /dev/tty1
+            printf '    -> Press ENTER right now to open Ubuntu Disk Selector.\n' > /dev/tty1
+            printf '======================================================================\n' > /dev/tty1
+            printf '  Waiting for Web Disk Manager or press ENTER to continue... ' > /dev/tty1
+        fi
+        ELAPSED=0
+        while [ "$ELAPSED" -lt 300 ]; do
+            if [ -f /tmp/instant_picked_disk ]; then
+                break
+            fi
+            if [ -e /dev/tty1 ] && read -r -t 1 _ < /dev/tty1; then
+                break
+            fi
+            ELAPSED=$((ELAPSED + 1))
+        done
         kill "$DM_PID" 2>/dev/null || true
     fi
     python3 - "${DISK_LIST[@]}" << 'PYPICK' 2>/dev/null || true
@@ -322,6 +346,7 @@ if [ "$WIRED_ONLINE" -eq 1 ]; then
 fi
 `
 
+
 const ScriptDynamicDualBootStorageSh = `#!/usr/bin/env bash
 # ==============================================================================
 # NON-DESTRUCTIVE DUAL-BOOT STORAGE WRAPPER
@@ -331,13 +356,13 @@ const ScriptDynamicDualBootStorageSh = `#!/usr/bin/env bash
 # ==============================================================================
 set -uo pipefail
 REQ_GB="${1:-45}"
-LOG_A="/mnt/usb_logs/logs/INSTANT-SERVER-INSTALL.log"
-[ ! -d /mnt/usb_logs/logs ] && LOG_A="/tmp/INSTANT-SERVER-INSTALL.log"
+LOG_A="/mnt/usb_logs/instant_server_logs/instant_server_install.log"
+[ ! -d /mnt/usb_logs/instant_server_logs ] && LOG_A="/tmp/instant_server_install.log"
 log_usb() {
     printf '[dynamic_dualboot] %s\n' "$*" | tee -a "$LOG_A" 2>/dev/null || true
     if mountpoint -q /mnt/usb_logs 2>/dev/null; then
-        cp -f "$LOG_A" /mnt/usb_logs/INSTANT-SERVER-INSTALL.log 2>/dev/null || true
-        cp -f "$LOG_A" /mnt/usb_logs/logs/INSTANT-SERVER-INSTALL.log 2>/dev/null || true
+        cp -f "$LOG_A" /mnt/usb_logs/instant_server_install.log 2>/dev/null || true
+        cp -f "$LOG_A" /mnt/usb_logs/instant_server_logs/instant_server_install.log 2>/dev/null || true
     fi
     sync
 }
