@@ -65,6 +65,7 @@ func LoadBundledDashboardAsset(assetName string) []byte {
 			"src/instant_server/ui/dashboard/styles/" + assetName,
 			"src/instant_server/ui/dashboard/core/" + assetName,
 			"src/instant_server/ui/dashboard/apps/" + assetName,
+			"src/instant_server/ui/disk_manager/" + assetName,
 			"src/instant_server/ui/dashboard/" + assetName,
 			"src/instant_server/ui/" + assetName,
 		} {
@@ -77,6 +78,9 @@ func LoadBundledDashboardAsset(assetName string) []byte {
 		filepath.Join("src", "instant_server", "ui", "dashboard", "styles", assetName),
 		filepath.Join("src", "instant_server", "ui", "dashboard", "core", assetName),
 		filepath.Join("src", "instant_server", "ui", "dashboard", "apps", assetName),
+		filepath.Join("src", "instant_server", "ui", "disk_manager", assetName),
+		filepath.Join("..", "src", "instant_server", "ui", "disk_manager", assetName),
+		filepath.Join("..", "..", "src", "instant_server", "ui", "disk_manager", assetName),
 		filepath.Join("..", "src", "instant_server", "ui", "dashboard", "styles", assetName),
 		filepath.Join("..", "src", "instant_server", "ui", "dashboard", "core", assetName),
 		filepath.Join("..", "src", "instant_server", "ui", "dashboard", "apps", assetName),

@@ -58,7 +58,10 @@
         "pause-and-exit-flash",
         "confirm-cancel-and-exit",
         "open-dashboard-preview",
-        "copy-yaml"
+        "copy-yaml",
+        "copy-text",
+        "toggle-sidebar-pass",
+        "set-ui-mode"
       ]);
       if (state.flashing && action && !allowedWhileFlashing.has(action)) {
         showToast("Configuration is locked while USB flashing/downloading is active");
@@ -154,31 +157,31 @@
           const warn = getDomainSecurityWarning(state.server_address_domain);
           body.innerHTML = `
             <label style="font-size:12px;color:var(--text-secondary);">Server Display Name
-              <input id="qeServerName" class="win-input" style="width:100%;margin-top:4px;" value="${esc(state.server_name || state.hostname)}" />
+              <input id="qeServerName" class="win-input" style="width:100%;min-width:0;max-width:100%;box-sizing:border-box;margin-top:4px;" value="${esc(state.server_name || state.hostname)}" />
             </label>
             <div style="display:flex;gap:8px;">
-              <label style="flex:1;font-size:12px;color:var(--text-secondary);">Address Host
-                <input id="qeAddrHost" class="win-input" style="width:100%;margin-top:4px;" value="${esc(state.server_address_host || state.hostname)}" />
+              <label style="flex:1;min-width:0;font-size:12px;color:var(--text-secondary);">Address Host
+                <input id="qeAddrHost" class="win-input" style="width:100%;min-width:0;max-width:100%;box-sizing:border-box;margin-top:4px;" value="${esc(state.server_address_host || state.hostname)}" />
               </label>
-              <label style="width:130px;font-size:12px;color:var(--text-secondary);">Domain
-                <input id="qeAddrDomain" class="win-input" style="width:100%;margin-top:4px;" value="${esc(state.server_address_domain || ".local")}" />
+              <label style="flex:0 0 132px;min-width:0;font-size:12px;color:var(--text-secondary);">Domain
+                <input id="qeAddrDomain" class="win-input" style="width:100%;min-width:0;max-width:100%;box-sizing:border-box;margin-top:4px;" value="${esc(state.server_address_domain || ".local")}" />
               </label>
             </div>
             ${warn ? `<div class="notice-banner" style="margin:0;font-size:11.5px;">${esc(warn)}</div>` : ""}
             <div style="display:flex;gap:8px;">
-              <label style="flex:1;font-size:12px;color:var(--text-secondary);">Admin Username
-                <input id="qeUsername" class="win-input" style="width:100%;margin-top:4px;" value="${esc(state.username || "admin")}" />
+              <label style="flex:1;min-width:0;font-size:12px;color:var(--text-secondary);">Admin Username
+                <input id="qeUsername" class="win-input" style="width:100%;min-width:0;max-width:100%;box-sizing:border-box;margin-top:4px;" value="${esc(state.username || "admin")}" />
               </label>
-              <label style="flex:1;font-size:12px;color:var(--text-secondary);">Admin Password
-                <input id="qePassword" type="password" class="win-input" style="width:100%;margin-top:4px;" value="${esc(state.password || "")}" />
+              <label style="flex:1;min-width:0;font-size:12px;color:var(--text-secondary);">Admin Password
+                <input id="qePassword" type="password" class="win-input" style="width:100%;min-width:0;max-width:100%;box-sizing:border-box;margin-top:4px;" value="${esc(state.password || "")}" />
               </label>
             </div>
             <div style="display:flex;gap:8px;">
-              <label style="flex:1;font-size:12px;color:var(--text-secondary);">Wi-Fi SSID (Optional)
-                <input id="qeWifiSsid" class="win-input" style="width:100%;margin-top:4px;" value="${esc(state.wifi_ssid || "")}" />
+              <label style="flex:1;min-width:0;font-size:12px;color:var(--text-secondary);">Wi-Fi SSID (Optional)
+                <input id="qeWifiSsid" class="win-input" style="width:100%;min-width:0;max-width:100%;box-sizing:border-box;margin-top:4px;" value="${esc(state.wifi_ssid || "")}" />
               </label>
-              <label style="width:130px;font-size:12px;color:var(--text-secondary);">Log Retention (Days)
-                <input id="qeLogDays" type="number" min="1" max="365" class="win-input" style="width:100%;margin-top:4px;" value="${Number(state.log_retention_days) || 14}" />
+              <label style="flex:0 0 132px;min-width:0;font-size:12px;color:var(--text-secondary);">Log Retention (Days)
+                <input id="qeLogDays" type="number" min="1" max="365" class="win-input" style="width:100%;min-width:0;max-width:100%;box-sizing:border-box;margin-top:4px;" value="${Number(state.log_retention_days) || 14}" />
               </label>
             </div>
           `;

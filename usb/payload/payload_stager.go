@@ -92,7 +92,7 @@ func StageCIDATAPayload(targetDir string, cfg ServerProfileConfig, hardeningScri
 	if err := writeItem("dashboard_server.py", NormalizeShellScriptLF(dashboardDaemonPy), 0755); err != nil {
 		return nil, err
 	}
-	for _, extraPy := range []string{"disk_manager.py", "disk_ops.py", "disk_manager_ui.py", "dashboard_system_api.py", "dashboard_files_api.py", "dashboard_mc_api.py", "dashboard_updates_api.py"} {
+	for _, extraPy := range []string{"disk_manager.py", "disk_ops.py", "dashboard_system_api.py", "dashboard_files_api.py", "dashboard_mc_api.py", "dashboard_updates_api.py"} {
 		if rawPy := LoadBundledScript(extraPy, ""); len(rawPy) > 0 {
 			if err := writeItem(extraPy, NormalizeShellScriptLF(rawPy), 0755); err != nil {
 				return nil, err
@@ -148,6 +148,9 @@ func StageCIDATAPayload(targetDir string, cfg ServerProfileConfig, hardeningScri
 		"dash_minecraft_app.js",
 		"dash_mc_events.js",
 		"dash_updates_center.js",
+		"disk_manager.html",
+		"disk_manager.css",
+		"disk_manager.js",
 	}
 	for _, assetName := range dashboardSubAssets {
 		if rawAsset := LoadBundledDashboardAsset(assetName); len(rawAsset) > 0 {

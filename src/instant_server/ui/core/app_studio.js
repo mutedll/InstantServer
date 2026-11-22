@@ -207,10 +207,32 @@
 
       if (field === "appSearchQuery") {
         refreshAppGridInPlace();
-      } else if (field === "hostname") {
+      } else if (
+        field === "hostname" ||
+        field === "server_address_host" ||
+        field === "server_address_domain" ||
+        field === "server_name" ||
+        field === "username" ||
+        field === "password"
+      ) {
+        if (field === "server_address_host") {
+          state.hostname = String(e.target.value || "").trim() || "instant-server";
+        } else if (field === "hostname") {
+          state.server_address_host = String(e.target.value || "").trim() || "instant-server";
+        }
         const hostDesc = document.getElementById("descServerHostname");
-        if (hostDesc) {
-          hostDesc.textContent = `Name used to reach your server on your home network (${state.hostname || "instant-server"}.local)`;
+        if (hostDesc && typeof getFullServerAddress === "function") {
+          hostDesc.innerHTML = `Reach your dashboard at <strong>http://${esc(getFullServerAddress())}</strong>`;
+        }
+        const warnBox = document.getElementById("domainSecurityWarnBox");
+        if (warnBox && typeof getDomainSecurityWarning === "function") {
+          const w = getDomainSecurityWarning(state.server_address_domain);
+          warnBox.textContent = w || "";
+          warnBox.style.display = w ? "block" : "none";
+        }
+        const cardSlot = document.querySelector(".sidebar-server-card");
+        if (cardSlot && typeof renderSidebarServerCard === "function") {
+          cardSlot.outerHTML = renderSidebarServerCard();
         }
       } else if (field === "storage_custom_input") {
         const rawStr = String(e.target.value || "").trim();

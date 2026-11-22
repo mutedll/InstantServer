@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Disk Management</title>
+  <link rel="stylesheet" href="/disk_manager.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="brand-dot" aria-hidden="true"></span>
+        <h1>Disk Management</h1>
+      </div>
+      <button type="button" id="btnRefresh" class="btn btn-ghost">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        <span>Refresh</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="container" id="mainView">
+    <p class="subtitle">Choose the drive where Ubuntu Server will be installed. Your installer USB is automatically protected.</p>
+
+    <section id="skeletonView" class="disk-list" aria-label="Loading drives">
+      <div class="skel-card">
+        <div class="skel-row">
+          <div class="skel-line skel-title"></div>
+          <div class="skel-pill"></div>
+        </div>
+        <div class="skel-line skel-sub"></div>
+        <div class="skel-bar"></div>
+        <div class="skel-row skel-actions">
+          <div class="skel-btn"></div>
+          <div class="skel-btn sm"></div>
+        </div>
+      </div>
+      <div class="skel-card">
+        <div class="skel-row">
+          <div class="skel-line skel-title"></div>
+          <div class="skel-pill"></div>
+        </div>
+        <div class="skel-line skel-sub"></div>
+        <div class="skel-bar"></div>
+      </div>
+    </section>
+
+    <section id="diskList" class="disk-list" hidden></section>
+  </main>
+
+  <section id="handoffView" class="handoff-wrap" hidden aria-live="polite">
+    <div class="handoff-card">
+      <div class="handoff-check" aria-hidden="true">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+      <h2>Installation Started</h2>
+      <p class="handoff-lead">Your target drive is confirmed and Ubuntu Server installation is now running automatically.</p>
+      <div id="handoffTarget" class="handoff-target"></div>
+      <p class="handoff-note">Disk Management has finished and closed cleanly. You can safely close this browser tab and follow progress on your server screen. Once installation completes and reboots, your dashboard will be available at <strong id="handoffDashUrl"></strong>.</p>
+      <div class="handoff-actions">
+        <button type="button" id="btnCloseTab" class="btn btn-primary">Close This Tab</button>
+      </div>
+      <p id="closeTabHint" class="close-hint" hidden>Your browser prevented automatic tab closing — you can safely close this tab manually.</p>
+    </div>
+  </section>
+
+  <div id="confirmModal" class="modal-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <h2 id="confirmTitle">Confirm Target Drive</h2>
+        <button type="button" id="btnModalClose" class="icon-close" aria-label="Close">&times;</button>
+      </div>
+      <div id="confirmBody" class="modal-body"></div>
+      <div class="modal-footer">
+        <button type="button" id="btnModalCancel" class="btn btn-ghost">Cancel</button>
+        <button type="button" id="btnModalConfirm" class="btn btn-primary">Confirm &amp; Start Installation</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <script src="/disk_manager.js"></script>
+</body>
+</html>

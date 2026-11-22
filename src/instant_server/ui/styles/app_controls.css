@@ -326,7 +326,6 @@
     /* Lock and grey out all configuration controls while flashing/downloading is active */
     body.is-flashing-locked .setup-tab-btn,
     body.is-flashing-locked .nav-item,
-    body.is-flashing-locked .mode-seg-btn,
     body.is-flashing-locked #btnToggleModeView,
     body.is-flashing-locked #btnTitleBack,
     body.is-flashing-locked #globalSearchInput,
