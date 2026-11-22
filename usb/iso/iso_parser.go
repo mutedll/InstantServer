@@ -217,7 +217,7 @@ func PatchGrubConfigForAutoinstall(raw []byte) ([]byte, int) {
 	text := strings.ReplaceAll(string(raw), "\r\n", "\n")
 	lines := strings.Split(text, "\n")
 	patches := 0
-	const kernelArgs = "autoinstall noprompt noeject ds=nocloud\\;s=/cdrom/cidata/"
+	const kernelArgs = "autoinstall noprompt noeject fsck.mode=skip ds=nocloud\\;s=/cdrom/cidata/"
 
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)

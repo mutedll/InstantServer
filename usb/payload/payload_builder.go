@@ -129,11 +129,11 @@ func GenerateAutoinstallUserData(cfg ServerProfileConfig) string {
 	liveNoSleepCmds := `    - systemctl stop casper-md5check.service multipathd.service multipathd.socket 2>/dev/null || true
     - 'printf "{\"result\":\"pass\"}\n" > /run/casper-md5check.json 2>/dev/null || true'
     - mkdir -p /mnt/cidata /mnt/usb_logs /tmp/cidata
-    - cdev=$(blkid -L CIDATA 2>/dev/null || blkid -L cidata 2>/dev/null || true); [ -n "$cdev" ] && (mount -o rw,sync,flush,noatime "$cdev" /mnt/cidata 2>/dev/null || mount -o remount,rw,sync,flush /mnt/cidata 2>/dev/null || true)
+    - cdev=$(blkid -L CIDATA 2>/dev/null || blkid -L cidata 2>/dev/null || true); [ -n "$cdev" ] && (mount -o ro,noatime "$cdev" /mnt/cidata 2>/dev/null || true)
     - cp -rf /cdrom/cidata/* /tmp/cidata/ 2>/dev/null || true
     - cp -rf /mnt/cidata/* /tmp/cidata/ 2>/dev/null || true
     - bash /tmp/cidata/check_existing_os_safeguard.sh 2>/dev/null || bash /mnt/cidata/check_existing_os_safeguard.sh 2>/dev/null || true
-    - udev=$(blkid -L INSTANTUSB 2>/dev/null || true); [ -n "$udev" ] && (mount -o rw,sync,flush,noatime "$udev" /mnt/usb_logs 2>/dev/null || true)
+    - mkdir -p /tmp/instant_server_logs
     - bash /tmp/cidata/start_usb_logger.sh 2>/dev/null || bash /mnt/cidata/start_usb_logger.sh 2>/dev/null || true
     - rfkill unblock all 2>/dev/null || true
     - systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target 2>/dev/null || true
@@ -260,8 +260,8 @@ autoinstall:
 %s%s
   late-commands:
     - mkdir -p /target/opt/instant-server /target/opt/instant-server/debs /mnt/cidata /mnt/usb_logs
-    - cdev=$(blkid -L CIDATA 2>/dev/null || blkid -L cidata 2>/dev/null || true); [ -n "$cdev" ] && (mount -o rw,sync,flush,noatime "$cdev" /mnt/cidata 2>/dev/null || mount -o remount,rw,sync,flush /mnt/cidata 2>/dev/null || true)
-    - udev=$(blkid -L INSTANTUSB 2>/dev/null || true); [ -n "$udev" ] && (mount -o rw,sync,flush,noatime "$udev" /mnt/usb_logs 2>/dev/null || true)
+    - cdev=$(blkid -L CIDATA 2>/dev/null || blkid -L cidata 2>/dev/null || true); [ -n "$cdev" ] && (mount -o ro,noatime "$cdev" /mnt/cidata 2>/dev/null || true)
+    - mkdir -p /tmp/instant_server_logs
     - if [ -f /mnt/cidata/laptop_hardening.sh ]; then cp -rf /mnt/cidata/* /target/opt/instant-server/ 2>/dev/null || true; elif [ -d /cdrom/cidata ]; then cp -rf /cdrom/cidata/* /target/opt/instant-server/ 2>/dev/null || true; fi
     - find /cdrom/pool -type f \( -name "wpasupplicant*.deb" -o -name "wireless-tools*.deb" -o -name "libnl-*.deb" -o -name "libpcsclite*.deb" -o -name "rfkill*.deb" -o -name "ethtool*.deb" \) -exec cp -f {} /target/opt/instant-server/debs/ \; 2>/dev/null || true%s
     - date +%%s > /target/opt/instant-server/.install_complete_epoch 2>/dev/null || true
@@ -270,8 +270,8 @@ autoinstall:
     - chmod 600 /target/etc/netplan/*.yaml /etc/netplan/*.yaml 2>/dev/null || true
     - 'if lvdisplay /dev/ubuntu-vg/ubuntu-lv >/dev/null 2>&1; then lvextend -l +100%%FREE /dev/ubuntu-vg/ubuntu-lv 2>/dev/null || true; resize2fs /dev/mapper/ubuntu--vg-ubuntu--lv 2>/dev/null || true; fi'
     - curtin in-target -- chmod +x /opt/instant-server/laptop_hardening.sh 2>/dev/null || true
-    - curtin in-target -- bash /opt/instant-server/laptop_hardening.sh >> /mnt/usb_logs/instant_server_logs/instant_server_install.log 2>&1 || true
-    - cp -f /mnt/usb_logs/instant_server_logs/instant_server_install.log /target/var/log/instant-server/install/instant_server_install.log 2>/dev/null || true
+    - curtin in-target -- bash /opt/instant-server/laptop_hardening.sh >> /tmp/instant_server_logs/instant_server_install.log 2>&1 || true
+    - cp -f /tmp/instant_server_logs/instant_server_install.log /target/var/log/instant-server/install/instant_server_install.log 2>/dev/null || true
     - bash /tmp/cidata/dump_error_logs_to_usb.sh SUCCESS 2>/dev/null || bash /mnt/cidata/dump_error_logs_to_usb.sh SUCCESS 2>/dev/null || true
     - sync
     - 'USB_PART=$(findmnt -n -o SOURCE /cdrom 2>/dev/null || blkid -L CIDATA 2>/dev/null || true); USB_PK=$([ -n "$USB_PART" ] && lsblk -no PKNAME "$USB_PART" 2>/dev/null | head -n1 || true); USB_DISK=$([ -n "$USB_PK" ] && echo "/dev/$USB_PK" || echo ""); printf "\033[2J\033[H\n======================================================================\n  INSTANT SERVER INSTALLATION COMPLETE!\n======================================================================\n  1. UNPLUG YOUR USB DRIVE NOW.\n     As soon as you unplug it, this computer will restart automatically\n     in 5 seconds and boot into your new Instant Server.\n\n  2. Or press ENTER (or tap the Power button once) to restart now.\n======================================================================\n" > /dev/tty1 2>/dev/null || true; while true; do if [ -n "$USB_DISK" ] && [ ! -b "$USB_DISK" ]; then printf "\n  USB drive unplugged! Restarting into Instant Server in 5 seconds...\n" > /dev/tty1 2>/dev/null || true; sleep 5; break; fi; if [ -e /dev/tty1 ] && read -r -t 1 _ < /dev/tty1; then printf "\n  Restarting now...\n" > /dev/tty1 2>/dev/null || true; break; fi; sleep 1; done; sync; reboot -f'

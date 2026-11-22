@@ -1,8 +1,10 @@
 // ============================================================================
 // FILE: usb/payload/payload_stager.go
 // PURPOSE: Stages Cloud-Init user-data, meta-data, helper scripts, custom
-//          configs, systemd units, udev rules, and Docker Compose app stacks
-//          into the CIDATA staging directory.
+//
+//	configs, systemd units, udev rules, and Docker Compose app stacks
+//	into the CIDATA staging directory.
+//
 // ============================================================================
 package payload
 
@@ -58,7 +60,7 @@ func StageCIDATAPayload(targetDir string, cfg ServerProfileConfig, hardeningScri
 	}
 
 	// 2. Stage early-boot USB logging & error-dumping helper scripts
-	 earlyScripts := []struct {
+	earlyScripts := []struct {
 		name    string
 		content string
 	}{
@@ -90,7 +92,7 @@ func StageCIDATAPayload(targetDir string, cfg ServerProfileConfig, hardeningScri
 	if err := writeItem("dashboard_server.py", NormalizeShellScriptLF(dashboardDaemonPy), 0755); err != nil {
 		return nil, err
 	}
-	for _, extraPy := range []string{"disk_manager.py", "dashboard_files_api.py", "dashboard_mc_api.py", "dashboard_updates_api.py"} {
+	for _, extraPy := range []string{"disk_manager.py", "disk_ops.py", "disk_manager_ui.py", "dashboard_system_api.py", "dashboard_files_api.py", "dashboard_mc_api.py", "dashboard_updates_api.py"} {
 		if rawPy := LoadBundledScript(extraPy, ""); len(rawPy) > 0 {
 			if err := writeItem(extraPy, NormalizeShellScriptLF(rawPy), 0755); err != nil {
 				return nil, err
@@ -148,26 +150,8 @@ func StageCIDATAPayload(targetDir string, cfg ServerProfileConfig, hardeningScri
 		"dash_updates_center.js",
 	}
 	for _, assetName := range dashboardSubAssets {
-		for _, cand := range []string{
-			filepath.Join("src", "instant_server", "ui", "dashboard", "styles", assetName),
-			filepath.Join("src", "instant_server", "ui", "dashboard", "core", assetName),
-			filepath.Join("src", "instant_server", "ui", "dashboard", "apps", assetName),
-			filepath.Join("..", "src", "instant_server", "ui", "dashboard", "styles", assetName),
-			filepath.Join("..", "src", "instant_server", "ui", "dashboard", "core", assetName),
-			filepath.Join("..", "src", "instant_server", "ui", "dashboard", "apps", assetName),
-			filepath.Join("..", "..", "src", "instant_server", "ui", "dashboard", "styles", assetName),
-			filepath.Join("..", "..", "src", "instant_server", "ui", "dashboard", "core", assetName),
-			filepath.Join("..", "..", "src", "instant_server", "ui", "dashboard", "apps", assetName),
-			filepath.Join("src", "instant_server", "ui", "dashboard", assetName),
-			filepath.Join("..", "src", "instant_server", "ui", "dashboard", assetName),
-			filepath.Join("src", "instant_server", "ui", assetName),
-			assetName,
-			filepath.Join("..", assetName),
-		} {
-			if rawAsset, err := os.ReadFile(cand); err == nil && len(rawAsset) > 0 {
-				_ = writeItem(assetName, rawAsset, 0644)
-				break
-			}
+		if rawAsset := LoadBundledDashboardAsset(assetName); len(rawAsset) > 0 {
+			_ = writeItem(assetName, rawAsset, 0644)
 		}
 	}
 	if strings.TrimSpace(cfg.CustomPostInstallScript) != "" {

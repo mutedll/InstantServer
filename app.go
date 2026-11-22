@@ -43,6 +43,7 @@ import (
 
 	"github.com/mutedll/InstantServer/privilege"
 	"github.com/mutedll/InstantServer/usb"
+	"github.com/mutedll/InstantServer/usb/payload"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -61,6 +62,7 @@ type App struct {
 }
 
 func NewApp(assets embed.FS) *App {
+	payload.SetEmbeddedAssets(assets)
 	return &App{
 		assets:    assets,
 		pauseGate: usb.NewPauseGate(),

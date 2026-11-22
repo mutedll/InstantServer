@@ -23,10 +23,13 @@ VERSION_FILE = ROOT_DIR / ".dashboard_version"
 
 DASHBOARD_SYNC_FILES = [
     ("src/instant_server/scripts/dashboard/dashboard_server.py", ROOT_DIR / "dashboard_server.py"),
+    ("src/instant_server/scripts/dashboard/dashboard_system_api.py", ROOT_DIR / "dashboard_system_api.py"),
     ("src/instant_server/scripts/dashboard/dashboard_files_api.py", ROOT_DIR / "dashboard_files_api.py"),
     ("src/instant_server/scripts/dashboard/dashboard_mc_api.py", ROOT_DIR / "dashboard_mc_api.py"),
     ("src/instant_server/scripts/dashboard/dashboard_updates_api.py", ROOT_DIR / "dashboard_updates_api.py"),
     ("src/instant_server/scripts/os/disk_manager.py", ROOT_DIR / "disk_manager.py"),
+    ("src/instant_server/scripts/os/disk_ops.py", ROOT_DIR / "disk_ops.py"),
+    ("src/instant_server/scripts/os/disk_manager_ui.py", ROOT_DIR / "disk_manager_ui.py"),
     ("src/instant_server/ui/dashboard/server_dashboard.html", ROOT_DIR / "server_dashboard.html"),
     ("src/instant_server/ui/dashboard/styles/dash_file_manager.css", ROOT_DIR / "styles" / "dash_file_manager.css"),
     ("src/instant_server/ui/dashboard/styles/dash_responsive.css", ROOT_DIR / "styles" / "dash_responsive.css"),

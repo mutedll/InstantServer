@@ -1,20 +1,42 @@
 // ============================================================================
 // FILE: usb/payload_boot.go
 // PURPOSE: Loads bundled Python/Bash scripts and provides early-boot USB logging,
-//          error dumping, and emergency password/bootloader repair scripts.
+//
+//	error dumping, and emergency password/bootloader repair scripts.
+//
 // ============================================================================
 package payload
 
 import (
 	"bytes"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 )
 
-// loadBundledScript reads a standalone script from src/instant_server/scripts/ (or repo root),
-// falling back to a minimal built-in version during isolated unit tests.
+var embeddedAssetsFS fs.FS
+
+// SetEmbeddedAssets registers the Wails embed.FS so standalone binaries can stage
+// bundled Python/Bash scripts and dashboard assets without external src/ files on disk.
+func SetEmbeddedAssets(fsys fs.FS) {
+	embeddedAssetsFS = fsys
+}
+
+// LoadBundledScript reads a standalone script from embed.FS first, then src/instant_server/scripts/
+// on disk, falling back to a minimal built-in version during isolated unit tests.
 func LoadBundledScript(fileName string, fallback string) []byte {
+	if embeddedAssetsFS != nil {
+		for _, embPath := range []string{
+			"src/instant_server/scripts/os/" + fileName,
+			"src/instant_server/scripts/dashboard/" + fileName,
+			"src/instant_server/scripts/" + fileName,
+		} {
+			if data, err := fs.ReadFile(embeddedAssetsFS, embPath); err == nil && len(bytes.TrimSpace(data)) > 0 {
+				return data
+			}
+		}
+	}
 	candidates := []string{
 		filepath.Join("src", "instant_server", "scripts", "os", fileName),
 		filepath.Join("src", "instant_server", "scripts", "dashboard", fileName),
@@ -34,6 +56,44 @@ func LoadBundledScript(fileName string, fallback string) []byte {
 		}
 	}
 	return []byte(fallback)
+}
+
+// LoadBundledDashboardAsset reads a dashboard CSS/JS asset from embed.FS first, then disk.
+func LoadBundledDashboardAsset(assetName string) []byte {
+	if embeddedAssetsFS != nil {
+		for _, embPath := range []string{
+			"src/instant_server/ui/dashboard/styles/" + assetName,
+			"src/instant_server/ui/dashboard/core/" + assetName,
+			"src/instant_server/ui/dashboard/apps/" + assetName,
+			"src/instant_server/ui/dashboard/" + assetName,
+			"src/instant_server/ui/" + assetName,
+		} {
+			if data, err := fs.ReadFile(embeddedAssetsFS, embPath); err == nil && len(data) > 0 {
+				return data
+			}
+		}
+	}
+	for _, cand := range []string{
+		filepath.Join("src", "instant_server", "ui", "dashboard", "styles", assetName),
+		filepath.Join("src", "instant_server", "ui", "dashboard", "core", assetName),
+		filepath.Join("src", "instant_server", "ui", "dashboard", "apps", assetName),
+		filepath.Join("..", "src", "instant_server", "ui", "dashboard", "styles", assetName),
+		filepath.Join("..", "src", "instant_server", "ui", "dashboard", "core", assetName),
+		filepath.Join("..", "src", "instant_server", "ui", "dashboard", "apps", assetName),
+		filepath.Join("..", "..", "src", "instant_server", "ui", "dashboard", "styles", assetName),
+		filepath.Join("..", "..", "src", "instant_server", "ui", "dashboard", "core", assetName),
+		filepath.Join("..", "..", "src", "instant_server", "ui", "dashboard", "apps", assetName),
+		filepath.Join("src", "instant_server", "ui", "dashboard", assetName),
+		filepath.Join("..", "src", "instant_server", "ui", "dashboard", assetName),
+		filepath.Join("src", "instant_server", "ui", assetName),
+		assetName,
+		filepath.Join("..", assetName),
+	} {
+		if rawAsset, err := os.ReadFile(cand); err == nil && len(rawAsset) > 0 {
+			return rawAsset
+		}
+	}
+	return nil
 }
 
 const DefaultAutoinstallConfigPy = `#!/usr/bin/env python3
@@ -204,223 +264,3 @@ if [ -d "/cdrom" ] || grep -q "casper" /proc/cmdline 2>/dev/null; then
 fi
 `, cfg.Username, hashedPass, sshPort, dashPort)
 }
-
-const scriptStartUSBLoggerSh = `#!/usr/bin/env bash
-set -uo pipefail
-systemctl stop casper-md5check.service 2>/dev/null || true
-mkdir -p /mnt/cidata /mnt/usb_logs
-CDEV=$(blkid -L CIDATA 2>/dev/null || blkid -L cidata 2>/dev/null || true)
-UDEV=$(blkid -L INSTANTUSB 2>/dev/null || true)
-if [ -n "$CDEV" ]; then
-    mount -o rw,sync,flush,noatime "$CDEV" /mnt/cidata 2>/dev/null || mount -o remount,rw,sync,flush /mnt/cidata 2>/dev/null || true
-fi
-if [ -n "$UDEV" ]; then
-    mount -o rw,sync,flush,noatime "$UDEV" /mnt/usb_logs 2>/dev/null || mount -o remount,rw,sync,flush /mnt/usb_logs 2>/dev/null || true
-fi
-mkdir -p /mnt/usb_logs/instant_server_logs 2>/dev/null || true
-
-LOG_PRIMARY="/mnt/usb_logs/instant_server_logs/instant_server_install.log"
-if ! mountpoint -q /mnt/usb_logs 2>/dev/null; then
-    LOG_PRIMARY="/tmp/instant_server_install.log"
-fi
-
-write_both() {
-    cat >> "$LOG_PRIMARY" 2>/dev/null || true
-    sync
-}
-
-{
-    echo "================================================================================"
-    echo " INSTANT SERVER LIVE USB INSTALLATION & DIAGNOSTICS LOG"
-    echo " Started at (UTC): $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-    echo "================================================================================"
-    if [ -d /sys/firmware/efi ]; then
-        echo "[BOOT MODE] UEFI Mode"
-    else
-        echo "[BOOT MODE] Legacy BIOS / CSM Mode"
-    fi
-    echo "[KERNEL CMDLINE] $(cat /proc/cmdline 2>/dev/null || true)"
-    echo "[HARDWARE DMI] Vendor=$(cat /sys/class/dmi/id/sys_vendor 2>/dev/null || echo unknown) | Product=$(cat /sys/class/dmi/id/product_name 2>/dev/null || echo unknown) | BIOS=$(cat /sys/class/dmi/id/bios_version 2>/dev/null || echo unknown)"
-    echo "--- MEMORY ---"
-    free -h 2>/dev/null || true
-    echo "--- BLOCK DEVICES (lsblk) ---"
-    lsblk -o NAME,SIZE,TYPE,FSTYPE,LABEL,RM,ROTA,MOUNTPOINT,MODEL 2>/dev/null || true
-    echo "--- BLKID ---"
-    blkid 2>/dev/null || true
-    echo "--- NETWORK INTERFACES (ip -br link / addr) ---"
-    ip -br link 2>/dev/null || true
-    ip -br addr 2>/dev/null || true
-    echo "--- PCI & USB NETWORK ADAPTERS ---"
-    lspci -nnk 2>/dev/null | grep -A3 -iE "net|eth|wireless|wifi" || true
-    lsusb 2>/dev/null || true
-    rfkill list 2>/dev/null || true
-    echo "================================================================================"
-} | write_both
-
-if [ ! -f /run/instant-usb-log-daemon.pid ]; then
-    nohup bash /mnt/cidata/usb_log_daemon.sh >/dev/null 2>&1 &
-    echo $! > /run/instant-usb-log-daemon.pid
-fi
-exit 0
-`
-
-const scriptUSBLogDaemonSh = `#!/usr/bin/env bash
-set -uo pipefail
-LOG_PRIMARY="/mnt/usb_logs/instant_server_logs/instant_server_install.log"
-if ! mountpoint -q /mnt/usb_logs 2>/dev/null; then
-    LOG_PRIMARY="/tmp/instant_server_install.log"
-fi
-LAST_J_LINES=0
-LAST_SUB_LINES=0
-LAST_CUR_LINES=0
-
-while true; do
-    {
-        if command -v journalctl >/dev/null 2>&1; then
-            TOTAL_J=$(journalctl -b --no-pager 2>/dev/null | wc -l || echo 0)
-            if [ "${TOTAL_J:-0}" -gt "$LAST_J_LINES" ]; then
-                NEW_CNT=$((TOTAL_J - LAST_J_LINES))
-                echo "--- [JOURNALCTL +${NEW_CNT} lines @ $(date -u '+%H:%M:%S')] ---"
-                journalctl -b --no-pager 2>/dev/null | tail -n "$NEW_CNT" | grep -E -i "subiquity|curtin|netplan|networkd|wpa|cloud-init|instant-server|error|fail|warn|parted|sfdisk|sgdisk|grub|mount" || true
-                LAST_J_LINES="$TOTAL_J"
-            fi
-        fi
-        if [ -f /var/log/installer/subiquity-server-debug.log ]; then
-            TOTAL_S=$(wc -l < /var/log/installer/subiquity-server-debug.log 2>/dev/null || echo 0)
-            if [ "${TOTAL_S:-0}" -gt "$LAST_SUB_LINES" ]; then
-                NEW_S=$((TOTAL_S - LAST_SUB_LINES))
-                echo "--- [SUBIQUITY DEBUG +${NEW_S} lines @ $(date -u '+%H:%M:%S')] ---"
-                tail -n "$NEW_S" /var/log/installer/subiquity-server-debug.log 2>/dev/null | tail -n 80 || true
-                LAST_SUB_LINES="$TOTAL_S"
-            fi
-            cp -f /var/log/installer/subiquity-server-debug.log /mnt/usb_logs/instant_server_logs/subiquity_debug.log 2>/dev/null || true
-        fi
-        if [ -f /var/log/installer/curtin-install.log ]; then
-            TOTAL_C=$(wc -l < /var/log/installer/curtin-install.log 2>/dev/null || echo 0)
-            if [ "${TOTAL_C:-0}" -gt "$LAST_CUR_LINES" ]; then
-                NEW_C=$((TOTAL_C - LAST_CUR_LINES))
-                echo "--- [CURTIN INSTALL +${NEW_C} lines @ $(date -u '+%H:%M:%S')] ---"
-                tail -n "$NEW_C" /var/log/installer/curtin-install.log 2>/dev/null | tail -n 80 || true
-                LAST_CUR_LINES="$TOTAL_C"
-            fi
-            cp -f /var/log/installer/curtin-install.log /mnt/usb_logs/instant_server_logs/curtin-install.log 2>/dev/null || true
-        fi
-    } >> "$LOG_PRIMARY" 2>/dev/null || true
-
-    if [ -d /target/var/log/instant-server/install ]; then
-        cp -f "$LOG_PRIMARY" /target/var/log/instant-server/install/instant_server_install.log 2>/dev/null || true
-    fi
-    sync
-    # NOTE: Never open raw /dev/sd* block devices in O_RDWR ("r+b") inside this loop!
-    # udev's OPTIONS+="watch" synthesizes a CHANGE uevent on every writable close,
-    # which triggers Subiquity's probert storage re-probe loop and crashes the Disk Selector.
-    # FAT dirty-bit cleanup runs ONLY once in dump_error_logs_to_usb.sh after unmount.
-    sleep 6
-done
-`
-
-const scriptDumpErrorLogsSh = `#!/usr/bin/env bash
-set -uo pipefail
-STATUS="${1:-ERROR}"
-mkdir -p /mnt/usb_logs/instant_server_logs
-CDEV=$(blkid -L CIDATA 2>/dev/null || blkid -L cidata 2>/dev/null || true)
-UDEV=$(blkid -L INSTANTUSB 2>/dev/null || true)
-[ -n "$CDEV" ] && (mount -o rw,sync,flush,noatime "$CDEV" /mnt/cidata 2>/dev/null || mount -o remount,rw,sync,flush /mnt/cidata 2>/dev/null || true)
-[ -n "$UDEV" ] && (mount -o rw,sync,flush,noatime "$UDEV" /mnt/usb_logs 2>/dev/null || mount -o remount,rw,sync,flush /mnt/usb_logs 2>/dev/null || true)
-
-LOG_PRIMARY="/mnt/usb_logs/instant_server_logs/instant_server_install.log"
-if ! mountpoint -q /mnt/usb_logs 2>/dev/null; then
-    LOG_PRIMARY="/tmp/instant_server_install.log"
-fi
-
-{
-    echo ""
-    echo "================================================================================"
-    echo " FINAL INSTALLER SNAPSHOT (STATUS: ${STATUS}) @ $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-    echo "================================================================================"
-    echo "--- /autoinstall.yaml ---"
-    cat /autoinstall.yaml 2>/dev/null || true
-    echo "--- LIVE /etc/netplan/*.yaml ---"
-    head -n 100 /etc/netplan/*.yaml 2>/dev/null || true
-    echo "--- TARGET /target/etc/netplan/*.yaml ---"
-    head -n 100 /target/etc/netplan/*.yaml 2>/dev/null || true
-    echo "--- NETPLAN & IP STATUS ---"
-    ip -br link 2>/dev/null || true
-    ip -br addr 2>/dev/null || true
-    ip route 2>/dev/null || true
-    echo "--- BLOCK DEVICES & MOUNTS ---"
-    lsblk -o NAME,SIZE,TYPE,FSTYPE,LABEL,MOUNTPOINT 2>/dev/null || true
-    echo "--- SUBIQUITY TRACEBACK / CRASH FILES (/var/crash) ---"
-    for cf in /var/crash/*; do
-        [ -f "$cf" ] || continue
-        echo "Crash file: $cf"
-        tail -n 120 "$cf" 2>/dev/null || true
-    done
-    echo "--- LAST 120 LINES OF /var/log/installer/subiquity-server-debug.log ---"
-    tail -n 120 /var/log/installer/subiquity-server-debug.log 2>/dev/null || true
-    echo "--- LAST 120 LINES OF /var/log/installer/curtin-install.log ---"
-    tail -n 120 /var/log/installer/curtin-install.log 2>/dev/null || true
-    echo "--- LAST 100 LINES OF DMESG ---"
-    dmesg 2>/dev/null | tail -n 100 || true
-    echo "================================================================================"
-} >> "$LOG_PRIMARY" 2>/dev/null || true
-
-mkdir -p /mnt/usb_logs/instant_server_logs /target/var/log/instant-server/install 2>/dev/null || true
-cp -f /var/log/installer/subiquity-server-debug.log /mnt/usb_logs/instant_server_logs/subiquity_debug.log 2>/dev/null || true
-cp -f /var/log/installer/curtin-install.log /mnt/usb_logs/instant_server_logs/ 2>/dev/null || true
-cp -f /autoinstall.yaml /mnt/usb_logs/instant_server_logs/autoinstall_used.yaml 2>/dev/null || true
-if [ -d /target/var/log/instant-server/install ]; then
-    cp -f "$LOG_PRIMARY" /target/var/log/instant-server/install/instant_server_install.log 2>/dev/null || true
-    cp -f /var/log/installer/subiquity-server-debug.log /target/var/log/instant-server/install/subiquity_debug.log 2>/dev/null || true
-    cp -f /var/log/installer/curtin-install.log /target/var/log/instant-server/install/ 2>/dev/null || true
-    cp -f /autoinstall.yaml /target/var/log/instant-server/install/autoinstall_used.yaml 2>/dev/null || true
-fi
-sync
-kill $(cat /run/instant-usb-log-daemon.pid 2>/dev/null) 2>/dev/null || true
-umount /mnt/usb_logs 2>/dev/null || mount -o remount,ro /mnt/usb_logs 2>/dev/null || true
-umount /mnt/cidata 2>/dev/null || mount -o remount,ro /mnt/cidata 2>/dev/null || true
-    sync
-    python3 - << 'PYCLEAN' 2>/dev/null || true
-import subprocess
-out = subprocess.check_output(["lsblk", "-lnpo", "NAME,FSTYPE"], text=True, stderr=subprocess.DEVNULL)
-for line in out.splitlines():
-    parts = line.split()
-    if len(parts) == 2 and parts[1].lower() == "vfat":
-        dev = parts[0]
-        try:
-            with open(dev, "r+b") as f:
-                bpb = bytearray(f.read(512))
-                if len(bpb) == 512:
-                    if bpb[54:62] == b"FAT16   ":
-                        bpb[37] = 0x00
-                        f.seek(0)
-                        f.write(bpb)
-                        res = bpb[14] | (bpb[15] << 8)
-                        f.seek(res * 512 + 2)
-                        f.write(b"\xff\xff")
-                    elif bpb[82:90] == b"FAT32   ":
-                        bpb[65] = 0x00
-                        f.seek(0)
-                        f.write(bpb)
-                        f.seek(6 * 512)
-                        b6 = bytearray(f.read(512))
-                        if len(b6) == 512:
-                            b6[65] = 0x00
-                            f.seek(6 * 512)
-                            f.write(b6)
-                        res = bpb[14] | (bpb[15] << 8)
-                        f.seek(res * 512 + 4)
-                        f.write(b"\xff\xff\xff\x0f")
-        except Exception:
-            pass
-PYCLEAN
-if [ "$STATUS" = "ERROR" ]; then
-    printf "
-[INSTANT SERVER] Installation error logs saved to instant_server_install.log on your USB drive.
-" > /dev/console 2>/dev/null || true
-    printf "
-[INSTANT SERVER] Installation error logs saved to instant_server_install.log on your USB drive.
-" > /dev/tty1 2>/dev/null || true
-fi
-exit 0
-`
