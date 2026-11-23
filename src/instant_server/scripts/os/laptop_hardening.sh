@@ -89,6 +89,16 @@ EOF
 
     for gov_path in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do [ -w "$gov_path" ] && echo "$INSTANT_CPU_GOVERNOR" > "$gov_path" 2>/dev/null || true; done
 
+    if [ -f /etc/default/grub ]; then
+        local kparams="consoleblank=${INSTANT_SCREEN_BLANK_SEC} i915.enable_psr=0 i915.enable_dc=0"
+        if [ "${INSTANT_ENABLE_INTEL_VAAPI:-0}" != "1" ] || dmesg 2>/dev/null | grep -qi "disabling eDP"; then
+            kparams="nomodeset ${kparams}"
+        fi
+        for kp in $kparams; do
+            grep -q "${kp%%=*}" /etc/default/grub || sed -i "s/GRUB_CMDLINE_LINUX_DEFAULT=\"/GRUB_CMDLINE_LINUX_DEFAULT=\"${kp} /" /etc/default/grub 2>/dev/null || true
+        done
+        update-grub 2>/dev/null || true
+    fi
     if [ "$has_bat" -eq 0 ]; then
         log_info "Desktop PC / Mini-PC chassis detected (no battery). Enabling PCIe ASPM and SATA power saving..."
         if [ -w /sys/module/pcie_aspm/parameters/policy ]; then
@@ -104,11 +114,6 @@ EOF
 
     log_info "Laptop chassis detected. Applying lid-close immunity and ${INSTANT_BAT_STOP_THRESH}% battery charge cap..."
     [ "$INSTANT_IGNORE_LID_SWITCH" = "1" ] && cp -f /etc/systemd/logind.conf.d/99-instant-server-clamshell.conf /etc/systemd/logind.conf.d/99-instant-server-headless.conf 2>/dev/null || true
-
-    if [ -f /etc/default/grub ] && ! grep -q "consoleblank=" /etc/default/grub; then
-        sed -i "s/GRUB_CMDLINE_LINUX_DEFAULT=\"/GRUB_CMDLINE_LINUX_DEFAULT=\"consoleblank=${INSTANT_SCREEN_BLANK_SEC} /" /etc/default/grub 2>/dev/null || true
-        update-grub 2>/dev/null || true
-    fi
 
     mkdir -p /etc/tlp.d
     cat << EOF > /etc/tlp.d/99-instant-server-battery.conf
@@ -306,13 +311,14 @@ configure_prelogin_console_banner() {
 }
 EOF
 
+    # Never block getty@tty1 on network-online.target — TTY1 login & Server Details Card
+    # must appear immediately even while DHCP/Wi-Fi is coming up; banner refreshes via agetty --reload.
     cat << 'EOF' > /etc/systemd/system/getty@tty1.service.d/override.conf
 [Unit]
-After=network-online.target avahi-daemon.service instant-server-dashboard.service instant-server-banner.service
-Wants=network-online.target instant-server-banner.service
+After=systemd-user-sessions.service
 
 [Service]
-TTYVTDisallocate=yes
+TTYVTDisallocate=no
 EOF
 
     cat << 'EOF' > /usr/local/sbin/instant-server-banner-refresh
@@ -474,7 +480,7 @@ main() {
         fi
     done
 
-    local units=(instant-server-battery-guardian.timer instant-server-dashboard.service instant-server-banner.service instant-server-maintenance.timer instant-server-netwatch.timer instant-server-launch-apps.service)
+    local units=(ssh.socket instant-server-battery-guardian.timer instant-server-dashboard.service instant-server-banner.service instant-server-maintenance.timer instant-server-netwatch.timer instant-server-launch-apps.service)
     if [ "$(stat -c %d:%i / 2>/dev/null || echo chroot)" != "$(stat -c %d:%i /proc/1/root/. 2>/dev/null || echo root)" ]; then
         log_info "Chroot (curtin in-target) detected: enabling systemd units for first boot..."
         systemctl enable "${units[@]}" 2>/dev/null || true
