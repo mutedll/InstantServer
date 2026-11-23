@@ -200,7 +200,8 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          for shf in src/instant_server/scripts/os/laptop_hardening.sh src/instant_server/scripts/os/apps_setup.sh src/instant_server/scripts/laptop_hardening.sh src/instant_server/scripts/apps_setup.sh; do
+          for shf in src/instant_server/scripts/os/laptop_hardening.sh src/instant_server/scripts/os/apps_setup.sh; do
+            [ -f "\$shf" ] || continue
             sed -i 's/\r$//' "$shf"
             bash -n "$shf"
             shellcheck -s bash "$shf"

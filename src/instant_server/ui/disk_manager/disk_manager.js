@@ -13,7 +13,7 @@
     expanded: new Set(),
     busy: false,
     installStarted: false,
-    pendingDisk: null,
+    pendingTarget: null,
   };
 
   const elSkeleton = document.getElementById("skeletonView");
@@ -41,6 +41,18 @@
     return r.json();
   }
 
+  function sizeOf(item) {
+    return Number(item?.size_b ?? item?.size_bytes ?? 0);
+  }
+
+  function canSelect(item) {
+    return Boolean(item?.can_select ?? item?.eligible_target);
+  }
+
+  function selectReason(item) {
+    return item?.select_reason || item?.reason || "Not eligible";
+  }
+
   function segClass(fstype) {
     const f = String(fstype || "").toLowerCase();
     if (f.includes("ext")) return "seg-ext";
@@ -51,15 +63,17 @@
   }
 
   function renderPartBar(disk) {
-    const total = Math.max(1, Number(disk.size_bytes) || 1);
+    const total = Math.max(1, sizeOf(disk));
     const segs = [];
     for (const p of disk.partitions || []) {
-      const pct = Math.max(2, (Number(p.size_bytes || 0) / total) * 100);
-      segs.push(`<div class="part-seg ${segClass(p.fstype)}" style="width:${pct.toFixed(1)}%" title="${esc(p.path)} (${esc(p.fstype || "raw")}, ${fmtGB(p.size_bytes)})"></div>`);
+      const sz = sizeOf(p);
+      const pct = Math.max(2, (sz / total) * 100);
+      segs.push(`<div class="part-seg ${segClass(p.fstype)}" style="width:${pct.toFixed(1)}%" title="${esc(p.path)} (${esc(p.fstype || "RAW")}, ${fmtGB(sz)})"></div>`);
     }
     for (const g of disk.free_gaps || []) {
-      const pct = Math.max(2, (Number(g.size_bytes || 0) / total) * 100);
-      segs.push(`<div class="part-seg seg-free" style="width:${pct.toFixed(1)}%" title="Free space (${fmtGB(g.size_bytes)})"></div>`);
+      const sz = sizeOf(g);
+      const pct = Math.max(2, (sz / total) * 100);
+      segs.push(`<div class="part-seg seg-free" style="width:${pct.toFixed(1)}%" title="Unallocated (${fmtGB(sz)})"></div>`);
     }
     if (!segs.length) {
       segs.push(`<div class="part-seg seg-free" style="width:100%" title="Unallocated"></div>`);
@@ -73,44 +87,53 @@
       return;
     }
     elDiskList.innerHTML = state.disks.map((d) => {
+      const diskSize = sizeOf(d);
+      const eligible = canSelect(d);
       const isSelected = state.selectedPath === d.path;
       const isOpen = state.expanded.has(d.path);
       const badge = d.protected
         ? `<span class="badge badge-warn">Installer USB &bull; Protected</span>`
-        : d.eligible_target
+        : eligible
           ? (isSelected ? `<span class="badge badge-accent">Selected</span>` : `<span class="badge badge-ok">Ready for Install</span>`)
-          : `<span class="badge badge-muted">${esc(d.reason || "Not eligible")}</span>`;
+          : `<span class="badge badge-muted">${esc(selectReason(d))}</span>`;
 
       const partCount = (d.partitions || []).length;
       const freeCount = (d.free_gaps || []).length;
+      const ptLabel = d.pttype ? String(d.pttype).toUpperCase() : "RAW";
 
       let advHtml = "";
       if (!d.protected && isOpen) {
         const rows = [];
         for (const p of d.partitions || []) {
+          const pSize = sizeOf(p);
           rows.push(`
             <div class="part-row">
               <div class="part-info">
                 <strong>${esc(p.path)}</strong>
-                <span>${esc(p.fstype || "unformatted")} &bull; ${fmtGB(p.size_bytes)}${p.label ? " &bull; " + esc(p.label) : ""}</span>
+                <span>${esc(p.fstype || "RAW")} &bull; ${fmtGB(pSize)}${p.label ? " &bull; " + esc(p.label) : ""}</span>
               </div>
               <div class="part-btns">
                 <button type="button" class="btn btn-sm" data-act="format" data-dev="${esc(p.path)}">Format</button>
-                <button type="button" class="btn btn-sm" data-act="resize" data-dev="${esc(p.path)}" data-size="${p.size_bytes}">Resize</button>
-                <button type="button" class="btn btn-sm btn-danger" data-act="delete" data-dev="${esc(p.path)}">Delete</button>
+                <button type="button" class="btn btn-sm" data-act="shrink" data-dev="${esc(p.path)}" data-size="${pSize}">Shrink</button>
+                <button type="button" class="btn btn-sm" data-act="extend" data-dev="${esc(p.path)}" data-size="${pSize}">Extend</button>
+                <button type="button" class="btn btn-sm" data-act="relabel" data-dev="${esc(p.path)}" data-label="${esc(p.label || "")}">Relabel</button>
+                <button type="button" class="btn btn-sm btn-danger" data-act="delete_partition" data-dev="${esc(p.path)}">Delete</button>
               </div>
             </div>
           `);
         }
         for (const g of d.free_gaps || []) {
+          const gSize = sizeOf(g);
+          const gStart = Number(g.start_b ?? g.start_bytes ?? 1048576);
           rows.push(`
             <div class="part-row">
               <div class="part-info">
                 <strong>Unallocated Space</strong>
-                <span>${fmtGB(g.size_bytes)} free</span>
+                <span>${fmtGB(gSize)} free</span>
               </div>
               <div class="part-btns">
-                <button type="button" class="btn btn-sm" data-act="create" data-disk="${esc(d.path)}" data-start="${g.start_bytes}" data-max="${g.size_bytes}">Create Partition</button>
+                ${canSelect(g) ? `<button type="button" class="btn btn-sm btn-primary" data-act="select-gap" data-disk="${esc(d.path)}" data-size="${gSize}">Install Here</button>` : ""}
+                <button type="button" class="btn btn-sm" data-act="create_volume" data-disk="${esc(d.path)}" data-start="${gStart}" data-max="${gSize}">Create Volume</button>
               </div>
             </div>
           `);
@@ -118,7 +141,11 @@
         advHtml = `
           <div class="adv-drawer">
             <div class="part-list">${rows.join("") || `<div class="part-row"><span class="part-info">No partitions on this drive.</span></div>`}</div>
-            <button type="button" class="btn btn-sm btn-danger" data-act="wipe" data-disk="${esc(d.path)}">Wipe Partition Table (GPT)</button>
+            <div class="disk-tools-row">
+              <button type="button" class="btn btn-sm" data-act="init-gpt" data-disk="${esc(d.path)}">Initialize GPT</button>
+              <button type="button" class="btn btn-sm" data-act="init-mbr" data-disk="${esc(d.path)}">Initialize MBR</button>
+              <button type="button" class="btn btn-sm btn-danger" data-act="wipe" data-disk="${esc(d.path)}">Wipe Disk</button>
+            </div>
           </div>
         `;
       }
@@ -130,9 +157,9 @@
               <div class="disk-name">${esc(d.model || d.path)}</div>
               <div class="disk-meta">
                 <span>${esc(d.path)}</span>
-                <span>${fmtGB(d.size_bytes)}</span>
-                <span>${esc(d.media || "Disk")}${d.tran ? " (" + esc(d.tran.toUpperCase()) + ")" : ""}</span>
-                <span>${partCount} partition${partCount === 1 ? "" : "s"}${freeCount ? " &bull; " + freeCount + " free region" : ""}</span>
+                <span>${fmtGB(diskSize)}</span>
+                <span>${esc(String(d.tran || "Disk").toUpperCase())} &bull; ${esc(ptLabel)}</span>
+                <span>${partCount} partition${partCount === 1 ? "" : "s"}${freeCount ? " &bull; " + freeCount + " free" : ""}</span>
               </div>
             </div>
             ${badge}
@@ -140,7 +167,7 @@
           ${renderPartBar(d)}
           ${!d.protected ? `
             <div class="disk-actions">
-              ${d.eligible_target ? `<button type="button" class="btn btn-primary" data-act="select" data-disk="${esc(d.path)}" ${state.busy ? "disabled" : ""}>Select for Install</button>` : `<span></span>`}
+              ${eligible ? `<button type="button" class="btn btn-primary" data-act="select" data-disk="${esc(d.path)}" ${state.busy ? "disabled" : ""}>Select for Install</button>` : `<span></span>`}
               <button type="button" class="btn btn-ghost btn-sm" data-act="toggle-adv" data-disk="${esc(d.path)}" ${state.busy ? "disabled" : ""}>${isOpen ? "Hide Partition Tools" : "Partition Tools"}</button>
             </div>
           ` : ""}
@@ -150,17 +177,21 @@
     }).join("");
   }
 
-  function openConfirmModal(disk) {
+  function openConfirmModal(disk, mode = "whole", gapBytes = 0) {
     state.selectedPath = disk.path;
-    state.pendingDisk = disk;
+    state.pendingTarget = { disk, mode, gapBytes };
     renderDisks();
+    const isGap = mode === "gap";
+    const warnText = isGap
+      ? `Ubuntu Server will install into the largest free space (${fmtGB(gapBytes)}) on <strong>${esc(disk.path)}</strong>. Existing partitions will be kept.`
+      : `All existing partitions and data on <strong>${esc(disk.path)}</strong> will be erased. Your installer USB remains untouched.`;
     elModalBody.innerHTML = `
-      <p style="margin:0;">You selected the following drive for Ubuntu Server installation:</p>
+      <p style="margin:0;">You selected the following target for Ubuntu Server installation:</p>
       <div class="confirm-box">
         <div><strong>${esc(disk.model || disk.path)}</strong></div>
-        <div style="margin-top:4px;font-size:12.5px;color:var(--muted);">${esc(disk.path)} &bull; ${fmtGB(disk.size_bytes)} &bull; ${esc(disk.media || "Disk")}</div>
+        <div style="margin-top:4px;font-size:12.5px;color:var(--muted);">${esc(disk.path)} &bull; ${fmtGB(sizeOf(disk))} &bull; ${isGap ? "Free Space Install" : "Full Disk (Direct, No LVM)"}</div>
       </div>
-      <div class="warn-note">All existing partitions and data on <strong>${esc(disk.path)}</strong> will be erased. Your installer USB remains untouched.</div>
+      <div class="warn-note">${warnText}</div>
     `;
     elModalConfirm.disabled = false;
     elModalConfirm.textContent = "Confirm & Start Installation";
@@ -170,7 +201,7 @@
   function closeConfirmModal() {
     if (state.busy) return;
     elModal.hidden = true;
-    state.pendingDisk = null;
+    state.pendingTarget = null;
   }
 
   function showHandoffScreen(disk) {
@@ -178,7 +209,7 @@
     elModal.hidden = true;
     elMainView.hidden = true;
     document.getElementById("btnRefresh").hidden = true;
-    document.getElementById("handoffTarget").textContent = `${disk.model || disk.path} (${disk.path} • ${fmtGB(disk.size_bytes)})`;
+    document.getElementById("handoffTarget").textContent = `${disk.model || disk.path} (${disk.path} • ${fmtGB(sizeOf(disk))})`;
     document.getElementById("handoffDashUrl").textContent = `${window.location.protocol}//${window.location.host}`;
     elHandoff.hidden = false;
   }
@@ -226,49 +257,67 @@
       renderDisks();
     } else if (act === "select") {
       const disk = state.disks.find((d) => d.path === btn.dataset.disk);
-      if (disk) openConfirmModal(disk);
+      if (disk) openConfirmModal(disk, "whole");
+    } else if (act === "select-gap") {
+      const disk = state.disks.find((d) => d.path === btn.dataset.disk);
+      if (disk) openConfirmModal(disk, "gap", Number(btn.dataset.size || 0));
+    } else if (act === "init-gpt" || act === "init-mbr") {
+      const style = act === "init-gpt" ? "gpt" : "msdos";
+      const dk = btn.dataset.disk;
+      runAction({ action: "initialize", device: dk, style }, `Initialize ${dk} as ${style.toUpperCase()}? All existing partitions will be erased.`);
     } else if (act === "wipe") {
       const dk = btn.dataset.disk;
-      runAction({ action: "wipe_disk", disk: dk }, `Erase ALL partitions on ${dk} and create a blank GPT table?`);
-    } else if (act === "delete") {
+      runAction({ action: "wipe", device: dk }, `Erase ALL partitions and signatures on ${dk}?`);
+    } else if (act === "delete_partition") {
       const dev = btn.dataset.dev;
-      runAction({ action: "delete", partition: dev }, `Permanently delete partition ${dev}?`);
+      runAction({ action: "delete_partition", device: dev }, `Permanently delete partition ${dev}?`);
     } else if (act === "format") {
       const dev = btn.dataset.dev;
-      const fs = window.prompt(`Filesystem for ${dev} (ext4, xfs, btrfs, fat32, ntfs, swap):`, "ext4");
+      const fs = window.prompt(`Filesystem for ${dev} (ext4, fat32, ntfs, exfat, btrfs, xfs):`, "ext4");
       if (!fs) return;
       const label = window.prompt("Optional volume label (leave blank for none):", "") || "";
-      runAction({ action: "format", partition: dev, fstype: fs, label }, `Format ${dev} as ${fs}? All data on ${dev} will be erased.`);
-    } else if (act === "create") {
-      const maxGB = Math.floor(Number(btn.dataset.max) / 1073741824);
-      const sz = window.prompt(`New partition size in GB (max ${maxGB} GB):`, String(maxGB));
+      runAction({ action: "format", device: dev, fstype: fs.trim(), label }, `Format ${dev} as ${fs}? All data on ${dev} will be erased.`);
+    } else if (act === "relabel") {
+      const dev = btn.dataset.dev;
+      const lbl = window.prompt(`New volume label for ${dev}:`, btn.dataset.label || "");
+      if (lbl === null) return;
+      runAction({ action: "relabel", device: dev, label: lbl.trim() });
+    } else if (act === "create_volume") {
+      const maxGB = Math.max(1, Math.floor(Number(btn.dataset.max) / 1073741824));
+      const sz = window.prompt(`New volume size in GB (max ${maxGB} GB):`, String(maxGB));
       if (!sz || Number(sz) <= 0) return;
-      const fs = window.prompt("Filesystem (ext4, xfs, btrfs, fat32, ntfs, swap, none):", "ext4") || "ext4";
+      const fs = window.prompt("Filesystem (ext4, fat32, ntfs, exfat, btrfs, xfs, unformatted):", "ext4") || "ext4";
+      const label = window.prompt("Optional volume label:", "") || "";
       runAction({
-        action: "create",
-        disk: btn.dataset.disk,
-        start_bytes: Number(btn.dataset.start),
-        end_bytes: Number(btn.dataset.start) + Math.floor(Number(sz) * 1073741824),
-        fstype: fs,
+        action: "create_volume",
+        device: btn.dataset.disk,
+        start_b: Number(btn.dataset.start),
+        size_gb: Number(sz),
+        fstype: fs.trim(),
+        label,
       });
-    } else if (act === "resize") {
-      const curGB = Math.floor(Number(btn.dataset.size) / 1073741824);
-      const ns = window.prompt(`New size in GB for ${btn.dataset.dev} (current ${curGB} GB):`, String(curGB));
-      if (!ns || Number(ns) <= 0) return;
-      runAction({ action: "resize", partition: btn.dataset.dev, new_size_mb: Math.floor(Number(ns) * 1024) }, `Resize ${btn.dataset.dev} to ${ns} GB?`);
+    } else if (act === "shrink" || act === "extend") {
+      const curGB = (Number(btn.dataset.size) / 1073741824).toFixed(1);
+      const ns = window.prompt(`${act === "shrink" ? "Shrink" : "Extend"} ${btn.dataset.dev} (current ${curGB} GB) — new size in GB:`, curGB);
+      if (!ns || Number(ns) < 1) return;
+      runAction({ action: act, device: btn.dataset.dev, new_size_gb: Number(ns) }, `${act === "shrink" ? "Shrink" : "Extend"} ${btn.dataset.dev} to ${ns} GB?`);
     }
   });
 
   elModalConfirm.addEventListener("click", async () => {
-    const disk = state.pendingDisk;
-    if (!disk || state.busy) return;
+    const pending = state.pendingTarget;
+    if (!pending || state.busy) return;
     state.busy = true;
     elModalConfirm.disabled = true;
     elModalConfirm.textContent = "Starting Installation...";
     try {
-      const res = await api("/api/disk/action", { action: "select_target", disk: disk.path, mode: "wipe_entire_disk" });
+      const res = await api("/api/disk/action", {
+        action: "select_target",
+        device: pending.disk.path,
+        mode: pending.mode || "whole",
+      });
       if (res.ok) {
-        showHandoffScreen(disk);
+        showHandoffScreen(pending.disk);
       } else {
         state.busy = false;
         elModalConfirm.disabled = false;
@@ -276,8 +325,7 @@
         showToast("Error: " + (res.error || "Could not select drive"));
       }
     } catch {
-      // Server may have already closed after accepting the handoff
-      showHandoffScreen(disk);
+      showHandoffScreen(pending.disk);
     }
   });
 

@@ -140,27 +140,54 @@ if [ "$INSTALL_MODE" = "interactive_gui_disk" ] || [ "$INSTALL_MODE" = "interact
             [ -n "$LIVE_IP" ] && break
             sleep 1
         done
+        detect_network_hint() {
+            local ssid=""
+            if command -v iwgetid >/dev/null 2>&1; then
+                ssid=$(iwgetid -r 2>/dev/null | head -n1 || true)
+            fi
+            if [ -z "$ssid" ] && command -v iw >/dev/null 2>&1; then
+                for wdev in /sys/class/net/wl*; do
+                    [ -e "$wdev" ] || continue
+                    ssid=$(iw dev "$(basename "$wdev")" link 2>/dev/null | awk -F'SSID: ' '/SSID:/{print $2; exit}' || true)
+                    [ -n "$ssid" ] && break
+                done
+            fi
+            if [ -z "$ssid" ] && command -v wpa_cli >/dev/null 2>&1; then
+                ssid=$(wpa_cli status 2>/dev/null | awk -F'=' '/^ssid=/{print $2; exit}' || true)
+            fi
+            if [ -n "$ssid" ]; then
+                printf 'Wi-Fi "%s"' "$ssid"
+                return
+            fi
+            local cfg_ssid=""
+            for ef in /tmp/cidata/instant-server-env.conf /mnt/cidata/instant-server-env.conf /cdrom/cidata/instant-server-env.conf; do
+                if [ -f "$ef" ]; then
+                    cfg_ssid=$(grep -E '^WIFI_SSID=' "$ef" 2>/dev/null | head -n1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" || true)
+                    [ -n "$cfg_ssid" ] && break
+                fi
+            done
+            if [ -n "$cfg_ssid" ]; then
+                printf 'same router / Wi-Fi "%s"' "$cfg_ssid"
+            else
+                printf 'the same Wi-Fi / router as this computer'
+            fi
+        }
         DISPLAY_IP="${LIVE_IP:-<waiting-for-network-ip>}"
         print_dm_banner() {
+            local net_hint
+            net_hint=$(detect_network_hint)
             if [ -e /dev/tty1 ]; then
                 printf '\033[2J\033[H\n======================================================================\n' > /dev/tty1
-                printf '  INSTANT SERVER — CUSTOM WEB DISK MANAGER (WINDOWS-STYLE GUI)\n' > /dev/tty1
+                printf '  DISK MANAGEMENT\n' > /dev/tty1
                 printf '======================================================================\n' > /dev/tty1
-                printf '  Manage, format, split, wipe, and select your target drive visually:\n\n' > /dev/tty1
-                printf '  OPTION A — Use Custom Web Disk Manager (Recommended):\n' > /dev/tty1
-                printf '    1. Connect your phone or another PC to the SAME Wi-Fi / router.\n' > /dev/tty1
-                printf '    2. Open any web browser and go to:\n\n' > /dev/tty1
+                printf '  1. Connect your phone or PC to: %s\n' "$net_hint" > /dev/tty1
+                printf '  2. Open any web browser and go to:\n\n' > /dev/tty1
                 printf '         http://%s:8088\n\n' "$1" > /dev/tty1
-                printf '    3. Format/partition if needed, then click "Select as Target".\n' > /dev/tty1
-                printf '       Installation will start automatically (direct full-disk layout,\n' > /dev/tty1
-                printf '       no LVM cap, and no native Ubuntu disk screen needed).\n\n' > /dev/tty1
-                printf '  OPTION B — Use Native Ubuntu Disk Selector (Keyboard Only):\n' > /dev/tty1
-                printf '    -> Press ENTER right now ONLY if you want to skip the Web GUI\n' > /dev/tty1
-                printf '       and use the built-in Ubuntu keyboard Disk Selector instead.\n' > /dev/tty1
-                printf '       (Tip: Unchecking "LVM group" is simplest — or leave it checked\n' > /dev/tty1
-                printf '        and Instant Server will auto-expand LVM to 100%% after install.)\n' > /dev/tty1
+                printf '  3. Pick your target drive and confirm — install starts automatically.\n\n' > /dev/tty1
+                printf '  Prefer the keyboard installer instead?\n' > /dev/tty1
+                printf '    -> Press ENTER now to open the native Ubuntu Disk Selector.\n' > /dev/tty1
                 printf '======================================================================\n' > /dev/tty1
-                printf '  Waiting for Web Disk Manager selection (press ENTER for native GUI)... ' > /dev/tty1
+                printf '  Waiting for selection on http://%s:8088 (or press ENTER)... ' "$1" > /dev/tty1
             fi
         }
         print_dm_banner "$DISPLAY_IP"
