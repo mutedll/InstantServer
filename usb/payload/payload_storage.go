@@ -127,8 +127,12 @@ if [ "$INSTALL_MODE" = "interactive_gui_disk" ] || [ "$INSTALL_MODE" = "interact
     if [ -n "$DM_SCRIPT" ]; then
         rm -f /tmp/instant_picked_disk
         log_usb "Starting Custom Web Disk Manager (disk_manager.py) on port :8088..."
-        INSTANT_USB_DISKS="${USB_DISK},${CIDATA_DISK}" INSTANT_INSTALLER_MODE=1 python3 "$DM_SCRIPT" >/dev/null 2>&1 &
+        INSTANT_USB_DISKS="${USB_DISK},${CIDATA_DISK}" INSTANT_INSTALLER_MODE=1 python3 "$DM_SCRIPT" >/tmp/disk_manager.log 2>&1 &
         DM_PID=$!
+        sleep 1
+        if ! kill -0 "$DM_PID" 2>/dev/null; then
+            log_usb "ERROR: disk_manager.py exited immediately: $(tr '\n' ' ' < /tmp/disk_manager.log 2>/dev/null | head -c 400)"
+        fi
         # Give DHCP a few seconds to acquire a LAN IP so we display a real URL immediately
         LIVE_IP=""
         for _w in 1 2 3 4 5 6; do
@@ -177,6 +181,7 @@ if [ "$INSTALL_MODE" = "interactive_gui_disk" ] || [ "$INSTALL_MODE" = "interact
             fi
         done
         if [ "$WEB_PICKED" -eq 1 ]; then
+            sleep 3
             kill "$DM_PID" 2>/dev/null || true
         else
             log_usb "Keeping Custom Web Disk Manager (:8088) running in background alongside Native Disk Selector."
